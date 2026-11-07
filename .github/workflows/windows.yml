@@ -53,6 +53,7 @@ jobs:
           dotnet format whitespace tests/Customers.Core.Tests --verify-no-changes
           dotnet format whitespace src/Customers.Presentation --verify-no-changes
           dotnet format whitespace tests/Customers.Presentation.Tests --verify-no-changes
+          dotnet format whitespace src/Customers.App --folder --verify-no-changes
 
       - name: Restore
         run: |
@@ -110,9 +111,6 @@ jobs:
 
       - name: Restore
         run: dotnet restore src/Customers.App -r win-x64
-
-      - name: Format check
-        run: dotnet format whitespace src/Customers.App --folder --verify-no-changes
 
       - name: Build (warnings are errors)
         run: dotnet build src/Customers.App -c Release -r win-x64 --no-restore

@@ -186,7 +186,7 @@ public sealed partial class AppModel
         var broken = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(databasePath))!, $"leads.broken-{DateTime.Now:yyyyMMdd-HHmmss}.db");
         if (File.Exists(databasePath))
         {
-            File.Move(databasePath, broken);
+            Retrying(() => File.Move(databasePath, broken));
         }
 
         foreach (var suffix in new[] { "-wal", "-shm" })
@@ -194,8 +194,32 @@ public sealed partial class AppModel
             LeadStore.TryDelete(databasePath + suffix);
         }
 
-        File.Copy(backupFile, databasePath, overwrite: true);
+        Retrying(() => File.Copy(backupFile, databasePath, overwrite: true));
         return broken;
+    }
+
+    /// <summary>
+    /// В Windows файл ненадолго занимают антивирус и индексатор, поэтому перенос и копирование файла базы
+    /// повторяются несколько раз, прежде чем сообщить об ошибке.
+    /// </summary>
+    private static void Retrying(Action action)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                action();
+                return;
+            }
+            catch (IOException) when (attempt < 8)
+            {
+                // Освобождаем дескрипторы, которые мог оставить недоступный для чтения файл базы, и ждём.
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                Thread.Sleep(250 * attempt);
+            }
+        }
     }
 
     // MARK: Экспорт в CRM
