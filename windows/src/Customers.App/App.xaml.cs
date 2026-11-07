@@ -23,6 +23,18 @@ public partial class App : Application
 
     public static App Instance => (App)Current;
 
+    /// <summary>Перезапуск приложения (например, чтобы новый акцентный цвет применился ко всем элементам).</summary>
+    public static void Restart()
+    {
+        var path = Environment.ProcessPath;
+        if (path is not null)
+        {
+            using var started = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path, $"--after-pid {Environment.ProcessId}") { UseShellExecute = false });
+        }
+
+        Instance.Exit();
+    }
+
     public static int ExitCode { get; set; }
 
     public StartupOptions Options { get; }
@@ -58,7 +70,7 @@ public partial class App : Application
 
     private void Start()
     {
-        var root = Options.DataRoot ?? AppPaths.DefaultRoot;
+        var root = Options.DataRoot ?? (Options.Smoke ? Path.Combine(Path.GetFullPath(Options.SmokeDirectory!), "data") : AppPaths.DefaultRoot);
         Directory.CreateDirectory(root);
         Ui = new DispatcherUi(DispatcherQueue.GetForCurrentThread());
         var log = new FileLog(AppPaths.Logs(root));

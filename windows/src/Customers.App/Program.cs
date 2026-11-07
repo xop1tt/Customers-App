@@ -11,6 +11,7 @@ public static class Program
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
         var options = StartupOptions.Parse(args);
+        WaitForPreviousProcess(options.AfterProcess);
         if (!options.Smoke && !SingleInstance.TryAcquire())
         {
             SingleInstance.NotifyRunningInstance(options.Link);
@@ -23,5 +24,26 @@ public static class Program
             _ = new App(options);
         });
         return App.ExitCode;
+    }
+
+    private static void WaitForPreviousProcess(int? pid)
+    {
+        if (pid is not { } id)
+        {
+            return;
+        }
+
+        try
+        {
+            using var previous = System.Diagnostics.Process.GetProcessById(id);
+            previous.WaitForExit(TimeSpan.FromSeconds(20));
+        }
+        catch (ArgumentException)
+        {
+            // Процесса уже нет — ждать нечего.
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 }

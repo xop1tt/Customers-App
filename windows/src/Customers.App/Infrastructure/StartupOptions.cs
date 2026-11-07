@@ -12,6 +12,9 @@ public sealed class StartupOptions
     /// <summary>Ссылка leadgenerator://… из письма, если приложение запущено по ней.</summary>
     public string? Link { get; private init; }
 
+    /// <summary>--after-pid &lt;номер&gt;: подождать завершения этого процесса (так приложение перезапускает само себя).</summary>
+    public int? AfterProcess { get; private init; }
+
     public bool Smoke => SmokeDirectory is not null;
 
     public static StartupOptions Parse(string[] args)
@@ -19,6 +22,7 @@ public sealed class StartupOptions
         string? smoke = null;
         string? data = null;
         string? link = null;
+        int? after = null;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -28,6 +32,10 @@ public sealed class StartupOptions
                     break;
                 case "--data" when i + 1 < args.Length:
                     data = args[++i];
+                    break;
+                case "--after-pid" when i + 1 < args.Length && int.TryParse(args[i + 1], out var pid):
+                    after = pid;
+                    i++;
                     break;
                 default:
                     if (args[i].StartsWith("leadgenerator:", StringComparison.OrdinalIgnoreCase))
@@ -39,6 +47,6 @@ public sealed class StartupOptions
             }
         }
 
-        return new StartupOptions { SmokeDirectory = smoke, DataRoot = data, Link = link };
+        return new StartupOptions { SmokeDirectory = smoke, DataRoot = data, Link = link, AfterProcess = after };
     }
 }

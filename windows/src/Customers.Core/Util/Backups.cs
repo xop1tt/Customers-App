@@ -7,7 +7,7 @@ public sealed record BackupFile(string Path, DateTimeOffset CreatedAt, long Size
 /// <summary>Резервные копии базы: ежедневные автоматические и по кнопке, хранится заданное число последних.</summary>
 public sealed class BackupManager(LeadStore store, string directory, int keep = 14)
 {
-    public string Directory { get; } = directory;
+    public string Directory { get; set; } = directory;
 
     public int Keep { get; set; } = keep;
 

@@ -6,6 +6,17 @@ using Microsoft.UI.Xaml.Media;
 namespace Customers.Ui;
 
 /// <summary>Небольшие «кирпичики» интерфейса для страниц, которые строятся в коде: карточки настроек, переключатели, поля.</summary>
+internal static class Glyphs
+{
+    public const string Delete = "\uE74D";
+    public const string Check = "\uE73E";
+    public const string Folder = "\uE8B7";
+    public const string Refresh = "\uE72C";
+    public const string Copy = "\uE8C8";
+    public const string Add = "\uE710";
+    public const string Link = "\uE71B";
+}
+
 internal static class UiKit
 {
     public static Style Style(string key) => (Style)Application.Current.Resources[key];

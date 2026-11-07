@@ -202,7 +202,15 @@ public sealed partial class MainWindow : Window
 
     private void ShowContent()
     {
-        if (_session.Current is { } model)
+        if (_session.Current is { StartupError: not null } broken)
+        {
+            if (Host.Content is not DatabaseErrorView view || !ReferenceEquals(view.Model, broken))
+            {
+                (Host.Content as ShellView)?.Detach();
+                Host.Content = new DatabaseErrorView(broken, _session);
+            }
+        }
+        else if (_session.Current is { } model)
         {
             if (Host.Content is not ShellView shell || !ReferenceEquals(shell.Model, model))
             {

@@ -108,7 +108,8 @@ public sealed partial class AuthView : UserControl
                     {
                         _localRegister = !_localRegister;
                         Render();
-                    });
+                    }
+                    );
                 }
 
                 if (_session.CloudAvailable)

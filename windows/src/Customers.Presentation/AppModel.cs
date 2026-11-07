@@ -63,6 +63,7 @@ public sealed partial class AppModel : ObservableObject
             Prefs.PropertyChanged += (_, _) =>
             {
                 Backups.Keep = Prefs.KeepBackups;
+                Backups.Directory = Prefs.BackupDirectory;
                 ScheduleAutoSearch();
             };
             DailyBackupIfNeeded();

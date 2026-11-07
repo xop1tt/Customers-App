@@ -348,6 +348,19 @@ public class AppModelTests : IDisposable
     }
 
     [Fact]
+    public void ChangingBackupFolderRedirectsNewBackups()
+    {
+        using var scope = new Scope(Model());
+        var m = scope.Model;
+        var folder = Path.Combine(_box.Root, "other-backups");
+        m.Prefs.BackupDirectory = folder;
+        var file = m.BackupNow();
+        Assert.NotNull(file);
+        Assert.Equal(folder, Path.GetDirectoryName(file));
+        Assert.Single(m.BackupFiles);
+    }
+
+    [Fact]
     public void BackupRestoreAndMove()
     {
         using var scope = new Scope(Model());
