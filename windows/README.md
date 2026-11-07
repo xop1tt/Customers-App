@@ -53,5 +53,5 @@ dotnet run --project src/Customers.App -r win-x64
 Workflow `Windows app` (`.github/workflows/windows.yml`) на каждом изменении папки `windows/`:
 собирает ядро и интерфейс (предупреждения компилятора считаются ошибками), запускает тесты на Windows и Linux,
 публикует автономную сборку, запускает её в режиме `--smoke`, собирает установщик, ставит его, запускает установленное приложение,
-ставит поверх и удаляет. Workflow `Windows release` прикрепляет установщик к релизу GitHub рядом с версией для macOS.
+ставит поверх и удаляет. Общий workflow `Release` (`release.yml`) собирает версии для macOS и Windows и создаёт один релиз GitHub с обоими файлами.
 Файлы macOS и их workflow не затронуты.
