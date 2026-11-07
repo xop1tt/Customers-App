@@ -39,6 +39,8 @@ public sealed class DevicePreferences : ObservableObject
     private bool _checkUpdates = true;
     private int _updateCheckHours = UpdateSchedule.DefaultHours;
     private DateTimeOffset? _lastUpdateCheck;
+    private bool _backgroundDownload = true;
+    private string? _lastSeenVersion;
     private bool _closeToTray = true;
     private bool _startMinimized = true;
     private bool _trayHintShown;
@@ -84,6 +86,12 @@ public sealed class DevicePreferences : ObservableObject
 
     /// <summary>Когда обновления проверялись в последний раз (автоматически или вручную).</summary>
     public DateTimeOffset? LastUpdateCheck { get => _lastUpdateCheck; set => Update(ref _lastUpdateCheck, value); }
+
+    /// <summary>Скачивать найденное обновление в фоне, пока пользователь работает. Установка всё равно только по согласию.</summary>
+    public bool BackgroundDownload { get => _backgroundDownload; set => Update(ref _backgroundDownload, value); }
+
+    /// <summary>Версия, для которой уже показан экран «Что нового» (или записана молча при первом запуске).</summary>
+    public string? LastSeenVersion { get => _lastSeenVersion; set => Update(ref _lastSeenVersion, value); }
 
     /// <summary>Закрытие окна не завершает приложение, а оставляет его работать в области уведомлений (автопоиск и копии продолжаются).</summary>
     public bool CloseToTray { get => _closeToTray; set => Update(ref _closeToTray, value); }
@@ -154,6 +162,8 @@ public sealed class DevicePreferences : ObservableObject
             _checkUpdates = Get<bool?>("checkUpdates") ?? _checkUpdates;
             _updateCheckHours = UpdateSchedule.Normalize(Get<int?>("updateCheckHours") ?? _updateCheckHours);
             _lastUpdateCheck = DateTimeOffset.TryParse(Get<string>("lastUpdateCheck"), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var last) ? last : null;
+            _backgroundDownload = Get<bool?>("backgroundDownload") ?? _backgroundDownload;
+            _lastSeenVersion = Get<string>("lastSeenVersion");
             _closeToTray = Get<bool?>("closeToTray") ?? _closeToTray;
             _startMinimized = Get<bool?>("startMinimized") ?? _startMinimized;
             _trayHintShown = Get<bool?>("trayHintShown") ?? _trayHintShown;
@@ -187,6 +197,8 @@ public sealed class DevicePreferences : ObservableObject
             ["checkUpdates"] = CheckUpdates,
             ["updateCheckHours"] = UpdateCheckHours,
             ["lastUpdateCheck"] = LastUpdateCheck?.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            ["backgroundDownload"] = BackgroundDownload,
+            ["lastSeenVersion"] = LastSeenVersion,
             ["closeToTray"] = CloseToTray,
             ["startMinimized"] = StartMinimized,
             ["trayHintShown"] = TrayHintShown,
