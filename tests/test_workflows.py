@@ -59,11 +59,10 @@ def test_automerge_only_for_dependabot_patch_minor_without_checkout():
 
 
 def test_elevated_permissions_only_in_expected_jobs():
-    allowed = {"release.yml": {"release"}, "dependabot-automerge.yml": {"automerge"}, "wiki.yml": {"publish"},
+    allowed = {"release.yml": {"publish"}, "dependabot-automerge.yml": {"automerge"}, "wiki.yml": {"publish"},
                # CodeQL загружает результаты во вкладку Security.
                "codeql.yml": {"analyze"}, "codeql-swift.yml": {"analyze"},
-               # Windows: сборка без прав, одна задача только прикрепляет готовый установщик к релизу.
-               "windows-release.yml": {"publish"}}
+               }
     for f in WF.glob("*.yml"):
         wf = yaml.safe_load(f.read_text(encoding="utf-8"))
         for name, job in wf["jobs"].items():

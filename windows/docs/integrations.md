@@ -24,7 +24,7 @@
 
 Ключи можно передать двумя путями:
 
-1. **В сборку.** Переменные репозитория `GOOGLE_OAUTH_CLIENT_ID`, `DROPBOX_APP_KEY`, `MICROSOFT_CLIENT_ID` и секрет `GOOGLE_OAUTH_CLIENT_SECRET` (Settings → Secrets and variables → Actions). Те же переменные использует сборка macOS; в `windows.yml` и `windows-release.yml` они попадают в шаги сборки и публикации и вшиваются в `Customers.App.dll` как `AssemblyMetadata`.
+1. **В сборку.** Переменные репозитория `GOOGLE_OAUTH_CLIENT_ID`, `DROPBOX_APP_KEY`, `MICROSOFT_CLIENT_ID` и секрет `GOOGLE_OAUTH_CLIENT_SECRET` (Settings → Secrets and variables → Actions). Те же переменные использует сборка macOS; в `windows.yml` и в общем `release.yml` они попадают в шаги сборки и публикации и вшиваются в `Customers.App.dll` как `AssemblyMetadata`.
 2. **В приложении.** Пока ключа нет, вместо «Подключиться» стоит «Добавить ключ»; он хранится в DPAPI. Вшитый ключ главнее введённого.
 
 ## Почта: «Настройки → Почта»

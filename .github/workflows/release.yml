@@ -1,8 +1,10 @@
 name: Release
 
-# Релиз создаётся пушем тега вида v1.0.0 или вручную (Actions → Release → Run workflow):
-# собирается приложение для macOS и прикрепляется к GitHub Release вместе с заметками
-# из .github/release-notes/<тег>.md. При ручном запуске тег ставится на выбранный коммит ветки.
+# Один релиз для обеих систем. Создаётся пушем тега вида v1.0.0 или вручную (Actions → Release → Run workflow):
+# параллельно собираются приложение для macOS (dmg) и установщик для Windows, затем одна задача создаёт
+# GitHub Release с заметками из .github/release-notes/<тег>.md и прикладывает все файлы.
+# При ручном запуске тег ставится на выбранный коммит ветки; обе сборки берут этот же коммит.
+# Если одна из сборок упала, релиз не создаётся.
 on:
   push:
     tags: ["v*"]
@@ -20,16 +22,26 @@ concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
 jobs:
-  release:
+  # Сборки идут без прав на запись: токен не достаётся ни сборочным скриптам, ни установщику Inno Setup, ни чужим пакетам.
+  macos:
+    name: Build macOS app
     runs-on: macos-15
     timeout-minutes: 30
-    permissions:
-      contents: write # только для создания релиза и загрузки файла
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Check the tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG" >&2; exit 1; fi
 
       - name: Tests (core)
         working-directory: macos
@@ -79,19 +91,140 @@ jobs:
           ./scripts/make-dmg.sh "build/Customers-${TAG}-macOS.dmg"
           (cd build && shasum -a 256 "Customers-${TAG}-macOS.dmg" | tee "Customers-${TAG}-macOS.dmg.sha256")
 
-      - name: Publish release
+      - name: Upload macOS files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-macos
+          path: |
+            macos/build/Customers-v*-macOS.dmg
+            macos/build/Customers-v*-macOS.dmg.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: windows
+        shell: pwsh
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: windows/global.json
+
+      - name: Версия из тега
+        run: |
+          if ($env:TAG -notmatch '^v(\d+\.\d+\.\d+(?:\.\d+)?)$') { throw "Тег должен иметь вид vX.Y.Z или vX.Y.Z.W, получено: $env:TAG" }
+          $version = $Matches[1]
+          # Версия сборки всегда из четырёх чисел: 1.0.9 → 1.0.9.0
+          $assembly = if (($version -split '\.').Count -eq 3) { "$version.0" } else { $version }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ASSEMBLY_VERSION=$assembly" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Tests
+        run: |
+          dotnet test tests/Customers.Core.Tests -c Release
+          dotnet test tests/Customers.Presentation.Tests -c Release
+
+      - name: Publish (self-contained)
+        run: >
+          dotnet publish src/Customers.App -c Release -r win-x64 --self-contained true
+          -p:Version=$env:VERSION -p:AssemblyVersion="$env:ASSEMBLY_VERSION" -p:FileVersion="$env:ASSEMBLY_VERSION"
+          -o "${{ github.workspace }}/windows/artifacts/publish"
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag || github.ref_name }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
+          MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
+
+      - name: Smoke run
+        run: ./tools/smoke.ps1 -Exe artifacts/publish/Customers.exe -Output artifacts/smoke-publish
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          & $iscc /Qp "/DAppVersion=$env:VERSION" /DSourceDir="$PWD\artifacts\publish" /DOutputDir="$PWD\artifacts" installer/Customers.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC завершился с кодом $LASTEXITCODE" }
+
+      - name: Installer check
+        run: ./tools/installer-check.ps1 -Artifacts artifacts
+
+      - name: Checksum
+        run: |
+          $setup = Get-ChildItem artifacts -Filter 'Customers-v*-Windows-x64-Setup.exe' | Select-Object -First 1
+          $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($setup.Name)" | Out-File -FilePath "$($setup.FullName).sha256" -Encoding ascii
+          Get-Content "$($setup.FullName).sha256"
+
+      - name: Upload installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-windows
+          path: |
+            windows/artifacts/Customers-v*-Windows-x64-Setup.exe
+            windows/artifacts/Customers-v*-Windows-x64-Setup.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-windows-checks
+          path: |
+            windows/artifacts/smoke-publish
+            windows/artifacts/smoke-installed
+            windows/artifacts/install.log
+          retention-days: 14
+
+  # Единственное место с правом записи: берёт готовые файлы обеих сборок и кладёт их в релиз. Код проекта здесь не выполняется.
+  publish:
+    name: Publish the release
+    needs: [macos, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # только для создания релиза и загрузки файлов
+      actions: read # чтобы скачать собранные файлы из этого же запуска
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Заметки лежат в репозитории; код оттуда не запускается.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/release-notes
+
+      - name: Download the files built in this run
+        run: |
+          gh run download "${{ github.run_id }}" --name release-macos --dir files --repo "$GITHUB_REPOSITORY"
+          gh run download "${{ github.run_id }}" --name release-windows --dir files --repo "$GITHUB_REPOSITORY"
+          ls -l files
+
+      - name: Publish release
         run: |
           if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG" >&2; exit 1; fi
-          files=("macos/build/Customers-${TAG}-macOS.dmg" "macos/build/Customers-${TAG}-macOS.dmg.sha256")
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          files=(files/*)
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             # Релиз уже создан (например, через интерфейс GitHub): только прикладываем файлы.
-            gh release upload "$TAG" "${files[@]}" --clobber
+            gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
             exit 0
           fi
           notes=".github/release-notes/${TAG}.md"
           args=(--title "Customers ${TAG#v}" --target "$GITHUB_SHA")
           if [ -f "$notes" ]; then args+=(--notes-file "$notes"); else args+=(--generate-notes); fi
-          gh release create "$TAG" "${files[@]}" "${args[@]}"
+          gh release create "$TAG" "${files[@]}" "${args[@]}" --repo "$GITHUB_REPOSITORY"
