@@ -610,6 +610,24 @@ public sealed class SessionModel : ObservableObject
         Open(account);
     }
 
+    /// <summary>Открывает текущую учётную запись заново (например, после восстановления базы из копии).</summary>
+    public void Reopen()
+    {
+        if (Current is not { } model)
+        {
+            return;
+        }
+
+        if (model.IsCloud && CloudUser is { } user)
+        {
+            OpenCloud(user);
+        }
+        else if (Accounts?.Account(model.Username) is { } account)
+        {
+            Open(account);
+        }
+    }
+
     private void Open(UserAccount account)
     {
         if (Accounts is not { } auth)

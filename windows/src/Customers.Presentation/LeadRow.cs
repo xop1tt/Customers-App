@@ -58,6 +58,9 @@ public sealed class LeadRow : ObservableObject
         }
     }
 
+    /// <summary>Вторая строка таблицы: тип, регион, категория, бюджет, телефон.</summary>
+    public string Details => string.Join(" · ", new[] { KindTitle, Region, Subtitle }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
     public string FoundText => _item.DiscoveredAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm", CultureInfo.CurrentCulture);
 
     public bool IsFavorite => _item.Favorite;
