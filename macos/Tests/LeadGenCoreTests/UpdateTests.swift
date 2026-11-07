@@ -117,3 +117,40 @@ final class RecentReleasesTests: XCTestCase {
         XCTAssertNil(recent[1].publishedDate)
     }
 }
+
+final class PlainNotesTests: XCTestCase {
+    func testStripsHeadingsBoldAndBullets() {
+        let md = "## Что нового\n\n**Важно:** исправлено `окно`.\n\n- первое\n* второе\n  - вложенное\n1. шаг"
+        let text = Updates.plainNotes(md)
+        XCTAssertEqual(text, "Что нового\n\nВажно: исправлено окно.\n\n• первое\n• второе\n  • вложенное\n1. шаг")
+        for marker in ["**", "##", "`"] { XCTAssertFalse(text.contains(marker)) }
+    }
+
+    func testLinksImagesAndHTML() {
+        let text = Updates.plainNotes("См. [релиз](https://x.y/z) ![лого](a.png) <b>да</b> <!-- скрыто -->")
+        XCTAssertEqual(text, "См. релиз лого да")
+    }
+
+    func testLineBreaksAndBlankLines() {
+        XCTAssertEqual(Updates.plainNotes("a\r\n\r\n\r\n\r\nb\r\n---\r\nc\n\n"), "a\n\nb\nc")
+        XCTAssertEqual(Updates.plainNotes(""), "")
+    }
+
+    func testIdentifiersWithUnderscoresStay() {
+        XCTAssertEqual(Updates.plainNotes("поле snake_case_name и _курсив_ и 2*3*4"), "поле snake_case_name и курсив и 2*3*4")
+    }
+
+    func testCodeFenceAndChecklistAndQuote() {
+        let text = Updates.plainNotes("```\nlet a = 1\n```\n- [x] готово\n- [ ] позже\n> цитата")
+        XCTAssertEqual(text, "let a = 1\n☑ готово\n☐ позже\nцитата")
+    }
+
+    func testLimitCutsAtLineBoundary() {
+        let md = (1...30).map { "- пункт номер \($0)" }.joined(separator: "\n")
+        let cut = Updates.plainNotes(md, limit: 100)
+        XCTAssertTrue(cut.hasSuffix("…"))
+        XCTAssertLessThanOrEqual(cut.count, 101)
+        XCTAssertFalse(cut.dropLast().hasSuffix("пун"))
+        XCTAssertEqual(Updates.plainNotes("короткий", limit: 100), "короткий")
+    }
+}
