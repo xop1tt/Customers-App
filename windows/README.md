@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Язык и платформа | C# 14, .NET 10, WinUI 3 (Windows App SDK 1.8), XAML, Fluent 2 |
+| Язык и платформа | C# 14, .NET 10, WinUI 3 (Windows App SDK 2.6), XAML, Fluent 2 |
 | Система | Windows 10 1809 и новее, Windows 11 (x64) |
 | Данные | SQLite с шифрованием SQLCipher, ключ защищён DPAPI |
 | Установка | один установщик `Customers-vX.Y.Z-Windows-x64-Setup.exe`, ни Visual Studio, ни .NET SDK, ни среда выполнения не нужны |
