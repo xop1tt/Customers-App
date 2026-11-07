@@ -60,11 +60,14 @@ public sealed partial class AppModel : ObservableObject
             ReloadSyncedSettings();
             Reload();
             Backups = new BackupManager(Store, Prefs.BackupDirectory, Prefs.KeepBackups);
-            Prefs.PropertyChanged += (_, _) =>
+            Prefs.PropertyChanged += (_, e) =>
             {
                 Backups.Keep = Prefs.KeepBackups;
                 Backups.Directory = Prefs.BackupDirectory;
-                ScheduleAutoSearch();
+                if (e.PropertyName is nameof(AccountPreferences.AutoSearchMinutes) or null)
+                {
+                    ScheduleAutoSearch(); // сбрасывать отсчёт автопоиска из-за, например, смены почты незачем
+                }
             };
             DailyBackupIfNeeded();
             _backupTimer = new Timer(_ => _env.Ui.Post(DailyBackupIfNeeded), null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));

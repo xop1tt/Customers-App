@@ -391,6 +391,7 @@ public sealed class SessionModel : ObservableObject
         var username = model.Username;
         CloseCurrent();
         new DatabaseKeyProvider(_env.Secrets).Forget(username);
+        IntegrationsModel.ForgetUser(_env.Secrets, username);
         try
         {
             Directory.Delete(dir, recursive: true);
@@ -585,6 +586,7 @@ public sealed class SessionModel : ObservableObject
         }
 
         new DatabaseKeyProvider(_env.Secrets).Forget(username);
+        IntegrationsModel.ForgetUser(_env.Secrets, username);
         if (string.Equals(_env.Device.RememberedUser, username, StringComparison.OrdinalIgnoreCase))
         {
             _env.Device.RememberedUser = null;

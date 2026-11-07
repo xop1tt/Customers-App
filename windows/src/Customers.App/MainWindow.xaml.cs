@@ -48,6 +48,7 @@ public sealed partial class MainWindow : Window
         _device.PropertyChanged += OnDeviceChanged;
         _session.PropertyChanged += OnSessionChanged;
         Activated += (_, e) => App.Instance.Notifier.WindowActive = e.WindowActivationState != WindowActivationState.Deactivated;
+        AppWindow.Closing += OnAppWindowClosing;
         Closed += OnClosed;
         Root.KeyboardAccelerators.Add(Accelerator(Windows.System.VirtualKey.B, Windows.System.VirtualKeyModifiers.Control, TogglePane));
         ShowContent();
@@ -84,6 +85,13 @@ public sealed partial class MainWindow : Window
         if (e.PropertyName is nameof(DevicePreferences.Theme) or nameof(DevicePreferences.Backdrop))
         {
             ApplyAppearance();
+        }
+        else if (e.PropertyName is nameof(DevicePreferences.Accent))
+        {
+            // Цвет меняется на лету: подменяем ресурсы и просим уже показанные элементы прочитать их заново.
+            Appearance.ApplyAccent(_device.Accent);
+            Appearance.Refresh(Root);
+            Appearance.StyleTitleBar(AppWindow, Root.ActualTheme == ElementTheme.Dark);
         }
     }
 
@@ -152,8 +160,44 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>Окно спрятано в область уведомлений (приложение продолжает работать).</summary>
+    public bool IsHiddenToTray { get; private set; }
+
+    /// <summary>Окно не показывалось при запуске (запуск в фоне): первый показ сделает <see cref="BringToFront"/>.</summary>
+    public void MarkHiddenAtStart() => IsHiddenToTray = true;
+
+    private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        var background = App.Instance.Background;
+        if (_device.CloseToTray && background.Available && !background.Quitting)
+        {
+            args.Cancel = true;
+            HideToTray();
+        }
+    }
+
+    /// <summary>Прячет окно. Сообщает о фоновой работе при первом разе, чтобы закрытие окна не выглядело как пропажа приложения.</summary>
+    public void HideToTray()
+    {
+        SaveWindowPlacement();
+        AppWindow.Hide();
+        IsHiddenToTray = true;
+        if (!_device.TrayHintShown)
+        {
+            _device.TrayHintShown = true;
+            App.Instance.Notifier.Toast("Customers продолжает работать в фоне",
+                "Автопоиск и копии идут как обычно. Значок в области уведомлений откроет окно, а меню значка — выйдет из приложения.", force: true);
+        }
+    }
+
     public void BringToFront()
     {
+        if (IsHiddenToTray)
+        {
+            IsHiddenToTray = false;
+            AppWindow.Show();
+        }
+
         if (SingleInstance.IsIconic(Handle))
         {
             SingleInstance.ShowWindow(Handle, 9 /* SW_RESTORE */);
@@ -179,6 +223,7 @@ public sealed partial class MainWindow : Window
             _watchedSync.PropertyChanged -= OnSyncChanged;
         }
 
+        App.Instance.Background.Dispose();
         App.Instance.Notifier.ShutdownSystem();
         // Закрыть базу аккуратно: ожидающая запись в журнале WAL попадает в основной файл.
         _session.Sync?.Dispose();
@@ -315,7 +360,7 @@ public sealed partial class MainWindow : Window
             App.Instance.Notifier.Info($"Скачиваю версию {offer.Version}…", "Контрольная сумма проверяется перед установкой.");
             if (await App.Instance.Updates.InstallAsync(offer))
             {
-                Close();
+                App.Instance.Background.Quit();
             }
         }
         catch (Exception e) when (e is HttpFailure or HttpRequestException or TaskCanceledException or IOException or System.ComponentModel.Win32Exception)

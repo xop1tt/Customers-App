@@ -182,9 +182,9 @@ public sealed partial class LeadInspector : UserControl
         foreach (var email in d.Emails)
         {
             var actions = new List<(string, string, Action)> { ("", "Копировать", () => Launcher.Copy(email)) };
-            if (ContactLinks.MailtoUri(email, draft.Subject, draft.Body) is { } mail)
+            if (ContactLinks.IsEmail(email))
             {
-                actions.Add(("", "Написать письмо с черновиком", () => Write(lead, email, mail)));
+                actions.Add(("", "Написать письмо с черновиком", () => Write(lead, email, draft.Subject, draft.Body)));
             }
 
             DataPanel.Children.Add(Row("Email", email, [.. actions]));
@@ -293,16 +293,52 @@ public sealed partial class LeadInspector : UserControl
         return grid;
     }
 
-    private void Call(LeadItem lead, string phone, Uri tel)
+    private void Call(LeadItem lead, string phone, Uri tel) => _ = CallAsync(lead, phone, tel);
+
+    private async Task CallAsync(LeadItem lead, string phone, Uri tel)
     {
-        _ = Launcher.OpenAsync(tel);
-        Model.LogEvent(lead.Id, $"Набран номер {phone}");
+        if (Model.Prefs.ConfirmCalls && !await Dialogs.ConfirmAsync("Позвонить?", phone, "Позвонить"))
+        {
+            return;
+        }
+
+        if (await Launcher.OpenAsync(tel))
+        {
+            Model.LogEvent(lead.Id, $"Набран номер {phone}");
+        }
+        else
+        {
+            App.Instance.Notifier.Post(new Notice(NoticeKind.Warning, "Нет приложения для звонков",
+                "Установите «Связь с телефоном» или выберите программу для звонков в настройках.", "Настройки звонков",
+                () => App.Instance.MainWindow.Shell?.OpenSettings(SettingsSection.Calls)));
+        }
     }
 
-    private void Write(LeadItem lead, string email, Uri mail)
+    /// <summary>Письмо: окно «Написать» с отправкой из приложения, если она настроена, иначе сразу почтовая программа Windows.</summary>
+    private void Write(LeadItem lead, string email, string subject, string body)
     {
-        _ = Launcher.OpenAsync(mail);
-        Model.LogEvent(lead.Id, $"Открыто письмо для {email}");
+        if (Model.Mail.SmtpReady)
+        {
+            _ = ComposeMailDialog.ShowAsync(Model, lead, email, subject, body);
+        }
+        else
+        {
+            _ = OpenMailAppAsync(lead, email, subject, body);
+        }
+    }
+
+    private async Task OpenMailAppAsync(LeadItem lead, string email, string subject, string body)
+    {
+        if (ContactLinks.MailtoUri(email, subject, body) is { } mail && await Launcher.OpenAsync(mail))
+        {
+            Model.LogEvent(lead.Id, $"Открыто письмо для {email}");
+        }
+        else
+        {
+            App.Instance.Notifier.Post(new Notice(NoticeKind.Warning, "Не удалось открыть почтовую программу",
+                "Выберите программу для писем в Windows или настройте отправку прямо из приложения.", "Настройки почты",
+                () => App.Instance.MainWindow.Shell?.OpenSettings(SettingsSection.Mail)));
+        }
     }
 
     private void BuildReasons(LeadItem lead)
@@ -442,9 +478,9 @@ public sealed partial class LeadInspector : UserControl
         {
             case DraftWriter.Channel.Email:
                 var parts = ContactLinks.Split(DraftBox.Text);
-                if (lead.Data.Emails.FirstOrDefault() is { } email && ContactLinks.MailtoUri(email, parts.Subject, parts.Body) is { } mail)
+                if (lead.Data.Emails.FirstOrDefault(ContactLinks.IsEmail) is { } email)
                 {
-                    Write(lead, email, mail);
+                    Write(lead, email, parts.Subject, parts.Body);
                 }
 
                 break;

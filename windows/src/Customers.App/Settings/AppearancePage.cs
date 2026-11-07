@@ -57,7 +57,6 @@ internal sealed class AppearancePage(AppModel model, SessionModel session, Shell
     private UIElement BuildAccent()
     {
         var current = Device.Accent;
-        var swatches = new ItemsControl();
         var wrap = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         foreach (var (name, hex) in Presets)
         {
@@ -103,14 +102,12 @@ internal sealed class AppearancePage(AppModel model, SessionModel session, Shell
             Device.Accent = null;
             Refresh();
         });
-        var restart = UiKit.TextButton("Перезапустить сейчас", App.Restart, accent: true);
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Bottom };
         row.Children.Add(hexBox);
         row.Children.Add(apply);
         row.Children.Add(reset);
         var body = UiKit.VStack(12, UiKit.Strong("Цвет выделения, кнопок и переключателей"), wrap, row, error,
-            UiKit.Muted("Новый цвет полностью применяется после перезапуска приложения: так устроены стандартные элементы Windows."), restart);
-        _ = swatches;
+            UiKit.Muted("Цвет применяется сразу, перезапускать приложение не нужно."));
         return UiKit.Card(body);
     }
 }

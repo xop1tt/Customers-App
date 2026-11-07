@@ -26,3 +26,27 @@ internal static class CloudSettings
         return CloudConfig.Create(url, key);
     }
 }
+
+/// <summary>Ключи OAuth-приложений, вшитые при сборке. Для разработки можно переопределить переменными окружения CUSTOMERS_&lt;ИМЯ_ПЕРЕМЕННОЙ_СБОРКИ&gt;.</summary>
+internal static class OAuthBuild
+{
+    public static OAuthClient? Client(OAuthProvider provider)
+    {
+        var assembly = typeof(OAuthBuild).Assembly;
+        string? Metadata(string key) => assembly.GetCustomAttributes<AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == key)?.Value;
+
+        var id = Environment.GetEnvironmentVariable("CUSTOMERS_" + provider.BuildVariable());
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            id = Metadata(provider.MetadataKey());
+        }
+
+        var secret = provider.NeedsClientSecret() ? Metadata(provider.SecretMetadataKey()) : null;
+        if (provider.NeedsClientSecret() && Environment.GetEnvironmentVariable("CUSTOMERS_GOOGLE_OAUTH_CLIENT_SECRET") is { Length: > 0 } fromEnv)
+        {
+            secret = fromEnv;
+        }
+
+        return OAuthClient.Create(provider, id, secret);
+    }
+}

@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices.WindowsRuntime;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics.Imaging;
 
@@ -44,6 +47,7 @@ public sealed class SmokeTest
             + string.Join("\n", _failures.Select(f => "ERROR " + f)) + "\n" + string.Join("\n", _log) + "\n";
         File.WriteAllText(Path.Combine(_dir, "result.txt"), text);
         App.ExitCode = ok ? 0 : 1;
+        App.Instance.Background.Dispose();
         App.Instance.Exit();
     }
 
@@ -203,6 +207,19 @@ public sealed class SmokeTest
             await Pause(100);
         });
 
+        await Step("Акцентный цвет меняется без перезапуска", () => AccentLiveAsync(app));
+        await Step("Облачные диски: WebDAV, выгрузка копии, отключение", () => DrivesAsync(app, model, shell));
+        await Step("Вход через браузер: возврат на localhost", OAuthReturnAsync);
+        await Step("Почта: настройки, пароль в DPAPI, ошибка соединения", () => MailAsync(app, model, shell));
+        await Step("Звонки: поиск приложения для tel:", async () =>
+        {
+            shell.OpenSettings(SettingsSection.Calls);
+            await Pause(500);
+            var handlers = await CallHandlers.FindAsync();
+            _log.Add($"note приложений для звонков в системе: {handlers.Count}");
+        });
+        await Step("Работа в фоне: скрыть и вернуть окно, меню значка, автозапуск", () => BackgroundAsync(app, model, shell));
+
         await Step("Локальная запись: смена пароля и выход", async () =>
         {
             var error = await app.Session.ChangePasswordAsync("Smoke-Test-1234", "Smoke-Test-5678", "Smoke-Test-5678");
@@ -221,6 +238,270 @@ public sealed class SmokeTest
             Require(app.Env.Log.PendingCrashReports().Count == 0, "приложение записало отчёты о сбоях: " + string.Join(", ", app.Env.Log.PendingCrashReports()));
             return Task.CompletedTask;
         });
+    }
+
+    // MARK: Проверки новых возможностей
+
+    private static Windows.UI.Color? PaintedFill(Button button)
+    {
+        button.UpdateLayout();
+        return Find(button) is { Background: SolidColorBrush brush } ? brush.Color : null;
+
+        static ContentPresenter? Find(DependencyObject parent)
+        {
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is ContentPresenter { Name: "ContentPresenter" } presenter)
+                {
+                    return presenter;
+                }
+
+                if (Find(child) is { } nested)
+                {
+                    return nested;
+                }
+            }
+
+            return null;
+        }
+    }
+
+    private async Task AccentLiveAsync(App app)
+    {
+        var host = (Grid)app.MainWindow.RootElement;
+        var probe = new Button { Content = "Акцент", Style = UiKit.Style("AccentButtonStyle"), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 12, 12) };
+        host.Children.Add(probe);
+        try
+        {
+            await Pause(300);
+            foreach (var theme in new[] { ThemeChoice.Light, ThemeChoice.Dark })
+            {
+                app.Env.Device.Theme = theme;
+                await Pause(400);
+                var dark = theme == ThemeChoice.Dark;
+                foreach (var hex in new[] { "#C42B1C", "#107C10", "#744DA9" })
+                {
+                    app.Env.Device.Accent = hex;
+                    await Pause(300);
+                    var expected = Appearance.Shades(Appearance.ParseColor(hex)!.Value).Fill(dark);
+                    var painted = PaintedFill(probe);
+                    Require(painted is not null, "акцентная кнопка не нарисована");
+                    Require(painted == expected, $"{theme} {hex}: кнопка закрашена {painted}, ожидалось {expected}");
+                }
+
+                await Shot("accent-" + theme);
+            }
+
+            app.Env.Device.Accent = null;
+            await Pause(300);
+            var system = PaintedFill(probe);
+            Require(system is not null && system != Appearance.Shades(Appearance.ParseColor("#744DA9")!.Value).Fill(true), "после сброса цвет остался прежним");
+        }
+        finally
+        {
+            host.Children.Remove(probe);
+            app.Env.Device.Accent = null;
+            app.Env.Device.Theme = ThemeChoice.System;
+        }
+    }
+
+    /// <summary>Простейший WebDAV-сервер на этом компьютере: проверяет вход и принимает файл. Нужен, чтобы выгрузка шла по настоящему HTTP.</summary>
+    private sealed class FakeDav : IDisposable
+    {
+        private readonly System.Net.Sockets.TcpListener _listener = new(System.Net.IPAddress.Loopback, 0);
+        private readonly CancellationTokenSource _stop = new();
+
+        public FakeDav()
+        {
+            _listener.Start();
+            Port = ((System.Net.IPEndPoint)_listener.LocalEndpoint).Port;
+            _ = Task.Run(AcceptAsync);
+        }
+
+        public int Port { get; }
+
+        public List<string> Requests { get; } = [];
+
+        public long UploadedBytes { get; private set; }
+
+        private async Task AcceptAsync()
+        {
+            try
+            {
+                while (!_stop.IsCancellationRequested)
+                {
+                    var client = await _listener.AcceptTcpClientAsync(_stop.Token);
+                    _ = Task.Run(() => ServeAsync(client));
+                }
+            }
+            catch (Exception e) when (e is OperationCanceledException or ObjectDisposedException or System.Net.Sockets.SocketException)
+            {
+            }
+        }
+
+        private async Task ServeAsync(System.Net.Sockets.TcpClient client)
+        {
+            using var _ = client;
+            try
+            {
+                var stream = client.GetStream();
+                var head = new List<byte>();
+                var one = new byte[1];
+                while (!(head.Count >= 4 && head[^4] == 13 && head[^3] == 10 && head[^2] == 13 && head[^1] == 10))
+                {
+                    if (await stream.ReadAsync(one) == 0)
+                    {
+                        return;
+                    }
+
+                    head.Add(one[0]);
+                }
+
+                var lines = System.Text.Encoding.ASCII.GetString([.. head]).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+                var method = lines[0].Split(' ')[0];
+                var path = lines[0].Split(' ')[1];
+                var headers = lines.Skip(1).Select(l => l.Split(':', 2)).Where(p => p.Length == 2).ToDictionary(p => p[0].Trim().ToLowerInvariant(), p => p[1].Trim());
+                var length = headers.TryGetValue("content-length", out var text) ? long.Parse(text, System.Globalization.CultureInfo.InvariantCulture) : 0;
+                var buffer = new byte[16 * 1024];
+                for (var left = length; left > 0;)
+                {
+                    var read = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, left)));
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    left -= read;
+                }
+
+                var authorized = headers.GetValueOrDefault("authorization") == DriveUpload.BasicAuth("u", "p");
+                lock (Requests)
+                {
+                    Requests.Add($"{method} {path} {(authorized ? "auth" : "noauth")}");
+                }
+
+                var status = !authorized ? "401 Unauthorized" : method == "PROPFIND" ? "207 Multi-Status" : "201 Created";
+                if (authorized && method == "PUT")
+                {
+                    UploadedBytes = length;
+                }
+
+                await stream.WriteAsync(System.Text.Encoding.ASCII.GetBytes($"HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
+            }
+            catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or ObjectDisposedException)
+            {
+            }
+        }
+
+        public void Dispose()
+        {
+            _stop.Cancel();
+            _listener.Stop();
+        }
+    }
+
+    private async Task DrivesAsync(App app, AppModel model, ShellView shell)
+    {
+        using var dav = new FakeDav();
+        var drives = model.Drives;
+        var address = $"http://127.0.0.1:{dav.Port}/dav";
+        Require(!await drives.ConnectWebDavAsync(DriveService.WebDav, address, "u", "wrong"), "неверный пароль принят");
+        Require(drives.Error is not null && !drives.IsConnected(DriveService.WebDav), "ошибка входа не показана");
+        Require(await drives.ConnectWebDavAsync(DriveService.WebDav, address, "u", "p"), "WebDAV не подключился: " + drives.Error);
+        Require(app.Env.Secrets.Get(DriveConnection.SecretName(DriveService.WebDav, model.Username)) is { Length: > 0 }, "подключение не сохранено в DPAPI");
+        shell.OpenSettings(SettingsSection.Drives);
+        await Pause(500);
+        await Shot("drives-connected");
+        Require(await model.UploadBackupAsync(DriveService.WebDav), "выгрузка не удалась: " + drives.Error);
+        var newest = model.BackupFiles.OrderByDescending(b => b.CreatedAt).First();
+        Require(dav.UploadedBytes == new FileInfo(newest.Path).Length && dav.UploadedBytes > 0, $"на сервер ушло {dav.UploadedBytes} байт, копия {newest.Size}");
+        string[] expected = ["PROPFIND", "PROPFIND", "MKCOL", "PUT"];
+        var got = dav.Requests.Select(r => r.Split(' ')[0]).ToArray();
+        Require(got.SequenceEqual(expected), "запросы к серверу: " + string.Join(", ", dav.Requests));
+        drives.Disconnect(DriveService.WebDav);
+        Require(!drives.IsConnected(DriveService.WebDav) && app.Env.Secrets.Get(DriveConnection.SecretName(DriveService.WebDav, model.Username)) is null, "подключение не удалено");
+        shell.OpenSettings(SettingsSection.Drives);
+        await Pause(300);
+    }
+
+    private static async Task OAuthReturnAsync()
+    {
+        using var listener = new OAuthLoopback(0);
+        var wait = listener.WaitForCallbackAsync(CancellationToken.None);
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        // Браузер переходит именно на «localhost»: он может быть и IPv4, и IPv6, сервер должен ответить в обоих случаях.
+        using var reply = await http.GetAsync($"http://localhost:{listener.Port}/oauth/callback?code=smoke-code&state=smoke-state");
+        Require(reply.IsSuccessStatusCode, "страница возврата ответила " + (int)reply.StatusCode);
+        var callback = await wait.WaitAsync(TimeSpan.FromSeconds(10));
+        Require(callback.Validated("smoke-state") == "smoke-code", "код авторизации потерян");
+    }
+
+    private async Task MailAsync(App app, AppModel model, ShellView shell)
+    {
+        var mail = model.Mail;
+        mail.Account = MailAccount.Preset("smoke@example.ru", "Smoke");
+        mail.Delivery = MailDelivery.Smtp;
+        mail.SetPassword("app-password");
+        Require(mail.SmtpReady, "почта не готова к отправке");
+        Require(app.Env.Secrets.Get(MailModel.PasswordSecret(model.Username)) == "app-password", "пароль не сохранился в DPAPI");
+        shell.OpenSettings(SettingsSection.Mail);
+        await Pause(500);
+        await Shot("mail-smtp");
+
+        // Порт, на котором никто не слушает: проверяем, что настоящее соединение даёт понятную ошибку, а не зависание.
+        int closedPort;
+        using (var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
+        {
+            probe.Start();
+            closedPort = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+        }
+
+        mail.Account = mail.Account! with { Host = "127.0.0.1", Port = closedPort };
+        Require(!await mail.SendAsync(new OutgoingMail("to@example.com", "Проверка", "Текст")), "письмо «отправилось» в пустоту");
+        Require(mail.LastError?.Contains("Не удалось связаться", StringComparison.Ordinal) == true, "ошибка соединения непонятна: " + mail.LastError);
+        Require(!mail.Sending, "индикатор отправки завис");
+
+        mail.Forget();
+        Require(!mail.HasPassword && mail.Account is null && mail.Delivery == MailDelivery.MailApp, "почта не забыта");
+        shell.OpenSettings(SettingsSection.Mail);
+        await Pause(300);
+    }
+
+    private async Task BackgroundAsync(App app, AppModel model, ShellView shell)
+    {
+        var window = app.MainWindow;
+        window.HideToTray();
+        await Pause(300);
+        Require(!window.AppWindow.IsVisible, "окно не спряталось");
+        window.BringToFront();
+        await Pause(300);
+        Require(window.AppWindow.IsVisible, "окно не вернулось из области уведомлений");
+
+        var host = app.Background;
+        _log.Add($"note значок в области уведомлений создан: {host.Available}");
+        var items = host.Items();
+        Require(items.Any(i => i.Text.StartsWith("Открыть", StringComparison.Ordinal)) && items.Any(i => i.Text.StartsWith("Выйти", StringComparison.Ordinal)), "в меню значка нет «Открыть» или «Выйти»");
+        Require(items.Any(i => i.Text == "Найти сейчас") && items.Any(i => i.Text == $"Новые лиды: {model.NewLeads}"), "меню значка не показывает состояние: " + string.Join(" | ", items.Select(i => i.Text)));
+        Require(host.Tip().Contains($"новых лидов: {model.NewLeads}", StringComparison.Ordinal), "подсказка значка: " + host.Tip());
+
+        Require(AutoStart.Set(true, true), "автозапуск не включился");
+        try
+        {
+            Require(AutoStart.IsEnabled(), "автозапуск не виден после включения");
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+            Require(key?.GetValue("Customers") is string command && command.Contains("--background", StringComparison.Ordinal), "в автозапуске нет ключа --background");
+        }
+        finally
+        {
+            AutoStart.Set(false, true);
+        }
+
+        Require(!AutoStart.IsEnabled(), "автозапуск не выключился");
+        shell.OpenSettings(SettingsSection.Background);
+        await Pause(500);
+        await Shot("background");
     }
 
     private static void Seed(AppModel model)

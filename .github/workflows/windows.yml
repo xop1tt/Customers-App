@@ -114,11 +114,21 @@ jobs:
 
       - name: Build (warnings are errors)
         run: dotnet build src/Customers.App -c Release -r win-x64 --no-restore
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
+          MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
 
       - name: Publish (self-contained)
         run: >
           dotnet publish src/Customers.App -c Release -r win-x64 --self-contained true
           --no-restore -o "${{ github.workspace }}/windows/artifacts/publish"
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
+          MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
 
       - name: Smoke run of the published app
         run: ./tools/smoke.ps1 -Exe artifacts/publish/Customers.exe -Output artifacts/smoke-publish

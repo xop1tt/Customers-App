@@ -65,12 +65,16 @@ public sealed class SettingsView : UserControl, IDetachable
         _current = section;
         SettingsPage page = section switch {
             SettingsSection.Appearance => new AppearancePage(_model, _session, _shell),
+            SettingsSection.Background => new BackgroundPage(_model, _session, _shell),
             SettingsSection.Account => new AccountPage(_model, _session, _shell),
             SettingsSection.Search => new SearchPage(_model, _session, _shell),
             SettingsSection.Sources => new SourcesSettingsPage(_model, _session, _shell),
             SettingsSection.Filters => new FiltersPage(_model, _session, _shell),
             SettingsSection.Exclusions => new ExclusionsPage(_model, _session, _shell),
             SettingsSection.Integrations => new IntegrationsPage(_model, _session, _shell),
+            SettingsSection.Drives => new DrivesPage(_model, _session, _shell),
+            SettingsSection.Mail => new MailPage(_model, _session, _shell),
+            SettingsSection.Calls => new CallsPage(_model, _session, _shell),
             SettingsSection.Cloud => new CloudPage(_model, _session, _shell),
             SettingsSection.Backup => new BackupPage(_model, _session, _shell),
             SettingsSection.ExportImport => new ExportImportPage(_model, _session, _shell),

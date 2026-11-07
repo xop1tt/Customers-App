@@ -23,18 +23,6 @@ public partial class App : Application
 
     public static App Instance => (App)Current;
 
-    /// <summary>Перезапуск приложения (например, чтобы новый акцентный цвет применился ко всем элементам).</summary>
-    public static void Restart()
-    {
-        var path = Environment.ProcessPath;
-        if (path is not null)
-        {
-            using var started = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path, $"--after-pid {Environment.ProcessId}") { UseShellExecute = false });
-        }
-
-        Instance.Exit();
-    }
-
     public static int ExitCode { get; set; }
 
     public StartupOptions Options { get; }
@@ -46,6 +34,8 @@ public partial class App : Application
     public IUiDispatcher Ui { get; private set; } = null!;
 
     internal Notifier Notifier { get; } = new();
+
+    internal BackgroundHost Background { get; } = new();
 
     internal UpdateService Updates { get; private set; } = null!;
 
@@ -84,12 +74,26 @@ public partial class App : Application
             Log = log,
             Device = device,
             Cloud = CloudSettings.Load(),
+            BuiltInOAuth = OAuthBuild.Client,
+            OpenBrowser = Launcher.OpenInBrowserAsync,
         };
         Updates = new UpdateService(Env);
         Appearance.ApplyAccent(device.Accent);
+        Appearance.FollowSystemAccent(device);
         Session = new SessionModel(Env);
         MainWindow = new MainWindow();
-        MainWindow.Activate();
+        Background.Start();
+        // Запуск вместе с Windows (--background): остаёмся в области уведомлений, если окно сейчас не нужно (войти в запись не требуется).
+        var hidden = Options.Background && !Options.Smoke && device.StartMinimized && Background.Available && Session.Current is not null;
+        if (hidden)
+        {
+            Env.Log.Info("Запуск в фоне: окно скрыто");
+            MainWindow.MarkHiddenAtStart();
+        }
+        else
+        {
+            MainWindow.Activate();
+        }
 
         if (!Options.Smoke)
         {

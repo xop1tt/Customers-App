@@ -16,6 +16,8 @@ internal static class Launcher
         return await Windows.System.Launcher.LaunchUriAsync(uri);
     }
 
+    public static Task<bool> OpenInBrowserAsync(Uri url) => OpenWebAsync(url.AbsoluteUri);
+
     public static async Task<bool> OpenAsync(Uri? uri) => uri is not null && await Windows.System.Launcher.LaunchUriAsync(uri);
 
     public static void OpenFolder(string path)

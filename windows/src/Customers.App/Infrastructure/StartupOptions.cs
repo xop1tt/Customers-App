@@ -15,6 +15,9 @@ public sealed class StartupOptions
     /// <summary>--after-pid &lt;номер&gt;: подождать завершения этого процесса (так приложение перезапускает само себя).</summary>
     public int? AfterProcess { get; private init; }
 
+    /// <summary>--background: запуск вместе с Windows; окно не показывается, приложение остаётся в области уведомлений.</summary>
+    public bool Background { get; private init; }
+
     public bool Smoke => SmokeDirectory is not null;
 
     public static StartupOptions Parse(string[] args)
@@ -23,6 +26,7 @@ public sealed class StartupOptions
         string? data = null;
         string? link = null;
         int? after = null;
+        var background = false;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -37,6 +41,9 @@ public sealed class StartupOptions
                     after = pid;
                     i++;
                     break;
+                case "--background":
+                    background = true;
+                    break;
                 default:
                     if (args[i].StartsWith("leadgenerator:", StringComparison.OrdinalIgnoreCase))
                     {
@@ -47,6 +54,6 @@ public sealed class StartupOptions
             }
         }
 
-        return new StartupOptions { SmokeDirectory = smoke, DataRoot = data, Link = link, AfterProcess = after };
+        return new StartupOptions { SmokeDirectory = smoke, DataRoot = data, Link = link, AfterProcess = after, Background = background };
     }
 }

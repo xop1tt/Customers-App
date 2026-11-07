@@ -20,6 +20,7 @@
 | [docs/technologies.md](docs/technologies.md) | Используемые технологии и почему выбраны именно они |
 | [docs/macos-sync.md](docs/macos-sync.md) | Как Windows и macOS обмениваются данными |
 | [docs/testing.md](docs/testing.md) | Тесты, проверки в CI, что проверено автоматически, а что нет |
+| [docs/integrations.md](docs/integrations.md) | Диски, почта, звонки, работа в фоне и ключи OAuth |
 | [docs/status.md](docs/status.md) | Что готово, что не перенесено и известные ограничения |
 
 ## Структура

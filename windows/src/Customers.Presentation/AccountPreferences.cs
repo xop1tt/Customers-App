@@ -17,6 +17,9 @@ public sealed class AccountPreferences : ObservableObject
     private bool _notifyNewLeads = true;
     private bool _notifyErrors = true;
     private bool _notifySync;
+    private string _mailAccount = "";
+    private MailDelivery _mailDelivery = MailDelivery.MailApp;
+    private bool _confirmCalls;
 
     public AccountPreferences(string path, string defaultBackupDirectory)
     {
@@ -43,6 +46,14 @@ public sealed class AccountPreferences : ObservableObject
     public bool NotifyErrors { get => _notifyErrors; set => Update(ref _notifyErrors, value); }
 
     public bool NotifySync { get => _notifySync; set => Update(ref _notifySync, value); }
+
+    /// <summary>Настройки почтового ящика (JSON без пароля; пароль лежит в защищённом хранилище).</summary>
+    public string MailAccount { get => _mailAccount; set => Update(ref _mailAccount, value); }
+
+    public MailDelivery MailDelivery { get => _mailDelivery; set => Update(ref _mailDelivery, value); }
+
+    /// <summary>Спрашивать подтверждение перед звонком из карточки лида.</summary>
+    public bool ConfirmCalls { get => _confirmCalls; set => Update(ref _confirmCalls, value); }
 
     private void Update<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
     {
@@ -71,6 +82,9 @@ public sealed class AccountPreferences : ObservableObject
             _notifyNewLeads = Get<bool?>("notifyNewLeads") ?? _notifyNewLeads;
             _notifyErrors = Get<bool?>("notifyErrors") ?? _notifyErrors;
             _notifySync = Get<bool?>("notifySync") ?? _notifySync;
+            _mailAccount = Get<string>("mailAccount") ?? _mailAccount;
+            _mailDelivery = Enum.TryParse<MailDelivery>(Get<string>("mailDelivery"), out var delivery) ? delivery : _mailDelivery;
+            _confirmCalls = Get<bool?>("confirmCalls") ?? _confirmCalls;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -89,6 +103,9 @@ public sealed class AccountPreferences : ObservableObject
             ["notifyNewLeads"] = NotifyNewLeads,
             ["notifyErrors"] = NotifyErrors,
             ["notifySync"] = NotifySync,
+            ["mailAccount"] = MailAccount,
+            ["mailDelivery"] = MailDelivery.ToString(),
+            ["confirmCalls"] = ConfirmCalls,
         };
         try
         {

@@ -48,4 +48,14 @@
     <AssemblyMetadata Include="SupabaseAnonKey" Value="$(SUPABASE_ANON_KEY)" />
   </ItemGroup>
 
+  <!-- Ключи приложений для входа в Google Диск, Dropbox и OneDrive (те же переменные репозитория, что у macOS-версии).
+       Идентификатор клиента публичный, но свой у каждой регистрации приложения: его создаёт владелец сборки. Без ключа сервис
+       подключается по кнопке «Добавить ключ» прямо в приложении. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="GoogleClientId" Value="$(GOOGLE_OAUTH_CLIENT_ID)" />
+    <AssemblyMetadata Include="GoogleClientSecret" Value="$(GOOGLE_OAUTH_CLIENT_SECRET)" />
+    <AssemblyMetadata Include="DropboxAppKey" Value="$(DROPBOX_APP_KEY)" />
+    <AssemblyMetadata Include="MicrosoftClientId" Value="$(MICROSOFT_CLIENT_ID)" />
+  </ItemGroup>
+
 </Project>

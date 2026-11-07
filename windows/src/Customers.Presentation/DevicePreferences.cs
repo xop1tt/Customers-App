@@ -37,6 +37,9 @@ public sealed class DevicePreferences : ObservableObject
     private bool _compactRows;
     private bool _animations = true;
     private bool _checkUpdates = true;
+    private bool _closeToTray = true;
+    private bool _startMinimized = true;
+    private bool _trayHintShown;
     private string? _rememberedUser;
     private string _lastSection = "all";
     private double _windowWidth = 1360;
@@ -73,6 +76,15 @@ public sealed class DevicePreferences : ObservableObject
     public bool Animations { get => _animations; set => Update(ref _animations, value); }
 
     public bool CheckUpdates { get => _checkUpdates; set => Update(ref _checkUpdates, value); }
+
+    /// <summary>Закрытие окна не завершает приложение, а оставляет его работать в области уведомлений (автопоиск и копии продолжаются).</summary>
+    public bool CloseToTray { get => _closeToTray; set => Update(ref _closeToTray, value); }
+
+    /// <summary>При запуске вместе с Windows не показывать окно, а оставить приложение в области уведомлений.</summary>
+    public bool StartMinimized { get => _startMinimized; set => Update(ref _startMinimized, value); }
+
+    /// <summary>Подсказка «приложение продолжает работать в фоне» уже показана.</summary>
+    public bool TrayHintShown { get => _trayHintShown; set => Update(ref _trayHintShown, value); }
 
     /// <summary>Имя локальной учётной записи, в которую входить автоматически.</summary>
     public string? RememberedUser { get => _rememberedUser; set => Update(ref _rememberedUser, value); }
@@ -132,6 +144,9 @@ public sealed class DevicePreferences : ObservableObject
             _compactRows = Get<bool?>("compactRows") ?? _compactRows;
             _animations = Get<bool?>("animations") ?? _animations;
             _checkUpdates = Get<bool?>("checkUpdates") ?? _checkUpdates;
+            _closeToTray = Get<bool?>("closeToTray") ?? _closeToTray;
+            _startMinimized = Get<bool?>("startMinimized") ?? _startMinimized;
+            _trayHintShown = Get<bool?>("trayHintShown") ?? _trayHintShown;
             _rememberedUser = Get<string>("rememberedUser");
             _lastSection = Get<string>("lastSection") ?? _lastSection;
             _windowWidth = Math.Clamp(Get<double?>("windowWidth") ?? _windowWidth, 800, 8000);
@@ -160,6 +175,9 @@ public sealed class DevicePreferences : ObservableObject
             ["compactRows"] = CompactRows,
             ["animations"] = Animations,
             ["checkUpdates"] = CheckUpdates,
+            ["closeToTray"] = CloseToTray,
+            ["startMinimized"] = StartMinimized,
+            ["trayHintShown"] = TrayHintShown,
             ["rememberedUser"] = RememberedUser,
             ["lastSection"] = LastSection,
             ["windowWidth"] = WindowWidth,
