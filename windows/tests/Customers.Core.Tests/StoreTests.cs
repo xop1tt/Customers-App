@@ -538,12 +538,21 @@ public class EncryptionTests : StoreTestBase
 
     private static string NewKey() => Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
 
+    // На Windows открытая SQLite-база заблокирована для обычного чтения, поэтому читаем с разрешением совместного доступа.
+    private static byte[] ReadShared(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
+    }
+
     private static bool Contains(string path, string text)
     {
         var needle = System.Text.Encoding.UTF8.GetBytes(text);
         foreach (var suffix in new[] { "", "-wal" })
         {
-            if (File.Exists(path + suffix) && File.ReadAllBytes(path + suffix).AsSpan().IndexOf(needle) >= 0)
+            if (File.Exists(path + suffix) && ReadShared(path + suffix).AsSpan().IndexOf(needle) >= 0)
             {
                 return true;
             }
