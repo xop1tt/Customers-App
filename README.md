@@ -54,6 +54,12 @@ Customers просматривает открытые источники: RSS-л
 
 Нужна macOS 14 Sonoma или новее. Сборка из исходников: [Wiki → Установка](https://github.com/xop1tt/CLIENTS/wiki/Установка).
 
+### 🪟 Windows
+
+Есть и нативная версия для **Windows 10 и 11** (WinUI 3, .NET 10): те же источники, оценка, экспорт и облачная синхронизация, общий облачный аккаунт с macOS.
+Скачайте `Customers-vX.Y.Z-Windows-x64-Setup.exe` со страницы [релиза](https://github.com/xop1tt/CLIENTS/releases/latest) и запустите (права администратора не нужны).
+Установка, сборка и устройство: [windows/README.md](windows/README.md).
+
 ## 📖 Документация
 
 Подробная документация переехала в **[Wiki](https://github.com/xop1tt/CLIENTS/wiki)**:
