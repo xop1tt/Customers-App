@@ -85,3 +85,68 @@ jobs:
           name: core-test-results-${{ runner.os }}
           path: windows/TestResults
           retention-days: 14
+
+  # Интерфейс WinUI 3 собирается только на Windows. Здесь же проверяется главное: приложение запускается,
+  # проходит по всем разделам (Customers.exe --smoke), собирается установщик, ставится, работает и удаляется.
+  app:
+    name: WinUI app, installer and smoke run
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: windows
+        shell: pwsh
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: windows/global.json
+
+      - name: Restore
+        run: dotnet restore src/Customers.App -r win-x64
+
+      - name: Format check
+        run: dotnet format whitespace src/Customers.App --folder --verify-no-changes
+
+      - name: Build (warnings are errors)
+        run: dotnet build src/Customers.App -c Release -r win-x64 --no-restore
+
+      - name: Publish (self-contained)
+        run: >
+          dotnet publish src/Customers.App -c Release -r win-x64 --self-contained true
+          --no-restore -o "${{ github.workspace }}/windows/artifacts/publish"
+
+      - name: Smoke run of the published app
+        run: ./tools/smoke.ps1 -Exe artifacts/publish/Customers.exe -Output artifacts/smoke-publish
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          & $iscc /Qp /DAppVersion=1.0.0 /DSourceDir="$PWD\artifacts\publish" /DOutputDir="$PWD\artifacts" installer/Customers.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC завершился с кодом $LASTEXITCODE" }
+          Get-ChildItem artifacts -Filter *.exe | ForEach-Object { "$($_.Name)  $([math]::Round($_.Length/1MB,1)) MB" }
+
+      # Полный путь пользователя: установка → запуск установленной копии → удаление.
+      - name: Install, smoke run of the installed app, uninstall
+        run: ./tools/installer-check.ps1 -Artifacts artifacts
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-app-checks
+          path: |
+            windows/artifacts/smoke-publish
+            windows/artifacts/smoke-installed
+            windows/artifacts/install.log
+            windows/artifacts/Customers-*-Setup.exe
+          retention-days: 14
