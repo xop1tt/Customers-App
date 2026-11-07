@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Customers.Ui;
 
-/// <summary>Карточка выбранного лида: оценка и причины, контакты, заметка, черновик обращения, история.</summary>
+/// <summary>Карточка выбранного лида: оценка и причины, контакты с кнопками «Позвонить» и «Написать», заметка, история.</summary>
 public sealed partial class LeadInspector : UserControl
 {
     private readonly ShellView _shell;
@@ -13,7 +13,6 @@ public sealed partial class LeadInspector : UserControl
     private LeadItem? _shown;
     private string? _shownId;
     private bool _filling;
-    private string _draft = "";
 
     public LeadInspector(AppModel model, ShellView shell)
     {
@@ -24,12 +23,6 @@ public sealed partial class LeadInspector : UserControl
         _noteTimer.Interval = TimeSpan.FromMilliseconds(900);
         _noteTimer.IsRepeating = false;
         _noteTimer.Tick += (_, _) => SaveNote();
-        foreach (var channel in Enum.GetValues<DraftWriter.Channel>())
-        {
-            ChannelCombo.Items.Add(new ComboBoxItem { Content = channel.Title(), Tag = channel });
-        }
-
-        ChannelCombo.SelectedIndex = 0;
         Model.SelectionChanged += OnSelectionChanged;
         Model.DataReloaded += OnDataReloaded;
         Render(force: true);
@@ -111,11 +104,6 @@ public sealed partial class LeadInspector : UserControl
         }
 
         _filling = false;
-        if (!sameLead || force)
-        {
-            RebuildDraft();
-        }
-
         BuildHistory(lead);
         if (!sameLead)
         {
@@ -162,7 +150,6 @@ public sealed partial class LeadInspector : UserControl
     {
         DataPanel.Children.Clear();
         var d = lead.Data;
-        var draft = ContactLinks.EmailFor(d, Model.Signature);
         if (!string.IsNullOrWhiteSpace(d.CustomerName))
         {
             DataPanel.Children.Add(Row("Заказчик", d.CustomerName));
@@ -184,7 +171,7 @@ public sealed partial class LeadInspector : UserControl
             var actions = new List<(string, string, Action)> { ("", "Копировать", () => Launcher.Copy(email)) };
             if (ContactLinks.IsEmail(email))
             {
-                actions.Add(("", "Написать письмо с черновиком", () => Write(lead, email, draft.Subject, draft.Body)));
+                actions.Add(("", "Написать", () => Write(lead, email)));
             }
 
             DataPanel.Children.Add(Row("Email", email, [.. actions]));
@@ -262,7 +249,6 @@ public sealed partial class LeadInspector : UserControl
         var grid = new Grid { ColumnSpacing = 8, MinHeight = 28 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(104) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var l = new TextBlock { Text = label, Style = (Style)Application.Current.Resources["MutedTextStyle"], VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         var v = new TextBlock { Text = value, IsTextSelectionEnabled = true, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(v, 1);
@@ -270,12 +256,15 @@ public sealed partial class LeadInspector : UserControl
         grid.Children.Add(v);
         if (actions.Length > 0)
         {
-            var panel = new StackPanel { Orientation = Orientation.Horizontal };
+            var panel = new WrapPanel { HorizontalSpacing = 0, VerticalSpacing = 0 };
             foreach (var (glyph, tip, action) in actions)
             {
+                var primary = tip is "Позвонить" or "Написать";
                 var button = new Button {
-                    Content = new FontIcon { Glyph = glyph, FontSize = 12 },
-                    Padding = new Thickness(6),
+                    Content = primary
+                        ? UiKit.HStack(6, new FontIcon { Glyph = glyph, FontSize = 12 }, new TextBlock { Text = tip, FontSize = 12 })
+                        : new FontIcon { Glyph = glyph, FontSize = 12 },
+                    Padding = primary ? new Thickness(8, 4, 8, 4) : new Thickness(6),
                     Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                     BorderThickness = new Thickness(0),
                 };
@@ -286,7 +275,13 @@ public sealed partial class LeadInspector : UserControl
                 panel.Children.Add(button);
             }
 
-            Grid.SetColumn(panel, 2);
+            // Кнопки под значением: так они не вытесняют текст в узкой карточке и не выходят за её край.
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            panel.HorizontalAlignment = HorizontalAlignment.Left;
+            panel.Margin = new Thickness(-6, 0, 0, 0);
+            Grid.SetRow(panel, 1);
+            Grid.SetColumn(panel, 1);
             grid.Children.Add(panel);
         }
 
@@ -314,22 +309,22 @@ public sealed partial class LeadInspector : UserControl
         }
     }
 
-    /// <summary>Письмо: окно «Написать» с отправкой из приложения, если она настроена, иначе сразу почтовая программа Windows.</summary>
-    private void Write(LeadItem lead, string email, string subject, string body)
+    /// <summary>Письмо без заготовок: окно «Написать» с отправкой из приложения, если она настроена, иначе сразу почтовая программа Windows.</summary>
+    private void Write(LeadItem lead, string email)
     {
         if (Model.Mail.SmtpReady)
         {
-            _ = ComposeMailDialog.ShowAsync(Model, lead, email, subject, body);
+            _ = ComposeMailDialog.ShowAsync(Model, lead, email, "", "");
         }
         else
         {
-            _ = OpenMailAppAsync(lead, email, subject, body);
+            _ = OpenMailAppAsync(lead, email);
         }
     }
 
-    private async Task OpenMailAppAsync(LeadItem lead, string email, string subject, string body)
+    private async Task OpenMailAppAsync(LeadItem lead, string email)
     {
-        if (ContactLinks.MailtoUri(email, subject, body) is { } mail && await Launcher.OpenAsync(mail))
+        if (ContactLinks.MailtoUri(email, "", "") is { } mail && await Launcher.OpenAsync(mail))
         {
             Model.LogEvent(lead.Id, $"Открыто письмо для {email}");
         }
@@ -426,80 +421,6 @@ public sealed partial class LeadInspector : UserControl
         if (_shownId is { } id && !_filling && Model.Lead(id) is { } lead && lead.Note != NoteBox.Text)
         {
             Model.SetNote(id, NoteBox.Text);
-        }
-    }
-
-    // MARK: Черновик
-
-    private DraftWriter.Channel Channel => (ChannelCombo.SelectedItem as ComboBoxItem)?.Tag is DraftWriter.Channel c ? c : DraftWriter.Channel.Message;
-
-    private void OnChannelChanged(object sender, SelectionChangedEventArgs e) => RebuildDraft();
-
-    private void RebuildDraft()
-    {
-        if (_shown is not { } lead)
-        {
-            return;
-        }
-
-        _draft = DraftWriter.Draft(lead.Data, Channel, Model.Signature);
-        DraftBox.Text = _draft;
-        switch (Channel)
-        {
-            case DraftWriter.Channel.Email:
-                DraftActionButton.Content = "Открыть письмо";
-                DraftActionButton.IsEnabled = lead.Data.Emails.Count > 0;
-                break;
-            case DraftWriter.Channel.Call:
-                DraftActionButton.Content = "Позвонить";
-                DraftActionButton.IsEnabled = lead.Data.Phones.Any(p => ContactLinks.TelUri(p) is not null);
-                break;
-            default:
-                DraftActionButton.Content = "Открыть чат";
-                DraftActionButton.IsEnabled = lead.Data.Contacts.Any(kv => TelegramLink(kv.Key, kv.Value) is not null);
-                break;
-        }
-    }
-
-    private void OnCopyDraftClick(object sender, RoutedEventArgs e)
-    {
-        Launcher.Copy(DraftBox.Text);
-        App.Instance.Notifier.Success("Черновик скопирован");
-    }
-
-    private void OnDraftActionClick(object sender, RoutedEventArgs e)
-    {
-        if (_shown is not { } lead)
-        {
-            return;
-        }
-
-        switch (Channel)
-        {
-            case DraftWriter.Channel.Email:
-                var parts = ContactLinks.Split(DraftBox.Text);
-                if (lead.Data.Emails.FirstOrDefault(ContactLinks.IsEmail) is { } email)
-                {
-                    Write(lead, email, parts.Subject, parts.Body);
-                }
-
-                break;
-            case DraftWriter.Channel.Call:
-                if (lead.Data.Phones.FirstOrDefault(p => ContactLinks.TelUri(p) is not null) is { } phone)
-                {
-                    Call(lead, phone, ContactLinks.TelUri(phone)!);
-                }
-
-                break;
-            default:
-                if (lead.Data.Contacts.Select(kv => TelegramLink(kv.Key, kv.Value)).FirstOrDefault(x => x is not null) is { } chat)
-                {
-                    Launcher.Copy(DraftBox.Text);
-                    _ = Launcher.OpenWebAsync(chat);
-                    App.Instance.Notifier.Info("Текст скопирован", "Вставьте его в открывшийся чат.");
-                }
-
-                break;
         }
     }
 

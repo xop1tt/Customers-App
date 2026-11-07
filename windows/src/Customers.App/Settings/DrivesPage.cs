@@ -256,7 +256,7 @@ internal static class KeyDialog
         var redirectRow = UiKit.HStack(8,
             new TextBlock { Text = redirect, FontFamily = new FontFamily("Consolas"), IsTextSelectionEnabled = true, VerticalAlignment = VerticalAlignment.Center },
             UiKit.IconButton(Glyphs.Copy, "Копировать адрес возврата", () => Launcher.Copy(redirect)));
-        var panel = new StackPanel { Spacing = 10, Width = 480 };
+        var panel = new StackPanel { Spacing = 10, MaxWidth = 480 };
         panel.Children.Add(UiKit.Muted("Один раз создайте своё бесплатное приложение в консоли сервиса и вставьте его ключ сюда."));
         panel.Children.Add(id);
         panel.Children.Add(secret);
@@ -313,7 +313,7 @@ internal static class WebDavDialog
         var login = new TextBox { Header = "Логин", PlaceholderText = service.PasswordOptional() ? "не нужен для MEGAcmd" : "логин или email", Text = current?.Login ?? "" };
         var password = new PasswordBox { Header = "Пароль приложения", PlaceholderText = service.PasswordOptional() ? "не нужен для MEGAcmd" : "" };
         var error = new TextBlock { Foreground = UiKit.ThemeBrush("SystemFillColorCriticalBrush"), TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
-        var panel = new StackPanel { Spacing = 10, Width = 460 };
+        var panel = new StackPanel { Spacing = 10, MaxWidth = 460 };
         panel.Children.Add(UiKit.Muted(service.Subtitle()));
         panel.Children.Add(url);
         panel.Children.Add(login);

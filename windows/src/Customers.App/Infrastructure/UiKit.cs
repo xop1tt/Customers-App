@@ -58,13 +58,18 @@ internal static class UiKit
         return panel;
     }
 
-    /// <summary>Строка настройки как в «Параметрах Windows»: название и пояснение слева, элемент управления справа.</summary>
+    /// <summary>Ширина карточки, при которой элемент управления переходит под текст, чтобы строка не распиралась и не обрезалась.</summary>
+    private const double StackBelow = 560;
+
+    /// <summary>Строка настройки как в «Параметрах Windows»: название и пояснение слева, элемент управления справа. В узком окне (и при крупном масштабе) элемент управления переходит под текст.</summary>
     public static Border SettingRow(string title, string? description, FrameworkElement? control, string? glyph = null)
     {
-        var grid = new Grid { ColumnSpacing = 16 };
+        var grid = new Grid { ColumnSpacing = 16, RowSpacing = 10 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         if (glyph is not null)
         {
             grid.Children.Add(new FontIcon { Glyph = glyph, FontSize = 18, VerticalAlignment = VerticalAlignment.Center });
@@ -72,6 +77,7 @@ internal static class UiKit
         else
         {
             grid.ColumnDefinitions[0].Width = new GridLength(0);
+            grid.ColumnSpacing = 0;
         }
 
         var text = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
@@ -85,12 +91,71 @@ internal static class UiKit
         grid.Children.Add(text);
         if (control is not null)
         {
-            control.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(control, 2);
+            var stacked = false;
+            void Place(bool below)
+            {
+                stacked = below;
+                Grid.SetRow(control, below ? 1 : 0);
+                Grid.SetColumn(control, below ? 1 : 2);
+                control.HorizontalAlignment = below ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+                control.VerticalAlignment = VerticalAlignment.Center;
+                grid.ColumnSpacing = glyph is null && below ? 0 : 16;
+            }
+
+            Place(false);
             grid.Children.Add(control);
+            grid.SizeChanged += (_, e) =>
+            {
+                var below = e.NewSize.Width < StackBelow;
+                if (below != stacked)
+                {
+                    Place(below);
+                }
+            };
         }
 
         return Card(grid, 14);
+    }
+
+    /// <summary>
+    /// Единая раскладка «поле + кнопка действия» для интеграций: поле растягивается, кнопка стоит справа и выровнена по нижней кромке поля
+    /// (а не по его подписи). В узком окне кнопка переходит под поле, чтобы ничего не обрезалось.
+    /// </summary>
+    public static Grid InputRow(FrameworkElement input, Button? action = null)
+    {
+        var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        input.HorizontalAlignment = HorizontalAlignment.Stretch;
+        input.Width = double.NaN;
+        input.MinWidth = 0;
+        grid.Children.Add(input);
+        if (action is not null)
+        {
+            action.VerticalAlignment = VerticalAlignment.Bottom;
+            action.MinHeight = 32;
+            Grid.SetColumn(action, 1);
+            grid.Children.Add(action);
+            var below = false;
+            grid.SizeChanged += (_, e) =>
+            {
+                var narrow = e.NewSize.Width < 460;
+                if (narrow == below)
+                {
+                    return;
+                }
+
+                below = narrow;
+                Grid.SetRow(action, narrow ? 1 : 0);
+                Grid.SetColumn(action, narrow ? 0 : 1);
+                Grid.SetColumnSpan(action, narrow ? 2 : 1);
+                action.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+            };
+        }
+
+        return grid;
     }
 
     public static Button TextButton(string text, Action action, bool accent = false, string? tip = null)
@@ -233,17 +298,27 @@ internal static class UiKit
     public static InfoBar Bar(InfoBarSeverity severity, string title, string message, bool open = true) =>
         new() { Severity = severity, Title = title, Message = message, IsOpen = open, IsClosable = false };
 
-    /// <summary>Страница со скроллом и ограничением ширины, чтобы текст не растягивался на весь монитор.</summary>
+    /// <summary>
+    /// Страница со скроллом. Содержимое занимает всю ширину, но не больше <paramref name="maxWidth"/>, и всегда прижато влево:
+    /// раньше оно центрировалось и «ездило» вправо, когда левую панель сворачивали или окно растягивали.
+    /// </summary>
     public static ScrollViewer Page(StackPanel content, double maxWidth = 1000)
     {
-        content.MaxWidth = maxWidth;
-        content.HorizontalAlignment = HorizontalAlignment.Stretch;
         content.Padding = new Thickness(24, 8, 24, 32);
-        return new ScrollViewer {
+        var scroll = new ScrollViewer {
             Content = content,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
+        FitWidth(scroll, content, maxWidth);
+        return scroll;
+    }
+
+    /// <summary>Делает ширину содержимого равной ширине окна просмотра, но не больше предела; выравнивание — по левому краю.</summary>
+    public static void FitWidth(ScrollViewer host, FrameworkElement content, double maxWidth)
+    {
+        content.HorizontalAlignment = HorizontalAlignment.Left;
+        host.SizeChanged += (_, e) => content.Width = Math.Max(0, Math.Min(maxWidth, e.NewSize.Width));
     }
 
     public static Border Pill(string text, Brush? background = null, Brush? foreground = null)

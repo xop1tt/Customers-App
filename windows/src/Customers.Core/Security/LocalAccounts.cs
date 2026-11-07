@@ -118,6 +118,19 @@ public sealed partial class LocalAccounts : IDisposable
 
     public UserAccount Login(string username, string password)
     {
+        var key = CheckCredentials(username, password);
+        _db.Run("UPDATE users SET last_login_at=? WHERE username_key=?", ISODate.Now(), key);
+        return Account(key) ?? new UserAccount(username);
+    }
+
+    /// <summary>
+    /// Проверяет пароль уже вошедшего пользователя перед опасным действием (например, удалением всех лидов).
+    /// Те же задержка после неудачных попыток и подсчёт ошибок, что и при входе. Неверный пароль — <see cref="AuthException"/>.
+    /// </summary>
+    public void ConfirmPassword(string username, string password) => CheckCredentials(username, password);
+
+    private string CheckCredentials(string username, string password)
+    {
         var key = KeyOf(username.Trim());
         lock (_gate)
         {
@@ -151,8 +164,7 @@ public sealed partial class LocalAccounts : IDisposable
             _failures.Remove(key);
         }
 
-        _db.Run("UPDATE users SET last_login_at=? WHERE username_key=?", ISODate.Now(), key);
-        return Account(key) ?? new UserAccount(username);
+        return key;
     }
 
     private bool Verify(string key, string password)

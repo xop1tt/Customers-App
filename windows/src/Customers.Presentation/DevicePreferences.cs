@@ -37,6 +37,8 @@ public sealed class DevicePreferences : ObservableObject
     private bool _compactRows;
     private bool _animations = true;
     private bool _checkUpdates = true;
+    private int _updateCheckHours = UpdateSchedule.DefaultHours;
+    private DateTimeOffset? _lastUpdateCheck;
     private bool _closeToTray = true;
     private bool _startMinimized = true;
     private bool _trayHintShown;
@@ -76,6 +78,12 @@ public sealed class DevicePreferences : ObservableObject
     public bool Animations { get => _animations; set => Update(ref _animations, value); }
 
     public bool CheckUpdates { get => _checkUpdates; set => Update(ref _checkUpdates, value); }
+
+    /// <summary>Как часто автоматически проверять обновления, в часах: 0 — при каждом запуске, иначе одно из <see cref="UpdateSchedule.Choices"/>.</summary>
+    public int UpdateCheckHours { get => _updateCheckHours; set => Update(ref _updateCheckHours, UpdateSchedule.Normalize(value)); }
+
+    /// <summary>Когда обновления проверялись в последний раз (автоматически или вручную).</summary>
+    public DateTimeOffset? LastUpdateCheck { get => _lastUpdateCheck; set => Update(ref _lastUpdateCheck, value); }
 
     /// <summary>Закрытие окна не завершает приложение, а оставляет его работать в области уведомлений (автопоиск и копии продолжаются).</summary>
     public bool CloseToTray { get => _closeToTray; set => Update(ref _closeToTray, value); }
@@ -144,6 +152,8 @@ public sealed class DevicePreferences : ObservableObject
             _compactRows = Get<bool?>("compactRows") ?? _compactRows;
             _animations = Get<bool?>("animations") ?? _animations;
             _checkUpdates = Get<bool?>("checkUpdates") ?? _checkUpdates;
+            _updateCheckHours = UpdateSchedule.Normalize(Get<int?>("updateCheckHours") ?? _updateCheckHours);
+            _lastUpdateCheck = DateTimeOffset.TryParse(Get<string>("lastUpdateCheck"), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var last) ? last : null;
             _closeToTray = Get<bool?>("closeToTray") ?? _closeToTray;
             _startMinimized = Get<bool?>("startMinimized") ?? _startMinimized;
             _trayHintShown = Get<bool?>("trayHintShown") ?? _trayHintShown;
@@ -175,6 +185,8 @@ public sealed class DevicePreferences : ObservableObject
             ["compactRows"] = CompactRows,
             ["animations"] = Animations,
             ["checkUpdates"] = CheckUpdates,
+            ["updateCheckHours"] = UpdateCheckHours,
+            ["lastUpdateCheck"] = LastUpdateCheck?.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
             ["closeToTray"] = CloseToTray,
             ["startMinimized"] = StartMinimized,
             ["trayHintShown"] = TrayHintShown,

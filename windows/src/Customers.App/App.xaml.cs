@@ -140,10 +140,12 @@ public partial class App : Application
                 }
             }
 
-            if (Env.Device.CheckUpdates)
+            if (UpdateSchedule.IsDue(Env.Device.CheckUpdates, Env.Device.UpdateCheckHours, Env.Device.LastUpdateCheck, DateTimeOffset.Now))
             {
                 await Task.Delay(4000);
-                if (await Updates.CheckAsync() is { } offer)
+                var found = await Updates.CheckAsync();
+                Env.Device.LastUpdateCheck = DateTimeOffset.Now;
+                if (found is { } offer)
                 {
                     Notifier.Post(new Notice(NoticeKind.Info, $"Доступна версия {offer.Version}", "Обновление скачивается с GitHub и проверяется по контрольной сумме.",
                         "Установить", () => _ = MainWindow.InstallUpdateAsync(offer)));

@@ -214,7 +214,7 @@ public sealed class CloudSyncController : ObservableObject, IDisposable
         {
             State = SyncState.Offline;
         }
-        catch (Exception e) when (e is CloudException or DatabaseException or Microsoft.Data.Sqlite.SqliteException or IOException)
+        catch (Exception e) when (e is CloudException or DatabaseException or Microsoft.Data.Sqlite.SqliteException or IOException or System.Text.Json.JsonException)
         {
             _env.Log.Error("Синхронизация не удалась", e);
             State = SyncState.Failed;

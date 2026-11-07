@@ -117,10 +117,13 @@ public sealed class SessionModel : ObservableObject
         catch (OperationCanceledException)
         {
         }
-        catch (Exception e) when (e is DatabaseException or Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is not OutOfMemoryException)
         {
+            // Любой другой сбой (база, защищённое хранилище, разбор ответа сервера) показывается в окне входа, а не роняет приложение.
             _env.Log.Error("Операция учётной записи не удалась", e);
-            Error = e.Message;
+            Error = e is DatabaseException or Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException
+                ? e.Message
+                : "Не получилось: " + e.Message;
         }
         finally
         {
@@ -363,6 +366,63 @@ public sealed class SessionModel : ObservableObject
     });
 
     public Task<string?> ResendCloudEmailChangeAsync() => Guard(c => c.ResendEmailChangeAsync());
+
+    /// <summary>
+    /// Удаление всех лидов открытой учётной записи. Сначала проверяется пароль этой учётной записи (облачной — на сервере,
+    /// локальной — по хешу), затем сохраняется резервная копия, и только потом лиды удаляются. Любая неудача на этих шагах —
+    /// сообщение об ошибке и никакого удаления. Возвращает null при успехе.
+    /// </summary>
+    public async Task<string?> DeleteAllLeadsAsync(string password)
+    {
+        if (Current is not { } model)
+        {
+            return "Сначала войдите в учётную запись.";
+        }
+
+        if (password.Length == 0)
+        {
+            return "Введите пароль учётной записи.";
+        }
+
+        try
+        {
+            if (model.IsCloud)
+            {
+                var cloud = Cloud ?? throw new CloudException(CloudErrorKind.NotConfigured);
+                await cloud.CheckPasswordAsync(password).ConfigureAwait(true);
+            }
+            else
+            {
+                var auth = Accounts ?? throw new AuthException(AuthFailure.WrongCredentials);
+                await Task.Run(() => auth.ConfirmPassword(model.Username, password)).ConfigureAwait(true);
+            }
+        }
+        catch (CloudException e) when (e.Kind == CloudErrorKind.InvalidCredentials)
+        {
+            return "Неверный пароль. Лиды не удалены.";
+        }
+        catch (CloudException e)
+        {
+            return e.Message + " Лиды не удалены.";
+        }
+        catch (AuthException e)
+        {
+            return e.Kind == AuthFailure.WrongCredentials ? "Неверный пароль. Лиды не удалены." : e.Message;
+        }
+        catch (Exception e) when (e is IOException or Microsoft.Data.Sqlite.SqliteException or DatabaseException)
+        {
+            _env.Log.Error("Проверка пароля не удалась", e);
+            return "Не удалось проверить пароль: " + e.Message + " Лиды не удалены.";
+        }
+
+        if (model.BackupNow() is null)
+        {
+            return "Не удалось сохранить резервную копию, поэтому лиды не удалены. " + model.LastError;
+        }
+
+        model.Delete(model.AllLeads.Select(l => l.Id).ToList());
+        return null;
+    }
 
     /// <summary>Удаление облачной учётной записи. Сначала сохраняется копия базы, без неё удалять нельзя.</summary>
     public async Task<string?> DeleteCloudAccountAsync(string password)

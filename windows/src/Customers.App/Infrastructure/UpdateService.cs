@@ -22,6 +22,7 @@ internal sealed class UpdateService
     {
         Offer = await new UpdateChecker(_env.SearchTransport()).CheckAsync(Current, ct).ConfigureAwait(true);
         CheckedAt = DateTimeOffset.Now;
+        _env.Device.LastUpdateCheck = CheckedAt;
         return Offer;
     }
 

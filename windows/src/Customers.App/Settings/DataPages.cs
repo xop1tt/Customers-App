@@ -211,8 +211,8 @@ internal sealed class DataPage(AppModel model, SessionModel session, ShellView s
             })));
 
         Heading("Опасная зона");
-        Add(UiKit.SettingRow("Удалить все лиды", "Перед удалением сохраняется копия базы. Настройки, исключения и учётная запись остаются.",
-            UiKit.TextButton("Удалить все лиды…", () => Run(DeleteAllAsync))));
+        Add(UiKit.SettingRow("Удалить все лиды", "Нужен пароль учётной записи. Перед удалением сохраняется копия базы. Настройки, исключения и учётная запись остаются.",
+            DangerButton("Удалить все лиды…", () => Run(DeleteAllAsync))));
     }
 
     private async Task CheckAsync()
@@ -228,6 +228,27 @@ internal sealed class DataPage(AppModel model, SessionModel session, ShellView s
         }
     }
 
+    /// <summary>Красная кнопка опасного действия.</summary>
+    private static Button DangerButton(string text, Action action)
+    {
+        var button = UiKit.TextButton(text, action);
+        button.Background = UiKit.ThemeBrush("SystemFillColorCriticalBrush");
+        button.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White);
+        // Подсветка при наведении и нажатии остаётся красной: переопределяем ресурсы кнопки, иначе тема вернёт серый.
+        foreach (var key in new[] { "ButtonBackgroundPointerOver", "ButtonBackgroundPressed" })
+        {
+            button.Resources[key] = UiKit.ThemeBrush("SystemFillColorCriticalBrush");
+        }
+
+        foreach (var key in new[] { "ButtonForegroundPointerOver", "ButtonForegroundPressed", "ButtonBorderBrushPointerOver", "ButtonBorderBrushPressed" })
+        {
+            button.Resources[key] = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White);
+        }
+
+        button.BorderBrush = UiKit.ThemeBrush("SystemFillColorCriticalBrush");
+        return button;
+    }
+
     private async Task DeleteAllAsync()
     {
         var count = Model.AllLeads.Count;
@@ -237,18 +258,21 @@ internal sealed class DataPage(AppModel model, SessionModel session, ShellView s
             return;
         }
 
-        if (!await Dialogs.ConfirmAsync("Удалить все лиды?", $"Будет удалено лидов: {count}. Сначала сохранится резервная копия, из которой их можно вернуть.", "Удалить"))
+        var password = await Dialogs.PromptAsync("Удалить все лиды?",
+            $"Будет удалено лидов: {count}. Сначала сохранится резервная копия, из которой их можно вернуть. Для подтверждения введите пароль своей учётной записи.",
+            "Пароль учётной записи", password: true, primary: "Удалить все лиды");
+        if (password is null)
         {
             return;
         }
 
-        if (Model.BackupNow() is null)
+        if (await Session.DeleteAllLeadsAsync(password) is { } problem)
         {
-            Fail("Лиды не удалены", "Не удалось сохранить резервную копию.");
+            Fail("Лиды не удалены", problem);
             return;
         }
 
-        Model.Delete(Model.AllLeads.Select(l => l.Id).ToList());
+        Ok("Все лиды удалены", "Резервная копия сохранена: её можно вернуть в разделе «Резервные копии».");
         Refresh();
     }
 
@@ -268,14 +292,14 @@ internal sealed class DataPage(AppModel model, SessionModel session, ShellView s
 
 internal sealed class AboutPage(AppModel model, SessionModel session, ShellView shell) : SettingsPage(model, session, shell)
 {
-    private const string Repository = "https://github.com/xop1tt/CLIENTS";
+    private const string Repository = "https://github.com/xop1tt/Customers-App";
 
     protected override SettingsSection Kind => SettingsSection.About;
 
     protected override void Fill()
     {
         Add(UiKit.Card(UiKit.VStack(4, UiKit.SubTitle("Customers"), UiKit.Muted("Поиск заказов и потенциальных клиентов по публичным источникам"),
-            UiKit.Muted("Версия " + AppBuild.Version + " · Windows"))));
+            UiKit.Muted("Версия " + AppBuild.Version))));
 
         Heading("Обновления");
         var updates = App.Instance.Updates;
@@ -292,12 +316,18 @@ internal sealed class AboutPage(AppModel model, SessionModel session, ShellView 
                 UiKit.TextButton("Установить и перезапустить", () => Run(() => App.Instance.MainWindow.InstallUpdateAsync(available)), accent: true)));
         }
 
-        Add(UiKit.SettingRow("Проверять при запуске", "Раз в сутки сверяться с последним выпуском на GitHub. Больше ничего не отправляется.",
-            UiKit.Toggle(Device.CheckUpdates, v => Device.CheckUpdates = v)));
+        Add(UiKit.SettingRow("Проверять автоматически", "Сверяться с последним выпуском на GitHub. Больше ничего не отправляется. Установка всегда только с вашего согласия.",
+            UiKit.Toggle(Device.CheckUpdates, v =>
+            {
+                Device.CheckUpdates = v;
+                Refresh();
+            })));
+        var frequency = UiKit.Combo(UpdateSchedule.Choices.Select(c => (c.Title, c.Hours)), Device.UpdateCheckHours, v => Device.UpdateCheckHours = v, 220);
+        frequency.IsEnabled = Device.CheckUpdates;
+        Add(UiKit.SettingRow("Как часто проверять", Device.LastUpdateCheck is { } last ? "Последняя проверка: " + Fmt.Date(last) : "Проверок ещё не было.", frequency));
 
         Heading("О проекте");
         Add(UiKit.SettingRow("Лицензия", "PIBUL 1.0 — свободное использование и изменение, без гарантий.", null));
         Add(UiKit.SettingRow("Исходный код и страница выпусков", Repository, UiKit.TextButton("Открыть", () => Run(() => Launcher.OpenWebAsync(Repository)))));
-        Add(UiKit.SettingRow("Версия для macOS", "Те же лиды и настройки при входе в одну облачную запись.", null));
     }
 }

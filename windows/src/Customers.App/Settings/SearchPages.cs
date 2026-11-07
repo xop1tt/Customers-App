@@ -45,11 +45,6 @@ internal sealed class SearchPage(AppModel model, SessionModel session, ShellView
         Add(UiKit.SettingRow("Найти сейчас", status, run));
         Add(UiKit.SettingRow("Подробности по источникам", "Состояние, ошибки и сброс памяти источника — в разделе «Источники».",
             UiKit.TextButton("Открыть источники", () => Shell.Navigate(NavSection.Sources))));
-
-        Heading("Письма");
-        var signature = new TextBox { Text = Model.Signature, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 90, Header = "Подпись в черновиках писем" };
-        signature.LostFocus += (_, _) => Model.Signature = signature.Text;
-        Add(UiKit.Card(UiKit.VStack(8, signature, UiKit.Muted("Добавляется в конец сообщения, которое приложение готовит для связи с клиентом."))));
     }
 }
 

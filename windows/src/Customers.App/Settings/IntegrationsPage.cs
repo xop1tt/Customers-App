@@ -34,11 +34,11 @@ internal sealed class IntegrationsPage(AppModel model, SessionModel session, She
         {
             Model.SetCrmSecret(CrmKind.Bitrix, v);
             Refresh();
-        }, width: 380, placeholder: "https://ваш-портал.bitrix24.ru/rest/1/ключ/");
+        }, placeholder: "https://ваш-портал.bitrix24.ru/rest/1/ключ/");
         var check = UiKit.TextButton("Проверить подключение", () => Run(() => CheckBitrixAsync(secret.Password)));
         Add(UiKit.Card(UiKit.VStack(10, UiKit.Strong("Адрес входящего вебхука"),
             UiKit.Muted("В Bitrix24: Разработчикам → Другое → Входящий вебхук. Нужно право «CRM». Каждый лид появится в CRM один раз: повторная отправка пропускает уже переданные."),
-            secret, check)));
+            UiKit.InputRow(secret, check))));
     }
 
     private async Task CheckBitrixAsync(string text)
@@ -87,10 +87,10 @@ internal sealed class IntegrationsPage(AppModel model, SessionModel session, She
 
             Model.SetCrmSecret(CrmKind.Webhook, v);
             Ok(v.Trim().Length == 0 ? "Вебхук удалён" : "Адрес вебхука сохранён");
-        }, width: 380, placeholder: "https://hooks.example.com/…");
+        }, placeholder: "https://hooks.example.com/…");
         Add(UiKit.Card(UiKit.VStack(10, UiKit.Strong("Адрес вебхука (https)"),
             UiKit.Muted("Для Make, Zapier, n8n и любых своих сервисов: каждый лид уходит отдельным POST-запросом в формате JSON. Адрес секретный, поэтому допускается только https."),
-            secret)));
+            UiKit.InputRow(secret))));
     }
 
     private void FillNotion()
@@ -100,13 +100,13 @@ internal sealed class IntegrationsPage(AppModel model, SessionModel session, She
         {
             Model.SetCrmSecret(CrmKind.Notion, v);
             Refresh();
-        }, width: 380, placeholder: "secret_… или ntn_…");
-        var database = new TextBox { Text = _notionDatabaseText, PlaceholderText = "ссылка на базу или её номер", Width = 380 };
+        }, placeholder: "secret_… или ntn_…");
+        var database = new TextBox { Text = _notionDatabaseText, PlaceholderText = "ссылка на базу или её номер" };
         database.TextChanged += (_, _) => _notionDatabaseText = database.Text;
         var load = UiKit.TextButton("Загрузить поля базы", () => Run(() => LoadDatabaseAsync(token.Password)));
         var body = UiKit.VStack(10, UiKit.Strong("Внутренняя интеграция Notion"),
             UiKit.Muted("Создайте интеграцию на notion.so/profile/integrations, откройте нужную базу → «…» → «Подключения» и добавьте интеграцию. Токен вставьте ниже."),
-            token, database, load);
+            UiKit.InputRow(token), UiKit.InputRow(database, load));
         Add(UiKit.Card(body));
 
         if (_database is { } db)

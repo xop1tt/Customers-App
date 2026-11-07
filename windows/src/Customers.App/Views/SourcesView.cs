@@ -95,18 +95,39 @@ public sealed class SourcesView : UserControl, ISectionAware, IDetachable
         }
 
         var interval = UiKit.Number(settings.IntervalHours(key), 0.25, 24 * 30, h => Model.UpdateSearchSettings(s => SetInterval(s, key, h)), 0.5, "Интервал, часов", 160);
-        var actions = UiKit.HStack(8,
-            UiKit.TextButton(Model.Searching ? "Идёт поиск…" : "Проверить сейчас", () => _ = Model.RunSearchAsync(true, new HashSet<string> { key }), accent: true),
-            UiKit.TextButton("Сбросить память источника", () => Model.ResetSourceMemory(key), tip: "Забыть, что уже просмотрено, чтобы источник был просмотрен заново"),
-            UiKit.TextButton("Настроить…", () => _shell.OpenSettings(SettingsSection.Sources)));
+        var actions = new WrapPanel { HorizontalSpacing = 8, VerticalSpacing = 8 };
+        actions.Children.Add(UiKit.TextButton(Model.Searching ? "Идёт поиск…" : "Проверить сейчас", () => _ = Model.RunSearchAsync(true, new HashSet<string> { key }), accent: true));
+        actions.Children.Add(UiKit.TextButton("Сбросить память источника", () => Model.ResetSourceMemory(key), tip: "Забыть, что уже просмотрено, чтобы источник был просмотрен заново"));
+        actions.Children.Add(UiKit.TextButton("Настроить…", () => _shell.OpenSettings(SettingsSection.Sources)));
         ((Button)actions.Children[0]).IsEnabled = !Model.Searching && enabled;
-        var bottom = new Grid { ColumnSpacing = 16 };
+        // Интервал слева, кнопки справа от него; в узком окне кнопки переходят под интервал.
+        var bottom = new Grid { ColumnSpacing = 16, RowSpacing = 10 };
         bottom.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         bottom.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        bottom.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        bottom.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         bottom.Children.Add(interval);
-        Grid.SetColumn(actions, 1);
         actions.VerticalAlignment = VerticalAlignment.Bottom;
+        actions.HorizontalAlignment = HorizontalAlignment.Left;
         bottom.Children.Add(actions);
+        var below = false;
+        void Place(bool value)
+        {
+            below = value;
+            Grid.SetColumn(actions, value ? 0 : 1);
+            Grid.SetRow(actions, value ? 1 : 0);
+            Grid.SetColumnSpan(actions, value ? 2 : 1);
+        }
+
+        Place(false);
+        bottom.SizeChanged += (_, e) =>
+        {
+            var narrow = e.NewSize.Width < 640;
+            if (narrow != below)
+            {
+                Place(narrow);
+            }
+        };
         panel.Children.Add(bottom);
         return UiKit.Card(panel);
     }

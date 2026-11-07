@@ -19,7 +19,7 @@ public sealed class AccountPreferences : ObservableObject
     private bool _notifySync;
     private string _mailAccount = "";
     private MailDelivery _mailDelivery = MailDelivery.MailApp;
-    private bool _confirmCalls;
+    private bool _confirmCalls = true;
 
     public AccountPreferences(string path, string defaultBackupDirectory)
     {
@@ -52,7 +52,7 @@ public sealed class AccountPreferences : ObservableObject
 
     public MailDelivery MailDelivery { get => _mailDelivery; set => Update(ref _mailDelivery, value); }
 
-    /// <summary>Спрашивать подтверждение перед звонком из карточки лида.</summary>
+    /// <summary>Спрашивать подтверждение перед звонком из карточки лида (по умолчанию да).</summary>
     public bool ConfirmCalls { get => _confirmCalls; set => Update(ref _confirmCalls, value); }
 
     private void Update<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
@@ -84,7 +84,12 @@ public sealed class AccountPreferences : ObservableObject
             _notifySync = Get<bool?>("notifySync") ?? _notifySync;
             _mailAccount = Get<string>("mailAccount") ?? _mailAccount;
             _mailDelivery = Enum.TryParse<MailDelivery>(Get<string>("mailDelivery"), out var delivery) ? delivery : _mailDelivery;
-            _confirmCalls = Get<bool?>("confirmCalls") ?? _confirmCalls;
+            // До версии 2 значение записывалось при любом сохранении настроек, даже если пользователь его не трогал,
+            // поэтому старое «выключено» не считается выбором пользователя: подтверждение звонка включено по умолчанию.
+            if (Get<int?>("confirmCallsVersion") is >= 2)
+            {
+                _confirmCalls = Get<bool?>("confirmCalls") ?? _confirmCalls;
+            }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -106,6 +111,7 @@ public sealed class AccountPreferences : ObservableObject
             ["mailAccount"] = MailAccount,
             ["mailDelivery"] = MailDelivery.ToString(),
             ["confirmCalls"] = ConfirmCalls,
+            ["confirmCallsVersion"] = 2,
         };
         try
         {

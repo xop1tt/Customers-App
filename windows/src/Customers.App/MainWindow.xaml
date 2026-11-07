@@ -28,7 +28,7 @@
                     AutomationProperties.Name="Показать или скрыть левую панель">
                 <FontIcon Glyph="&#xE700;" FontSize="16" />
             </Button>
-            <Image Grid.Column="2" Source="ms-appx:///Assets/AppIcon.png" Width="18" Height="18" Margin="8,0,0,0" />
+            <Image Grid.Column="2" Source="ms-appx:///Assets/AppIcon.png" Width="24" Height="24" Margin="8,0,0,0" />
             <TextBlock x:Name="TitleText" Grid.Column="3" Text="Customers" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="10,0,0,0" />
 
             <Button x:Name="SyncButton" Grid.Column="5" Height="32" Margin="0,0,4,0" Padding="10,0" Background="Transparent" BorderThickness="0"
