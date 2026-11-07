@@ -9,10 +9,15 @@ public sealed class SettingsView : UserControl, IDetachable
     private readonly AppModel _model;
     private readonly SessionModel _session;
     private readonly ShellView _shell;
-    private readonly ListView _list = new() { SelectionMode = ListViewSelectionMode.Single, Width = 230, Padding = new Thickness(8, 0, 4, 8) };
+    private readonly ListView _list = new() { SelectionMode = ListViewSelectionMode.Single, Width = ExpandedWidth, Padding = new Thickness(8, 0, 8, 8) };
     private readonly ContentControl _host = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
     private SettingsSection _current = SettingsSection.Appearance;
+    private const double ExpandedWidth = 232;
+    private const double CompactWidth = 60;
+    private readonly List<TextBlock> _titles = [];
+    private readonly TextBlock _header;
     private bool _syncing;
+    private bool _compact;
 
     public SettingsView(AppModel model, SessionModel session, ShellView shell)
     {
@@ -21,8 +26,14 @@ public sealed class SettingsView : UserControl, IDetachable
         _shell = shell;
         foreach (var section in Enum.GetValues<SettingsSection>())
         {
-            var row = UiKit.HStack(12, new FontIcon { Glyph = section.Glyph(), FontSize = 16 }, new TextBlock { Text = section.Title(), VerticalAlignment = VerticalAlignment.Center });
-            _list.Items.Add(new ListViewItem { Content = row, Tag = section, MinHeight = 40 });
+            var title = new TextBlock { Text = section.Title(), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            _titles.Add(title);
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+            row.Children.Add(new FontIcon { Glyph = section.Glyph(), FontSize = 16, Width = 20 });
+            row.Children.Add(title);
+            var item = new ListViewItem { Content = row, Tag = section, MinHeight = 40, HorizontalContentAlignment = HorizontalAlignment.Left };
+            ToolTipService.SetToolTip(item, section.Title());
+            _list.Items.Add(item);
         }
 
         _list.SelectionChanged += (_, _) =>
@@ -36,21 +47,39 @@ public sealed class SettingsView : UserControl, IDetachable
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var header = new TextBlock { Text = "Настройки", Style = UiKit.Style("TitleTextBlockStyle"), Margin = new Thickness(20, 8, 12, 12) };
+        _header = new TextBlock { Text = "Настройки", Style = UiKit.Style("TitleTextBlockStyle"), Margin = new Thickness(24, 8, 12, 12) };
         var left = new Grid();
         left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         left.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        left.Children.Add(header);
+        left.Children.Add(_header);
         Grid.SetRow(_list, 1);
         left.Children.Add(_list);
         grid.Children.Add(left);
         Grid.SetColumn(_host, 1);
         grid.Children.Add(_host);
         Content = grid;
+        // В узком окне (и при крупном масштабе Windows) список разделов сжимается до значков, чтобы не отнимать место у страницы.
+        grid.SizeChanged += (_, e) => SetCompact(e.NewSize.Width < 760);
         Select(_current);
     }
 
     public void Detach() => _host.Content = null;
+
+    private void SetCompact(bool compact)
+    {
+        if (compact == _compact)
+        {
+            return;
+        }
+
+        _compact = compact;
+        _list.Width = compact ? CompactWidth : ExpandedWidth;
+        _header.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var title in _titles)
+        {
+            title.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
 
     public void Select(SettingsSection section)
     {

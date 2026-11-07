@@ -1,14 +1,15 @@
 <UserControl
     x:Class="Customers.Ui.LeadInspector"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Customers.Ui">
 
     <Grid>
         <!-- Ничего не выбрано -->
         <StackPanel x:Name="NoneState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" Padding="24" MaxWidth="320">
             <FontIcon Glyph="&#xE8A5;" FontSize="36" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
             <TextBlock Text="Выберите лид" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" />
-            <TextBlock Text="Здесь появятся оценка и её причины, контакты, заметка, черновик обращения и история." Style="{StaticResource MutedTextStyle}" TextAlignment="Center" />
+            <TextBlock Text="Здесь появятся оценка и её причины, контакты, заметка и история." Style="{StaticResource MutedTextStyle}" TextAlignment="Center" />
         </StackPanel>
 
         <!-- Выбрано несколько -->
@@ -28,7 +29,7 @@
                 <TextBlock x:Name="TitleText" Style="{StaticResource SubtitleTextBlockStyle}" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
                 <StackPanel x:Name="Chips" Orientation="Horizontal" Spacing="6" />
 
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <local:WrapPanel HorizontalSpacing="6" VerticalSpacing="6">
                     <Button x:Name="OpenButton" Style="{StaticResource AccentButtonStyle}" Click="OnOpenClick" ToolTipService.ToolTip="Открыть страницу объявления (Enter в таблице)">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE774;" FontSize="14" />
@@ -53,7 +54,7 @@
                     <Button x:Name="DeleteButton" Click="OnDeleteClick" ToolTipService.ToolTip="Удалить" AutomationProperties.Name="Удалить">
                         <FontIcon Glyph="&#xE74D;" FontSize="14" />
                     </Button>
-                </StackPanel>
+                </local:WrapPanel>
 
                 <StackPanel Spacing="4">
                     <TextBlock Text="Данные" Style="{StaticResource SectionTitleStyle}" />
@@ -78,18 +79,6 @@
 
                 <Expander x:Name="FactsExpander" Header="Факты и предположения" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <StackPanel x:Name="FactsPanel" Spacing="2" />
-                </Expander>
-
-                <Expander x:Name="DraftExpander" Header="Черновик первого обращения" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <StackPanel Spacing="8">
-                        <ComboBox x:Name="ChannelCombo" Header="Канал" HorizontalAlignment="Stretch" SelectionChanged="OnChannelChanged" />
-                        <TextBox x:Name="DraftBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" MaxHeight="300" AutomationProperties.Name="Черновик" />
-                        <TextBlock Style="{StaticResource MutedTextStyle}" Text="Шаблон без ИИ. Текст можно править; отправка только вручную." />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Content="Копировать" Click="OnCopyDraftClick" />
-                            <Button x:Name="DraftActionButton" Click="OnDraftActionClick" />
-                        </StackPanel>
-                    </StackPanel>
                 </Expander>
 
                 <Expander x:Name="HistoryExpander" Header="История" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">

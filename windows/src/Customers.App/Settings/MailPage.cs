@@ -200,7 +200,7 @@ internal static class ComposeMailDialog
         var subjectBox = new TextBox { Header = "Тема", Text = subject };
         var bodyBox = new TextBox { Header = "Текст", Text = body, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 220, MaxHeight = 340 };
         var error = new TextBlock { Foreground = UiKit.ThemeBrush("SystemFillColorCriticalBrush"), TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
-        var panel = new StackPanel { Spacing = 10, Width = 520 };
+        var panel = new StackPanel { Spacing = 10, MaxWidth = 520 };
         var smtp = mail.SmtpReady;
         panel.Children.Add(UiKit.Muted(smtp
             ? $"Письмо уйдёт с адреса {mail.Account!.FromAddress} прямо из приложения."

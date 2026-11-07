@@ -555,20 +555,34 @@ public sealed partial class LeadsView : UserControl, ISectionAware, IDetachable
 
     // MARK: Карточка
 
+    // Карточке нужно минимум 280 пикселей, списку — не меньше 260: иначе карточка перекрыла бы кнопки над таблицей.
+    private const double MinInspector = 280;
+    private const double MinList = 260;
+    private const double SplitterWidth = 14;
+
+    private double AvailableWidth => Math.Max(0, Layout.ActualWidth - Layout.Padding.Left - Layout.Padding.Right);
+
+    /// <summary>Помещается ли карточка рядом со списком при текущей ширине окна.</summary>
+    private bool InspectorFits => AvailableWidth <= 0 || AvailableWidth >= MinList + SplitterWidth + MinInspector;
+
+    private double MaxInspector => Math.Max(MinInspector, Math.Min(640, AvailableWidth - MinList - SplitterWidth));
+
     private void ApplyInspector()
     {
-        var shown = _device.InspectorShown;
-        InspectorToggle.IsChecked = shown;
+        var wanted = _device.InspectorShown;
+        var shown = wanted && InspectorFits;
+        InspectorToggle.IsChecked = wanted;
         InspectorHost.Visibility = Fmt.Vis(shown);
         InspectorSplitter.Visibility = Fmt.Vis(shown);
-        SplitterColumn.Width = new GridLength(shown ? 14 : 0);
-        InspectorColumn.Width = new GridLength(shown ? _device.InspectorWidth : 0);
+        SplitterColumn.Width = new GridLength(shown ? SplitterWidth : 0);
+        InspectorColumn.Width = new GridLength(shown ? Math.Clamp(_device.InspectorWidth, MinInspector, MaxInspector) : 0);
     }
+
+    private void OnLayoutSizeChanged(object sender, SizeChangedEventArgs e) => ApplyInspector();
 
     private void SetInspectorWidth(double width, bool save)
     {
-        var max = Math.Max(280, Math.Min(640, Layout.ActualWidth - 320 - 14));
-        var w = Math.Clamp(width, 280, max);
+        var w = Math.Clamp(width, MinInspector, MaxInspector);
         InspectorColumn.Width = new GridLength(w);
         if (save)
         {

@@ -123,10 +123,22 @@ public sealed class CloudAuth
         return s;
     }
 
+    /// <summary>Причина, по которой сессию не удалось сохранить на диск (null — сохранена). Вход при этом всё равно удаётся: сессия живёт в памяти до закрытия приложения.</summary>
+    public string? PersistError { get; private set; }
+
     private void SetSession(CloudSession? s)
     {
         Session = s;
-        _store.Save(s);
+        try
+        {
+            _store.Save(s);
+            PersistError = null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+        {
+            // Защищённое хранилище недоступно (занят файл, антивирус, повреждённый профиль): вход не должен из-за этого проваливаться.
+            PersistError = e.Message;
+        }
     }
 
     private static string ValidEmail(string raw) =>
@@ -203,6 +215,21 @@ public sealed class CloudAuth
 
         var data = await AuthAsync("POST", "/token?grant_type=password", new JsonObject { ["email"] = email, ["password"] = password }, ct).ConfigureAwait(false);
         return Take(data);
+    }
+
+    /// <summary>
+    /// Проверяет пароль текущей облачной учётной записи на сервере, не меняя сессию. Нужен перед опасными действиями.
+    /// Неверный пароль — <see cref="CloudErrorKind.InvalidCredentials"/>; без сети проверить нельзя, и действие не выполняется.
+    /// </summary>
+    public async Task CheckPasswordAsync(string password, CancellationToken ct = default)
+    {
+        var email = Session?.User.Email ?? throw new CloudException(CloudErrorKind.SessionExpired);
+        if (password.Length == 0)
+        {
+            throw new CloudException(CloudErrorKind.InvalidCredentials);
+        }
+
+        _ = await AuthAsync("POST", "/token?grant_type=password", new JsonObject { ["email"] = email.Trim().ToLowerInvariant(), ["password"] = password }, ct).ConfigureAwait(false);
     }
 
     /// <summary>Выход: сессия отзывается на сервере (если есть сеть) и всегда удаляется с этого компьютера.</summary>

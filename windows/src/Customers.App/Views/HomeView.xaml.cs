@@ -14,12 +14,56 @@ public sealed partial class HomeView : UserControl, ISectionAware, IDetachable
         Model = model;
         _shell = shell;
         InitializeComponent();
+        UiKit.FitWidth(Scroller, PageStack, 1100);
+        Scroller.SizeChanged += (_, e) => Adapt(e.NewSize.Width);
         Model.PropertyChanged += OnModelChanged;
         Model.DataReloaded += Refresh;
         Refresh();
     }
 
     public AppModel Model { get; }
+
+    /// <summary>Перестраивает сетку под ширину окна (и масштаб Windows): четыре показателя в ряд, затем 2×2, затем в столбик.</summary>
+    private void Adapt(double width)
+    {
+        var cols = width >= 760 ? 4 : width >= 440 ? 2 : 1;
+        Stats.ColumnDefinitions.Clear();
+        Stats.RowDefinitions.Clear();
+        for (var c = 0; c < cols; c++)
+        {
+            Stats.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (var r = 0; r < (Stats.Children.Count + cols - 1) / cols; r++)
+        {
+            Stats.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+
+        for (var i = 0; i < Stats.Children.Count; i++)
+        {
+            var item = (FrameworkElement)Stats.Children[i];
+            Grid.SetColumn(item, i % cols);
+            Grid.SetRow(item, i / cols);
+        }
+
+        var stacked = width < 820;
+        Lower.ColumnDefinitions.Clear();
+        Lower.RowDefinitions.Clear();
+        Lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(stacked ? 1 : 3, GridUnitType.Star) });
+        if (!stacked)
+        {
+            Lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+        }
+
+        Lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        if (stacked)
+        {
+            Lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+
+        Grid.SetColumn(SourcesCard, stacked ? 0 : 1);
+        Grid.SetRow(SourcesCard, stacked ? 1 : 0);
+    }
 
     public void OnShown(NavSection section) => Refresh();
 

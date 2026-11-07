@@ -93,7 +93,7 @@ internal sealed class TrayIcon : IDisposable
 
     private void LoadIcon(string path)
     {
-        var size = GetSystemMetrics(49); // SM_CXSMICON
+        var size = GetSystemMetricsForDpi(49, GetDpiForSystem()); // SM_CXSMICON для масштаба Windows: 16, 20, 24 или 32 пикселя
         _icon = File.Exists(path) ? LoadImage(IntPtr.Zero, path, 1, size, size, 0x10) : IntPtr.Zero;
         _ownsIcon = _icon != IntPtr.Zero;
         if (_icon == IntPtr.Zero)
@@ -339,7 +339,10 @@ internal sealed class TrayIcon : IDisposable
     private static extern bool DestroyIcon(IntPtr icon);
 
     [DllImport("user32.dll")]
-    private static extern int GetSystemMetrics(int index);
+    private static extern int GetSystemMetricsForDpi(int index, uint dpi);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForSystem();
 
     [DllImport("user32.dll")]
     private static extern IntPtr CreatePopupMenu();

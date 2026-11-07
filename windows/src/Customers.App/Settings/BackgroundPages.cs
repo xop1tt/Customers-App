@@ -75,10 +75,15 @@ internal sealed class CallsPage(AppModel model, SessionModel session, ShellView 
             UiKit.Toggle(Model.Prefs.ConfirmCalls, v => Model.Prefs.ConfirmCalls = v)));
 
         Heading("Настройка Windows");
-        Add(UiKit.SettingRow("Связь с телефоном", "Подключите Android-телефон или iPhone, чтобы звонить с компьютера по обычной мобильной связи.",
-            UiKit.TextButton("Открыть", () => _ = Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:mobile-devices")))));
-        Add(UiKit.SettingRow("Приложения по умолчанию", "Выберите, какое приложение принимает ссылки tel: (Связь с телефоном, Teams, Skype, Zoom и другие).",
-            UiKit.TextButton("Открыть", () => _ = Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:defaultapps")))));
+        // «Связь с телефоном» нужна только если звонки идут через неё: при стороннем приложении (например, WhatsApp) строка лишняя.
+        if (!CallHandlers.DefaultIsThirdParty())
+        {
+            Add(UiKit.SettingRow("Связь с телефоном", "Подключите Android-телефон или iPhone, чтобы звонить с компьютера по обычной мобильной связи.",
+                UiKit.TextButton("Открыть", () => _ = Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:mobile-devices")))));
+        }
+
+        Add(UiKit.SettingRow("Приложение по умолчанию", "Выберите, какое приложение принимает звонки по ссылкам tel: (WhatsApp, Связь с телефоном, Teams, Zoom и другие).",
+            UiKit.TextButton("Открыть", () => Run(CallHandlers.OpenDefaultAppSettingsAsync))));
 
         Heading("Проверка");
         var number = new TextBox { PlaceholderText = "+7 900 000-00-00", Width = 220, Header = "Номер" };
@@ -118,6 +123,46 @@ internal sealed class CallsPage(AppModel model, SessionModel session, ShellView 
 /// <summary>Приложения, зарегистрированные в Windows для ссылок tel:.</summary>
 internal static class CallHandlers
 {
+    private const string TelAssociation = @"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\tel\UserChoice";
+
+    /// <summary>
+    /// Открывает «Приложения по умолчанию» сразу на ссылках tel: (параметр registrypath понимает Windows 11; на старых сборках он
+    /// игнорируется и открывается общий список — тогда выбрать «Выбор значений по умолчанию по типам ссылок → TEL»).
+    /// </summary>
+    public static async Task OpenDefaultAppSettingsAsync()
+    {
+        var direct = new Uri("ms-settings:defaultapps?registrypath=" + Uri.EscapeDataString(@"Computer\HKEY_CURRENT_USER\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\tel"));
+        if (!await Windows.System.Launcher.LaunchUriAsync(direct))
+        {
+            await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:defaultapps"));
+        }
+    }
+
+    /// <summary>Назначено ли для tel: стороннее приложение (не «Связь с телефоном»). Нет выбора — считаем, что нет.</summary>
+    public static bool DefaultIsThirdParty()
+    {
+        try
+        {
+            using var choice = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(TelAssociation);
+            if (choice?.GetValue("ProgId") as string is not { Length: > 0 } progId)
+            {
+                return false;
+            }
+
+            using var app = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(progId + @"\Application");
+            var id = (app?.GetValue("AppUserModelID") as string ?? app?.GetValue("ApplicationName") as string ?? progId);
+            return IsThirdParty(id);
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException or IOException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool IsThirdParty(string appId) =>
+        appId.Length > 0 && !appId.Contains("YourPhone", StringComparison.OrdinalIgnoreCase) && !appId.Contains("PhoneExperience", StringComparison.OrdinalIgnoreCase)
+        && !appId.Contains("PhoneLink", StringComparison.OrdinalIgnoreCase);
+
     public static async Task<IReadOnlyList<string>> FindAsync()
     {
         try

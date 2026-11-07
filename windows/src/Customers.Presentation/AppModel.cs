@@ -73,7 +73,8 @@ public sealed partial class AppModel : ObservableObject
             _backupTimer = new Timer(_ => _env.Ui.Post(DailyBackupIfNeeded), null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
             ScheduleAutoSearch();
         }
-        catch (Exception e) when (e is DatabaseException or Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is DatabaseException or Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException
+            or System.Security.Cryptography.CryptographicException or System.Text.Json.JsonException)
         {
             _env.Log.Error("База не открыта", e);
             StartupError = e.Message.StartsWith("Не удалось открыть базу", StringComparison.OrdinalIgnoreCase) ? e.Message : "Не удалось открыть базу: " + e.Message;
@@ -174,7 +175,7 @@ public sealed partial class AppModel : ObservableObject
                 nameof(SelectedIds), nameof(SelectedLead), nameof(SelectionCount));
             DataReloaded?.Invoke();
         }
-        catch (Exception e) when (e is DatabaseException or Microsoft.Data.Sqlite.SqliteException)
+        catch (Exception e) when (e is DatabaseException or Microsoft.Data.Sqlite.SqliteException or System.Text.Json.JsonException)
         {
             LastError = e.Message;
         }
