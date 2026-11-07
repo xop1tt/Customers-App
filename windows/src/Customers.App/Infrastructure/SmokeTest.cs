@@ -172,7 +172,8 @@ public sealed class SmokeTest
             foreach (var format in Enum.GetValues<ExportFormat>())
             {
                 var path = Path.Combine(_dir, "export." + format.Extension());
-                model.Export(model.AllLeads.ToList(), format, ExportFields.Defaults.ToList(), path);
+                // Для обратного импорта нужны все поля: с набором по умолчанию нет ID и описания, и лид считается новым.
+                model.Export(model.AllLeads.ToList(), format, ExportFields.All.ToList(), path);
                 Require(File.Exists(path) && new FileInfo(path).Length > 20, "файл экспорта пуст: " + format);
                 var result = model.ImportLeads(path);
                 Require(result is not null && result.Problems.Count == 0, "импорт вернул замечания: " + string.Join("; ", result?.Problems ?? []));
