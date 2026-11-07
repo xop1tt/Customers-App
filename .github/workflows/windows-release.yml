@@ -27,11 +27,11 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
 
 jobs:
-  release:
+  # Сборка идёт без прав на запись: токен не достаётся ни установщику Inno Setup, ни чужим пакетам.
+  build:
+    name: Build installer
     runs-on: windows-latest
-    timeout-minutes: 60
-    permissions:
-      contents: write # только для загрузки файлов в релиз
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: windows
@@ -40,7 +40,6 @@ jobs:
       TAG: ${{ inputs.tag || github.ref_name }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,20 +88,15 @@ jobs:
           "$hash  $($setup.Name)" | Out-File -FilePath "$($setup.FullName).sha256" -Encoding ascii
           Get-Content "$($setup.FullName).sha256"
 
-      # Релиз создаёт macOS-процесс (release.yml). Ждём его до 40 минут; при ручном запуске релиз уже существует.
-      - name: Attach to the release
-        run: |
-          $deadline = (Get-Date).AddMinutes(40)
-          while ($true) {
-            gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
-            if ($LASTEXITCODE -eq 0) { break }
-            if ((Get-Date) -gt $deadline) { throw "Релиз $env:TAG так и не появился" }
-            Write-Host "Релиз $env:TAG ещё не создан, ждём…"
-            Start-Sleep -Seconds 30
-          }
-          $files = Get-ChildItem artifacts -Filter 'Customers-v*-Windows-x64-Setup.exe*' | ForEach-Object { $_.FullName }
-          gh release upload $env:TAG @files --clobber --repo $env:GITHUB_REPOSITORY
-          if ($LASTEXITCODE -ne 0) { throw 'Не удалось загрузить файлы в релиз' }
+      - name: Upload installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-installer
+          path: |
+            windows/artifacts/Customers-v*-Windows-x64-Setup.exe
+            windows/artifacts/Customers-v*-Windows-x64-Setup.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload artifacts
         if: always()
@@ -114,3 +108,30 @@ jobs:
             windows/artifacts/smoke-installed
             windows/artifacts/install.log
           retention-days: 14
+
+  # Единственное место с правом записи: берёт готовые файлы и кладёт их в релиз. Код проекта здесь не выполняется.
+  publish:
+    name: Attach to the release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write # только для загрузки файлов в релиз
+      actions: read # чтобы скачать собранный установщик из этого же запуска
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the installer built in this run
+        run: gh run download "${{ github.run_id }}" --name windows-installer --dir installer --repo "$GITHUB_REPOSITORY"
+
+      # Релиз создаёт macOS-процесс (release.yml). Ждём его до 40 минут; при ручном запуске релиз уже существует.
+      - name: Attach to the release
+        run: |
+          deadline=$((SECONDS + 2400))
+          until gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; do
+            if [ "$SECONDS" -gt "$deadline" ]; then echo "Релиз $TAG так и не появился"; exit 1; fi
+            echo "Релиз $TAG ещё не создан, ждём…"
+            sleep 30
+          done
+          gh release upload "$TAG" installer/* --clobber --repo "$GITHUB_REPOSITORY"
