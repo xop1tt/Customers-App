@@ -697,7 +697,7 @@ public sealed partial class LeadStore : ISearchRepository, ISearchMemory, IDispo
 
     public long FileSize => File.Exists(Path) ? new FileInfo(Path).Length : 0;
 
-    internal static void TryDelete(string path)
+    public static void TryDelete(string path)
     {
         try
         {

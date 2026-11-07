@@ -23,7 +23,7 @@ env:
 
 jobs:
   core:
-    name: Core tests (${{ matrix.os }})
+    name: Core and view-model tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -51,19 +51,31 @@ jobs:
         run: |
           dotnet format whitespace src/Customers.Core --verify-no-changes
           dotnet format whitespace tests/Customers.Core.Tests --verify-no-changes
+          dotnet format whitespace src/Customers.Presentation --verify-no-changes
+          dotnet format whitespace tests/Customers.Presentation.Tests --verify-no-changes
 
       - name: Restore
-        run: dotnet restore src/Customers.Core tests/Customers.Core.Tests
+        run: |
+          dotnet restore tests/Customers.Core.Tests
+          dotnet restore tests/Customers.Presentation.Tests
 
       - name: Build (warnings are errors)
         run: |
           dotnet build src/Customers.Core -c Release --no-restore
           dotnet build tests/Customers.Core.Tests -c Release --no-restore
+          dotnet build src/Customers.Presentation -c Release --no-restore
+          dotnet build tests/Customers.Presentation.Tests -c Release --no-restore
 
-      - name: Tests
+      - name: Tests (Core)
         run: >
           dotnet test tests/Customers.Core.Tests -c Release --no-build
           --logger "trx;LogFileName=core-${{ runner.os }}.trx"
+          --collect:"XPlat Code Coverage" --results-directory TestResults
+
+      - name: Tests (Presentation)
+        run: >
+          dotnet test tests/Customers.Presentation.Tests -c Release --no-build
+          --logger "trx;LogFileName=presentation-${{ runner.os }}.trx"
           --collect:"XPlat Code Coverage" --results-directory TestResults
 
       - name: Результаты тестов
