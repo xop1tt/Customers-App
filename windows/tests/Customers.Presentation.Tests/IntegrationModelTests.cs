@@ -220,11 +220,9 @@ public class IntegrationsModelTests : IDisposable
     [Fact]
     public async Task UploadRefreshesExpiredTokenAndSendsTheFile()
     {
-        var http = new RecordingHttp(r => r.Url.Host switch
-        {
-            "api.dropboxapi.com" => RecordingHttp.Json("""{"access_token":"NEW","expires_in":3600}"""),
-            _ => RecordingHttp.Json("{}"),
-        });
+        var http = new RecordingHttp(r => r.Url.Host == "api.dropboxapi.com"
+            ? RecordingHttp.Json("""{"access_token":"NEW","expires_in":3600}""")
+            : RecordingHttp.Json("{}"));
         var env = Env(http, builtIn: OAuthClient.Create(OAuthProvider.Dropbox, "k"));
         _secrets.Set(DriveConnection.SecretName(DriveService.Dropbox, "maks"),
             new DriveConnection(DriveService.Dropbox, new OAuthToken("OLD", "RT", DateTimeOffset.UtcNow.AddMinutes(-5))).Encode());

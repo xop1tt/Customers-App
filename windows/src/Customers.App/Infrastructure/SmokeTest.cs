@@ -440,7 +440,7 @@ public sealed class SmokeTest
     private async Task MailAsync(App app, AppModel model, ShellView shell)
     {
         var mail = model.Mail;
-        mail.Account = MailAccount.Preset("smoke@example.ru", "Smoke");
+        mail.Account = MailAccount.Preset("smoke@gmail.com", "Smoke");
         mail.Delivery = MailDelivery.Smtp;
         mail.SetPassword("app-password");
         Require(mail.SmtpReady, "почта не готова к отправке");

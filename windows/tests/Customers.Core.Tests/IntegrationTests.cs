@@ -613,13 +613,26 @@ public class MailTests
     [Fact]
     public async Task FallsBackToAuthLogin()
     {
-        var server = new FakeServer(l => l switch
+        var user = Convert.ToBase64String(Encoding.UTF8.GetBytes("me@example.ru"));
+        var password = Convert.ToBase64String(Encoding.UTF8.GetBytes("pw"));
+        var server = new FakeServer(l =>
         {
-            _ when l.StartsWith("EHLO") => "250-mail\r\n250 AUTH LOGIN\r\n",
-            "AUTH LOGIN" => "334 VXNlcm5hbWU6\r\n",
-            _ when l == Convert.ToBase64String(Encoding.UTF8.GetBytes("me@example.ru")) => "334 UGFzc3dvcmQ6\r\n",
-            _ when l == Convert.ToBase64String(Encoding.UTF8.GetBytes("pw")) => "235 ok\r\n",
-            _ => Standard(l),
+            if (l.StartsWith("EHLO", StringComparison.Ordinal))
+            {
+                return "250-mail\r\n250 AUTH LOGIN\r\n";
+            }
+
+            if (l == "AUTH LOGIN")
+            {
+                return "334 VXNlcm5hbWU6\r\n";
+            }
+
+            if (l == user)
+            {
+                return "334 UGFzc3dvcmQ6\r\n";
+            }
+
+            return l == password ? "235 ok\r\n" : Standard(l);
         });
         await new SmtpClient(server).SendAsync(new OutgoingMail("to@example.com", "s", "b"), Account, "pw", CancellationToken.None);
         Assert.Contains("DATA", server.Commands);
