@@ -4,7 +4,7 @@
 |---|---|---|
 | Язык | C# 14 | родной язык WinUI и .NET |
 | Платформа | .NET 10 (текущий LTS) | долгая поддержка, автономная публикация без установки среды |
-| Интерфейс | WinUI 3 + Windows App SDK 1.8 | нативные элементы Windows 11 (Fluent 2, Mica, закруглённые углы), работает и на Windows 10 |
+| Интерфейс | WinUI 3 + Windows App SDK 2.6 | нативные элементы Windows 11 (Fluent 2, Mica, закруглённые углы), работает и на Windows 10 |
 | Разметка | XAML там, где она проще (оболочка, список, карточка лида), остальное — код | меньше связей по `x:Bind`, ошибки видны компилятору |
 | База | SQLite + SQLCipher (`Microsoft.Data.Sqlite.Core`, `SQLitePCLRaw.bundle_e_sqlcipher`) | один файл, шифрование данных на диске, как в macOS-версии |
 | Секреты | DPAPI (`System.Security.Cryptography.ProtectedData`) | защита ключом учётной записи Windows, без паролей на диске |
