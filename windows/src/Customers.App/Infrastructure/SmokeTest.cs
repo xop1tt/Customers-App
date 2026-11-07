@@ -78,6 +78,8 @@ public sealed class SmokeTest
             return;
         }
 
+        await Step("Мастер первого запуска: шаги, назад, пропуск, готово", () => WelcomeAsync(model, shell));
+
         await Step("База: запись и чтение лидов", async () =>
         {
             Require(model.StartupError is null, "база не открылась: " + model.StartupError);
@@ -96,6 +98,8 @@ public sealed class SmokeTest
                 await Shot("section-" + section);
             });
         }
+
+        await Step("«Что нового»: показ, закрытие, повторно не показывается", () => WhatsNewAsync(app));
 
         await Step("Лид выбран, показана карточка", async () =>
         {
@@ -423,6 +427,75 @@ public sealed class SmokeTest
         Require(!drives.IsConnected(DriveService.WebDav) && app.Env.Secrets.Get(DriveConnection.SecretName(DriveService.WebDav, model.Username)) is null, "подключение не удалено");
         shell.OpenSettings(SettingsSection.Drives);
         await Pause(300);
+    }
+
+    private async Task WelcomeAsync(AppModel model, ShellView shell)
+    {
+        for (var i = 0; i < 20 && shell.ActiveWizard is null; i++)
+        {
+            await Pause(200);
+        }
+
+        var wizard = shell.ActiveWizard;
+        Require(wizard is not null, "у новой учётной записи не показан мастер первого запуска");
+        Require(wizard!.Step == WelcomeStep.Intro && !wizard.CanGoBack, "мастер начинается не с описания");
+        var seen = new List<WelcomeStep>();
+        while (true)
+        {
+            seen.Add(wizard.Step);
+            await Pause(500);
+            await Shot("welcome-" + wizard.Step);
+            if (wizard.IsLast)
+            {
+                break;
+            }
+
+            if (wizard.Step == WelcomeStep.Drives)
+            {
+                wizard.Skip(); // необязательный шаг пропускается
+            }
+            else
+            {
+                wizard.Next();
+            }
+        }
+
+        Require(seen.SequenceEqual(WelcomeSteps.All), "мастер прошёл не все шаги: " + string.Join(", ", seen));
+        Require(wizard.StateOf(WelcomeStep.Drives) == WelcomeStepState.Skipped, "пропущенный шаг не отмечен");
+        wizard.Back();
+        Require(wizard.Step == WelcomeStep.Drives, "«Назад» не вернул на предыдущий шаг");
+        await Pause(300);
+        wizard.Next();
+        // Оформление применяется сразу, прямо в мастере.
+        App.Instance.Env.Device.Theme = ThemeChoice.Dark;
+        await Pause(400);
+        await Shot("welcome-dark");
+        App.Instance.Env.Device.Theme = ThemeChoice.System;
+        wizard.Finish();
+        await Pause(500);
+        Require(model.Prefs.WelcomeDone, "мастер не запомнил, что он пройден");
+        Require(shell.ActiveWizard is null, "мастер остался на экране");
+        Require(model.Section == NavSection.Home, "после мастера не открыта главная страница");
+        await Shot("welcome-finished");
+    }
+
+    private async Task WhatsNewAsync(App app)
+    {
+        var stage = new UpdateStage(Path.Combine(app.Env.Root, "updates"));
+        var version = UpdateService.Current;
+        stage.SaveInstalledNotes(new StagedUpdate(version.ToString(), "Customers " + version, "## Что изменилось\n- **Быстрее** запуск\n- Фоновое скачивание обновлений\n\nОбычный абзац с [ссылкой](https://example.com).", null, "", "", 0, DateTimeOffset.Now));
+        app.Env.Device.LastSeenVersion = "0.9.0";
+        var model = WhatsNewModel.Create(app.Env, version, hasExistingData: true);
+        Require(model is not null, "после обновления экран «Что нового» не создан");
+        var shown = WhatsNewDialog.ShowAsync(model!);
+        await Pause(900);
+        Require(WhatsNewDialog.Current is not null, "окно «Что нового» не показано");
+        Require(model!.Lines.Count == 4 && model.Lines.All(l => !l.Text.Contains("**", StringComparison.Ordinal)), "в списке изменений остались служебные символы");
+        await Shot("whats-new");
+        WhatsNewDialog.Current!.Hide();
+        await shown;
+        Require(app.Env.Device.LastSeenVersion == version.ToString(), "версия не запомнена после закрытия");
+        Require(WhatsNewModel.Create(app.Env, version, hasExistingData: true) is null, "экран показан повторно для той же версии");
     }
 
     private static async Task OAuthReturnAsync()

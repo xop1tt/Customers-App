@@ -77,12 +77,19 @@ Root: HKA; Subkey: "Software\Classes\leadgenerator\shell\open\command"; ValueTyp
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; Обновление из приложения идёт тихо (/SILENT /RELAUNCH=1): приложение закрылось само перед установкой, поэтому после неё его нужно открыть.
+Filename: "{app}\{#AppExe}"; Flags: nowait; Check: RelaunchAfterUpdate
 
 [CustomMessages]
 russian.DeleteDataQuestion=Удалить также данные Customers (лиды, настройки, журналы) с этого компьютера?%n%nПапка: %1%n%nЕсли нажать «Нет», данные останутся, и при повторной установке вы продолжите с того же места. Резервные копии в «Документах» в любом случае не удаляются.
 english.DeleteDataQuestion=Also delete Customers data (leads, settings, logs) from this computer?%n%nFolder: %1%n%nIf you choose No, the data stays and you can continue where you left off after reinstalling. Backups in Documents are never deleted.
 
 [Code]
+function RelaunchAfterUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir: String;

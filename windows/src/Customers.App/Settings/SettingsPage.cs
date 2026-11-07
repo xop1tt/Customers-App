@@ -82,7 +82,7 @@ internal abstract class SettingsPage : UserControl
     }
 
     /// <summary>Редактор списка строк (ленты, каналы, ключевые слова…): добавление с проверкой, удаление, подсказки.</summary>
-    protected static FrameworkElement ListEditor(string title, string? hint, Func<IReadOnlyList<string>> get, Action<List<string>> set,
+    internal static FrameworkElement ListEditor(string title, string? hint, Func<IReadOnlyList<string>> get, Action<List<string>> set,
         Func<string, string?> normalize, string placeholder, string invalidText, bool pill = false)
     {
         var items = new StackPanel { Spacing = 4 };

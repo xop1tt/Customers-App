@@ -405,8 +405,7 @@ public sealed class WhatsNewTests : IDisposable
     public void PreferencesPersist()
     {
         var path = Path.Combine(_box.Root, "device.json");
-        var a = new DevicePreferences(path)
-        {
+        var a = new DevicePreferences(path) {
             BackgroundDownload = false,
             UpdateCheckHours = 168,
             LastSeenVersion = "1.2.3",

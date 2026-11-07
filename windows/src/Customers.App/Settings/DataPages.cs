@@ -301,33 +301,95 @@ internal sealed class AboutPage(AppModel model, SessionModel session, ShellView 
         Add(UiKit.Card(UiKit.VStack(4, UiKit.SubTitle("Customers"), UiKit.Muted("Поиск заказов и потенциальных клиентов по публичным источникам"),
             UiKit.Muted("Версия " + AppBuild.Version))));
 
-        Heading("Обновления");
-        var updates = App.Instance.Updates;
-        var status = updates.Offer is { } offer ? $"Доступна версия {offer.Version}" : updates.CheckedAt is null ? "Проверка ещё не выполнялась" : "Установлена последняя версия";
-        var check = UiKit.TextButton("Проверить сейчас", () => Run(async () =>
+        FillUpdates();
+
+        Heading("О проекте");
+        Add(UiKit.SettingRow("Лицензия", "PIBUL 1.0 — свободное использование и изменение, без гарантий.", null));
+        Add(UiKit.SettingRow("Исходный код и страница выпусков", Repository, UiKit.TextButton("Открыть", () => Run(() => Launcher.OpenWebAsync(Repository)))));
+    }
+
+    private ProgressBar? _downloadBar;
+    private bool _watching;
+
+    private static UpdateModel Updater => App.Instance.Updates.Model;
+
+    /// <summary>Раздел «Обновления»: проверка, скачивание в фоне, установка по согласию, частота и параметры.</summary>
+    private void FillUpdates()
+    {
+        if (!_watching)
         {
-            await updates.CheckAsync();
-            Refresh();
-        }));
-        Add(UiKit.SettingRow("Проверка обновлений", status, check));
-        if (updates.Offer is { } available)
-        {
-            Add(UiKit.SettingRow($"Обновить до {available.Version}", "Установщик скачивается и проверяется по контрольной сумме. Данные и настройки сохраняются.",
-                UiKit.TextButton("Установить и перезапустить", () => Run(() => App.Instance.MainWindow.InstallUpdateAsync(available)), accent: true)));
+            _watching = true;
+            Loaded += (_, _) => Updater.PropertyChanged += OnUpdaterChanged;
+            Unloaded += (_, _) => Updater.PropertyChanged -= OnUpdaterChanged;
         }
 
-        Add(UiKit.SettingRow("Проверять автоматически", "Сверяться с последним выпуском на GitHub. Больше ничего не отправляется. Установка всегда только с вашего согласия.",
+        Heading("Обновления");
+        var m = Updater;
+        _downloadBar = null;
+        switch (m.Phase)
+        {
+            case UpdatePhase.Checking:
+                Add(UiKit.SettingRow("Проверяю обновления…", "Запрос к странице выпусков на GitHub.", new ProgressRing { IsActive = true, Width = 24, Height = 24 }));
+                break;
+            case UpdatePhase.Available:
+                Add(UiKit.SettingRow($"Доступна версия {m.TargetVersion}", m.Offer is { } o ? "Скачивается и проверяется по контрольной сумме SHA-256, пока вы работаете." + SizeNote(o) : null,
+                    UiKit.TextButton("Скачать", () => Run(() => m.DownloadAsync(manual: true)), accent: true)));
+                break;
+            case UpdatePhase.Downloading:
+                _downloadBar = new ProgressBar { Minimum = 0, Maximum = 1, IsIndeterminate = m.Progress is null, Value = m.Progress ?? 0, MinWidth = 160, Width = 220 };
+                Add(UiKit.SettingRow($"Скачиваю версию {m.TargetVersion}", "Можно продолжать работу: приложение не перезапустится без вашего согласия.",
+                    UiKit.HStack(12, _downloadBar, UiKit.TextButton("Отменить", m.CancelDownload))));
+                break;
+            case UpdatePhase.Ready:
+                Add(UiKit.SettingRow($"Версия {m.Staged?.Version} скачана и проверена", "Установка закроет приложение и откроет его снова. Лиды, учётные записи и настройки сохранятся.",
+                    UiKit.TextButton("Установить и перезапустить", () => Run(App.Instance.Updates.InstallAsync), accent: true)));
+                break;
+            case UpdatePhase.Installing:
+                Add(UiKit.SettingRow("Запускаю установку…", null, new ProgressRing { IsActive = true, Width = 24, Height = 24 }));
+                break;
+            default:
+                var status = m.Phase == UpdatePhase.UpToDate ? $"Установлена последняя версия ({UpdateService.Current})"
+                    : m.LastCheck is null ? "Проверка ещё не выполнялась" : "Последняя проверка: " + m.LastCheck.Value.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture);
+                Add(UiKit.SettingRow("Проверка обновлений", status, UiKit.TextButton("Проверить сейчас", () => Run(() => m.CheckAsync(manual: true)))));
+                break;
+        }
+
+        if (m.Error is { Length: > 0 } error && m.Phase == UpdatePhase.Failed)
+        {
+            Add(UiKit.Bar(m.ErrorIsSpace ? InfoBarSeverity.Warning : InfoBarSeverity.Error, m.ErrorIsSpace ? "Не хватает места на диске" : "Обновление не выполнено", error));
+        }
+
+        Add(UiKit.SettingRow("Проверять обновления автоматически", "Приложение само сверяется с последним выпуском на GitHub. Больше ничего не отправляется.",
             UiKit.Toggle(Device.CheckUpdates, v =>
             {
                 Device.CheckUpdates = v;
                 Refresh();
             })));
-        var frequency = UiKit.Combo(UpdateSchedule.Choices.Select(c => (c.Title, c.Hours)), Device.UpdateCheckHours, v => Device.UpdateCheckHours = v, 220);
-        frequency.IsEnabled = Device.CheckUpdates;
-        Add(UiKit.SettingRow("Как часто проверять", Device.LastUpdateCheck is { } last ? "Последняя проверка: " + Fmt.Date(last) : "Проверок ещё не было.", frequency));
+        var interval = UiKit.Combo(UpdateSchedule.Choices.Select(c => (c.Title, c.Hours)), Device.UpdateCheckHours, v => Device.UpdateCheckHours = v, 200);
+        interval.IsEnabled = Device.CheckUpdates;
+        Add(UiKit.SettingRow("Как часто проверять", "Раз в час — самое частое: GitHub разрешает 60 запросов в час без входа.", interval));
+        var background = UiKit.Toggle(Device.BackgroundDownload, v => Device.BackgroundDownload = v);
+        background.IsEnabled = Device.CheckUpdates;
+        Add(UiKit.SettingRow("Скачивать обновления в фоне", "Новая версия скачивается и проверяется, пока вы работаете, но устанавливается только по вашему согласию. На платном подключении фоновая загрузка откладывается.", background));
+    }
 
-        Heading("О проекте");
-        Add(UiKit.SettingRow("Лицензия", "PIBUL 1.0 — свободное использование и изменение, без гарантий.", null));
-        Add(UiKit.SettingRow("Исходный код и страница выпусков", Repository, UiKit.TextButton("Открыть", () => Run(() => Launcher.OpenWebAsync(Repository)))));
+    private static string SizeNote(UpdateOffer offer) => offer.Installer.Size is { } size ? $" Размер: {UpdateService.FormatSize(size)}." : "";
+
+    private void OnUpdaterChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(UpdateModel.Progress):
+                if (_downloadBar is { } bar && Updater.Progress is { } fraction)
+                {
+                    bar.IsIndeterminate = false;
+                    bar.Value = fraction;
+                }
+
+                break;
+            case nameof(UpdateModel.Phase) or nameof(UpdateModel.Error) or nameof(UpdateModel.Staged):
+                Refresh();
+                break;
+        }
     }
 }

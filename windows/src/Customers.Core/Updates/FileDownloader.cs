@@ -28,8 +28,7 @@ public sealed class HttpFileDownloader : IFileDownloader, IDisposable
 
     public HttpFileDownloader(HttpMessageHandler? handler = null, int attempts = 4, TimeSpan? retryDelay = null)
     {
-        _client = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, PooledConnectionLifetime = TimeSpan.FromMinutes(5) })
-        {
+        _client = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) {
             Timeout = Timeout.InfiniteTimeSpan,
         };
         _attempts = Math.Max(1, attempts);

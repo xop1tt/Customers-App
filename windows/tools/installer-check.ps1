@@ -34,9 +34,18 @@ if (-not $uninstallKey) { throw 'Приложение не появилось в
 $marker = Join-Path $env:LOCALAPPDATA 'Customers'
 New-Item -ItemType Directory -Path $marker -Force | Out-Null
 Set-Content (Join-Path $marker 'keep.txt') 'data'
-$again = Start-Process -FilePath $setup.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/DIR=`"$dir`"") -Wait -PassThru
+# Так же, как делает само приложение при обновлении: тихо, с закрытием работающей копии и с просьбой открыть приложение снова.
+$again = Start-Process -FilePath $setup.FullName -ArgumentList @('/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS', '/RELAUNCH=1', '/CURRENTUSER', "/DIR=`"$dir`"") -Wait -PassThru
 if ($again.ExitCode -ne 0) { throw "Установка поверх завершилась с кодом $($again.ExitCode)" }
 if (-not (Test-Path (Join-Path $marker 'keep.txt'))) { throw 'Установка поверх удалила данные пользователя' }
+$relaunched = $null
+for ($i = 0; $i -lt 30 -and -not $relaunched; $i++) {
+    Start-Sleep -Milliseconds 500
+    $relaunched = Get-Process -Name 'Customers' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }
+}
+if (-not $relaunched) { throw 'После обновления поверх (RELAUNCH=1) приложение не открылось снова' }
+$relaunched | Stop-Process -Force
+Start-Sleep -Seconds 2
 
 Write-Host 'Удаление'
 $remove = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
