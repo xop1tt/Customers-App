@@ -7,7 +7,7 @@
         <Grid MinHeight="520" Padding="24">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="420" Spacing="20">
                 <StackPanel HorizontalAlignment="Center" Spacing="10">
-                    <Image Source="Assets/Logo.png" Width="72" Height="72" HorizontalAlignment="Center" />
+                    <Image Source="ms-appx:///Assets/Logo.png" Width="72" Height="72" HorizontalAlignment="Center" />
                     <TextBlock Text="Customers" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
                     <TextBlock Text="Поиск заказов и потенциальных клиентов" Style="{StaticResource MutedTextStyle}" HorizontalAlignment="Center" TextAlignment="Center" />
                 </StackPanel>

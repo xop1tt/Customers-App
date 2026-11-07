@@ -237,11 +237,11 @@ public sealed class SmokeTest
             Relevance = relevance,
             ScoreReasons = ["Подходит по ключевым словам"],
         };
-        store.Save(Order("Сайт для салона красоты", 82, Relevance.High, "1"), "a", "fa");
-        store.Save(Order("Telegram-бот для кофейни", 64, Relevance.Medium, "2"), "b", "fb");
-        store.Save(Order("Мобильное приложение для доставки", 71, Relevance.Medium, "3"), "c", "fc");
-        store.Save(Order("Мусорный заказ", 8, Relevance.Rejected, "4"), "d", "fd");
-        store.Save(new LeadData {
+        Save(store, Order("Сайт для салона красоты", 82, Relevance.High, "1"));
+        Save(store, Order("Telegram-бот для кофейни", 64, Relevance.Medium, "2"));
+        Save(store, Order("Мобильное приложение для доставки", 71, Relevance.Medium, "3"));
+        Save(store, Order("Мусорный заказ", 8, Relevance.Rejected, "4"));
+        Save(store, new LeadData {
             Kind = LeadKind.Organization,
             Source = "osm_organizations",
             ExternalId = "n/1",
@@ -252,9 +252,13 @@ public sealed class SmokeTest
             DiscoveredAt = DateTimeOffset.Now,
             Score = 55,
             Relevance = Relevance.Medium,
-        }, "e", "fe");
+        });
         model.Reload();
     }
+
+    // Идентификатор и отпечаток считаются так же, как при настоящем поиске и импорте.
+    private static void Save(LeadStore store, LeadData data) =>
+        store.Save(data, SearchText.LeadId(data.Source, data.ExternalId), SearchText.Fingerprint(data));
 
     private async Task Step(string name, Func<Task> work)
     {
