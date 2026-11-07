@@ -14,6 +14,33 @@ struct SidebarFooter: View {
     @State private var updates = UpdateController.shared
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Только когда обновление уже скачано и проверено; иначе место не занимается.
+            if let version = updates.readyVersion {
+                Button { updates.installReady() } label: {
+                    Label("Обновить", systemImage: "arrow.down.circle.fill").appFont(12, .semibold)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                }
+                .buttonStyle(.borderedProminent).controlSize(.small)
+                .help("Установить версию \(version) и перезапустить приложение")
+                .accessibilityIdentifier("update-ready-button")
+                .padding(.leading, 6)
+            }
+            footerRow
+        }
+        .scaledPadding(.horizontal, 8)
+        .padding(.bottom, updates.readyVersion == nil ? 0 : 4)
+        // Окружение передаётся явно: лист живёт в отдельном NSHostingView.
+        .sheet(isPresented: $integrationsShown) {
+            IntegrationsSheet(model: model)
+                .environment(\.appModel, model)
+                .environment(\.session, session)
+                .environment(\.look, look)
+        }
+        .onAppear { updates.refreshRecentReleases() }
+    }
+
+    private var footerRow: some View {
         HStack(spacing: 6) {
             Button { accountShown.toggle() } label: {
                 HStack(spacing: 8) {
@@ -45,16 +72,7 @@ struct SidebarFooter: View {
                 helpMenu.environment(\.look, look)
             }
         }
-        .scaledPadding(.horizontal, 8)
         .frame(height: 48 * look.scale)
-        // Окружение передаётся явно: лист живёт в отдельном NSHostingView.
-        .sheet(isPresented: $integrationsShown) {
-            IntegrationsSheet(model: model)
-                .environment(\.appModel, model)
-                .environment(\.session, session)
-                .environment(\.look, look)
-        }
-        .onAppear { updates.refreshRecentReleases() }
     }
 
     // MARK: Учётная запись

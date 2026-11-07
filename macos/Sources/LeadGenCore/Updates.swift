@@ -111,6 +111,89 @@ public enum UpdateError: LocalizedError {
 }
 
 public enum Updates {
+    /// Описание релиза (Markdown с GitHub) в обычный читаемый текст: без «**», «##», обратных кавычек и ссылок,
+    /// списки — с точками «•», переносы строк сохраняются, лишние пустые строки схлопываются.
+    /// `limit` — максимум символов; текст обрезается по границе строки с многоточием.
+    public static func plainNotes(_ markdown: String, limit: Int? = nil) -> String {
+        var text = markdown.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        text = replace(text, "(?s)<!--.*?-->", "")
+        var out: [String] = []
+        var inFence = false
+        for raw in text.components(separatedBy: "\n") {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") { inFence.toggle(); continue }
+            if inFence { out.append(raw.replacingOccurrences(of: "\t", with: "  ")); continue }
+            if trimmed.isEmpty { out.append(""); continue }
+            // Горизонтальные линии «---», «***», «___» и таблицы-разделители не нужны.
+            if replace(trimmed, "^([-*_=])(\\s*\\1){2,}$", "").isEmpty { continue }
+            var line = trimmed
+            var indent = ""
+            // Уровень вложенности списка — по отступу в исходной строке.
+            let lead = raw.prefix { $0 == " " || $0 == "\t" }.reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
+            if lead >= 2 { indent = String(repeating: "  ", count: min(lead / 2, 4)) }
+            while line.hasPrefix(">") { line = String(line.dropFirst()).trimmingCharacters(in: .whitespaces) }
+            if line.hasPrefix("#") {
+                line = replace(line, "^#{1,6}\\s*", "")
+                line = replace(line, "\\s+#+$", "")
+                indent = ""
+            } else if let m = firstMatch(line, "^[-*+]\\s+(\\[[ xX]\\]\\s+)?(.*)$") {
+                let box = m[1].trimmingCharacters(in: .whitespaces)
+                let mark = box.isEmpty ? "•" : (box == "[ ]" ? "☐" : "☑")
+                line = indent + mark + " " + m[2]
+                indent = ""
+            } else if firstMatch(line, "^\\d+[.)]\\s+") != nil {
+                line = indent + line
+                indent = ""
+            }
+            out.append(indent + inline(line))
+        }
+        // Схлопываем пустые строки и обрезаем края.
+        var lines: [String] = []
+        for l in out {
+            let t = l.trimmingCharacters(in: .whitespaces)
+            if t.isEmpty { if lines.last?.isEmpty == false { lines.append("") } } else { lines.append(l.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)) }
+        }
+        while lines.last?.isEmpty == true { lines.removeLast() }
+        while lines.first?.isEmpty == true { lines.removeFirst() }
+        var result = lines.joined(separator: "\n")
+        if let limit, result.count > limit {
+            var cut = String(result.prefix(limit))
+            if let nl = cut.lastIndex(of: "\n"), cut.distance(from: cut.startIndex, to: nl) > limit / 2 { cut = String(cut[..<nl]) }
+            result = cut.trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+        }
+        return result
+    }
+
+    /// Разметка внутри строки: ссылки, картинки, жирный, курсив, зачёркнутый, код, HTML-теги.
+    private static func inline(_ s: String) -> String {
+        var t = s
+        t = replace(t, "!\\[([^\\]]*)\\]\\([^)]*\\)", "$1")
+        t = replace(t, "\\[([^\\]]+)\\]\\(([^)\\s]+)[^)]*\\)", "$1")
+        t = replace(t, "<(https?://[^>\\s]+)>", "$1")
+        t = replace(t, "</?[A-Za-z][^>]*>", "")
+        t = replace(t, "`+([^`]*)`+", "$1")
+        t = replace(t, "\\*\\*\\*(.+?)\\*\\*\\*", "$1")
+        t = replace(t, "\\*\\*(.+?)\\*\\*", "$1")
+        t = replace(t, "(?<![A-Za-z0-9_])__(.+?)__(?![A-Za-z0-9_])", "$1")
+        t = replace(t, "(?<![\\*\\w])\\*(?!\\s)([^*]+?)(?<!\\s)\\*(?![\\*\\w])", "$1")
+        t = replace(t, "(?<![A-Za-z0-9_])_(?!\\s)([^_]+?)(?<!\\s)_(?![A-Za-z0-9_])", "$1")
+        t = replace(t, "~~(.+?)~~", "$1")
+        return t
+    }
+
+    private static func replace(_ s: String, _ pattern: String, _ template: String) -> String {
+        s.replacingOccurrences(of: pattern, with: template, options: .regularExpression)
+    }
+
+    /// Группы первого совпадения (0 — всё совпадение); пустая строка для необязательной группы, которой нет.
+    private static func firstMatch(_ s: String, _ pattern: String) -> [String]? {
+        guard let re = try? NSRegularExpression(pattern: pattern),
+              let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) else { return nil }
+        return (0..<m.numberOfRanges).map { i in
+            Range(m.range(at: i), in: s).map { String(s[$0]) } ?? ""
+        }
+    }
+
     public static let repository = "xop1tt/CLIENTS"
     public static let latestReleaseURL = URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!
     public static let releasesPage = URL(string: "https://github.com/\(repository)/releases")!

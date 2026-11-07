@@ -53,6 +53,7 @@ struct UpdateSettingsView: View {
         case .upToDate: return "Установлена последняя версия"
         case .available(let v): return "Доступна версия \(v)"
         case .downloading: return "Скачиваю и проверяю…"
+        case .ready(let v): return "Версия \(v) скачана и готова к установке"
         case .installing: return "Устанавливаю…"
         case .failed(let why): return why
         }

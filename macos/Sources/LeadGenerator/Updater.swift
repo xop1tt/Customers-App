@@ -17,11 +17,19 @@ final class UpdateController {
         case upToDate
         case available(String)
         case downloading
+        /// Обновление скачано, проверено и ждёт установки (версия). Сюда же приходит фоновое скачивание.
+        case ready(String)
         case installing
         case failed(String)
     }
 
-    private(set) var phase: Phase = .idle
+    var phase: Phase = .idle
+
+    /// Версия скачанного и готового к установке обновления; от этого зависит кнопка «Обновить» в боковой панели.
+    var readyVersion: String? {
+        if case .ready(let v) = phase { return v }
+        return nil
+    }
     private(set) var lastCheck: Date?
     /// Три последних релиза для раздела «Что нового?» (nil — ещё не загружались).
     private(set) var recentReleases: [ReleaseInfo]?
@@ -32,6 +40,8 @@ final class UpdateController {
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var pending: AvailableUpdate?
+    /// Распакованное и проверенное приложение новой версии.
+    @ObservationIgnored private var staged: URL?
     /// Последняя автоматическая попытка, в том числе неудачная (нет сети, GitHub недоступен).
     @ObservationIgnored private var lastAttempt: Date?
 
@@ -122,6 +132,10 @@ final class UpdateController {
         }
         switch phase {
         case .checking, .downloading, .installing: return
+        case .ready:
+            // Обновление уже скачано: ручная проверка предлагает его установить, а не качает заново.
+            if manual, let pending { offer(pending) }
+            return
         default: break
         }
         phase = .checking
@@ -148,9 +162,8 @@ final class UpdateController {
     private func offer(_ update: AvailableUpdate) {
         let a = NSAlert()
         a.messageText = "Доступна версия \(update.version)"
-        var notes = update.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        if notes.count > 900 { notes = String(notes.prefix(900)) + "…" }
-        a.informativeText = "Установлена версия \(current?.description ?? "?").\n\n\(notes)"
+        let notes = Updates.plainNotes(update.notes, limit: 900)
+        a.informativeText = "Установлена версия \(current?.description ?? "?")." + (notes.isEmpty ? "" : "\n\n\(notes)")
         a.addButton(withTitle: "Установить и перезапустить")
         a.addButton(withTitle: "Позже")
         a.addButton(withTitle: "Пропустить эту версию")
@@ -164,24 +177,60 @@ final class UpdateController {
 
     // MARK: Установка
 
-    func install(_ update: AvailableUpdate) {
+    /// Скачивает и проверяет обновление, не трогая запущенное приложение: после этого оно «готово к установке».
+    /// Годится и для фонового скачивания. Возвращает false при ошибке (фаза `.failed`).
+    @discardableResult
+    func prepare(_ update: AvailableUpdate) async -> Bool {
+        if readyVersion == update.version.description, let staged, FileManager.default.fileExists(atPath: staged.path) { return true }
         pending = update
         phase = .downloading
+        do {
+            staged = try await download(update)
+            phase = .ready(update.version.description)
+            return true
+        } catch {
+            staged = nil
+            phase = .failed(error.localizedDescription)
+            return false
+        }
+    }
+
+    /// Устанавливает уже скачанное обновление и перезапускает приложение (кнопка «Обновить»).
+    func installReady() {
+        guard let pending, let staged, readyVersion != nil else { return }
+        guard FileManager.default.fileExists(atPath: staged.path) else {
+            // Временные файлы пропали (очистка диска): скачиваем заново.
+            self.staged = nil
+            install(pending)
+            return
+        }
+        phase = .installing
+        do {
+            try relaunch(replacingWith: staged)
+        } catch {
+            phase = .ready(pending.version.description)
+            installFailed(error.localizedDescription, pending)
+        }
+    }
+
+    func install(_ update: AvailableUpdate) {
         Task {
-            do {
-                let staged = try await download(update)
-                phase = .installing
-                try relaunch(replacingWith: staged)
-            } catch {
-                phase = .failed(error.localizedDescription)
-                let a = NSAlert()
-                a.messageText = "Обновление не установлено"
-                a.informativeText = "\(error.localizedDescription)\n\nМожно скачать установщик со страницы релиза и установить вручную."
-                a.addButton(withTitle: "Открыть страницу релиза")
-                a.addButton(withTitle: "Закрыть")
-                if a.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(update.page ?? Updates.releasesPage) }
+            if await prepare(update) {
+                installReady()
+            } else if case .failed(let why) = phase {
+                installFailed(why, update)
             }
         }
+    }
+
+    private func installFailed(_ reason: String, _ update: AvailableUpdate) {
+        let a = NSAlert()
+        a.messageText = "Обновление не установлено"
+        a.informativeText = "\(reason)\n\nМожно скачать установщик со страницы релиза и установить вручную."
+        a.addButton(withTitle: "Открыть страницу релиза")
+        a.addButton(withTitle: "Закрыть")
+        NSApp.activate(ignoringOtherApps: true)
+        if a.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(update.page ?? Updates.releasesPage) }
     }
 
     /// Скачивает установщик, сверяет SHA-256, достаёт приложение из образа и проверяет его.
