@@ -367,7 +367,7 @@ internal sealed class AboutPage(AppModel model, SessionModel session, ShellView 
             })));
         var interval = UiKit.Combo(UpdateSchedule.Choices.Select(c => (c.Title, c.Hours)), Device.UpdateCheckHours, v => Device.UpdateCheckHours = v, 200);
         interval.IsEnabled = Device.CheckUpdates;
-        Add(UiKit.SettingRow("Как часто проверять", "Раз в час — самое частое: GitHub разрешает 60 запросов в час без входа.", interval));
+        Add(UiKit.SettingRow("Как часто проверять", "«При каждом запуске» проверяет один раз за запуск. Запросов к GitHub немного: лимит без входа — 60 в час.", interval));
         var background = UiKit.Toggle(Device.BackgroundDownload, v => Device.BackgroundDownload = v);
         background.IsEnabled = Device.CheckUpdates;
         Add(UiKit.SettingRow("Скачивать обновления в фоне", "Новая версия скачивается и проверяется, пока вы работаете, но устанавливается только по вашему согласию. На платном подключении фоновая загрузка откладывается.", background));
