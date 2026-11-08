@@ -44,7 +44,7 @@ hmac = "0.12"
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 base64 = "0.22"
 hex = "0.4"
-rand = "0.8"
+rand = "0.10"
 regex = "1"
 fancy-regex = "0.14"
 once_cell = "1"
