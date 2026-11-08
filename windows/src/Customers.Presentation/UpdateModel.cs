@@ -185,7 +185,8 @@ public sealed class UpdateModel : ObservableObject
 
         _errorIsSpace = false;
         Error = text;
-        Phase = UpdatePhase.Failed;
+        // Уже скачанный и проверенный установщик остаётся доступным: установить его можно и без сети.
+        Phase = Staged is not null ? UpdatePhase.Ready : UpdatePhase.Failed;
     }
 
     // MARK: Скачивание
@@ -314,7 +315,7 @@ public sealed class UpdateModel : ObservableObject
         {
             Stage.ClearInstalledNotes();
             Error = "Не удалось запустить установщик. Приложение осталось прежним; попробуйте ещё раз.";
-            Phase = UpdatePhase.Failed;
+            Phase = UpdatePhase.Ready;
             return false;
         }
 

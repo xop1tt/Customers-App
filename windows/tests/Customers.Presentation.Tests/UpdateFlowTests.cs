@@ -107,6 +107,24 @@ public sealed class UpdateModelTests : IDisposable
     }
 
     [Fact]
+    public async Task StagedUpdateStaysInstallableWhenLaterCheckFailsOrLaunchFails()
+    {
+        var first = Make();
+        await first.Model.CheckAsync();
+        Assert.True(await first.Model.DownloadAsync());
+
+        var offline = Make(online: false, launchOk: false); // перезапуск без сети: скачанное восстанавливается
+        Assert.Equal(UpdatePhase.Ready, offline.Model.Phase);
+        Assert.Null(await offline.Model.CheckAsync());
+        Assert.Equal(UpdatePhase.Ready, offline.Model.Phase); // установщик остаётся доступным
+        Assert.Contains("интернет", offline.Model.Error, StringComparison.Ordinal);
+
+        Assert.False(await offline.Model.InstallAsync()); // установщик не запустился
+        Assert.Equal(UpdatePhase.Ready, offline.Model.Phase);
+        Assert.NotNull(offline.Model.Staged);
+    }
+
+    [Fact]
     public async Task DownloadProducesReadyUpdateAndRaisesEventWithoutInstalling()
     {
         var r = Make();
@@ -171,7 +189,7 @@ public sealed class UpdateModelTests : IDisposable
         await r.Model.CheckAsync();
         await r.Model.DownloadAsync();
         Assert.False(await r.Model.InstallAsync());
-        Assert.Equal(UpdatePhase.Failed, r.Model.Phase);
+        Assert.Equal(UpdatePhase.Ready, r.Model.Phase);
         Assert.Null(r.Model.Stage.LoadInstalledNotes(AppVersion.Parse("1.3.0")!));
         Assert.NotNull(r.Model.Staged); // файл цел: можно повторить
     }

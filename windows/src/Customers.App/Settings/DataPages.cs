@@ -354,7 +354,7 @@ internal sealed class AboutPage(AppModel model, SessionModel session, ShellView 
                 break;
         }
 
-        if (m.Error is { Length: > 0 } error && m.Phase == UpdatePhase.Failed)
+        if (m.Error is { Length: > 0 } error && m.Phase is UpdatePhase.Failed or UpdatePhase.Ready)
         {
             Add(UiKit.Bar(m.ErrorIsSpace ? InfoBarSeverity.Warning : InfoBarSeverity.Error, m.ErrorIsSpace ? "Не хватает места на диске" : "Обновление не выполнено", error));
         }
