@@ -63,12 +63,11 @@ struct AppCommands: Commands {
             Button("Проверить обновления…") { UpdateController.shared.check(manual: true) }
         }
         // Отдельного окна настроек нет: ⌘, открывает их поверх главного окна.
+        // Одна группа: в теле меню не больше десяти групп.
         CommandGroup(replacing: .appSettings) {
             Button("Настройки…") { MenuActions.openSettings() }
                 .keyboardShortcut(",", modifiers: .command)
                 .disabled(model == nil)
-        }
-        CommandGroup(after: .appSettings) {
             Button("Учётная запись…") { MenuActions.openSettings(.account) }
                 .disabled(model == nil)
             Button("Синхронизировать сейчас") { session.sync?.syncNow() }
