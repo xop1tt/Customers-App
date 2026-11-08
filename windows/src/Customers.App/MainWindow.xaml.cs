@@ -46,6 +46,13 @@ public sealed partial class MainWindow : Window
         Root.ActualThemeChanged += (_, _) => Appearance.StyleTitleBar(AppWindow, Root.ActualTheme == ElementTheme.Dark);
         Root.SizeChanged += (_, _) => UpdateInsets();
         _device.PropertyChanged += OnDeviceChanged;
+        App.Instance.LightMode.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LightModeModel.Active))
+            {
+                ApplyAppearance();
+            }
+        };
         _session.PropertyChanged += OnSessionChanged;
         Activated += (_, e) =>
         {
@@ -81,7 +88,8 @@ public sealed partial class MainWindow : Window
     private void ApplyAppearance()
     {
         Root.RequestedTheme = Appearance.ToElementTheme(_device.Theme);
-        SystemBackdrop = Appearance.CreateBackdrop(_device.Backdrop);
+        // В облегчённом режиме прозрачные материалы (Mica, акрил) отключены: они нагружают видеокарту и батарею.
+        SystemBackdrop = Appearance.CreateBackdrop(App.Instance.LightMode.Active ? BackdropChoice.None : _device.Backdrop);
         // Без прозрачного материала нужен обычный фон окна, иначе будет виден фон рабочего стола.
         Root.Background = SystemBackdrop is null ? (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"] : null;
         Appearance.StyleTitleBar(AppWindow, Root.ActualTheme == ElementTheme.Dark);

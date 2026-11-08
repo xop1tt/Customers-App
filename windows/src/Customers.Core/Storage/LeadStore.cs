@@ -503,19 +503,7 @@ public sealed partial class LeadStore : ISearchRepository, ISearchMemory, IDispo
                         continue;
                     }
 
-                    ExclusionKind? kind = null;
-                    if (v.Contains('@'))
-                    {
-                        kind = ExclusionKind.Email;
-                    }
-                    else if (v.Count(char.IsNumber) >= 10 && v.All(c => char.IsNumber(c) || " +-()".Contains(c)))
-                    {
-                        kind = ExclusionKind.Phone;
-                    }
-                    else if (v.Contains('.') && !v.Contains(' '))
-                    {
-                        kind = ExclusionKind.Domain;
-                    }
+                    var kind = EnumText.DetectExclusion(v);
 
                     if (kind is { } k)
                     {

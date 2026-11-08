@@ -110,7 +110,7 @@ public struct OSMSourceSettings: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Self()
         enabled = c.v(.enabled, d.enabled); intervalHours = c.v(.intervalHours, d.intervalHours)
-        regions = c.v(.regions, d.regions); categories = c.v(.categories, d.categories)
+        regions = c.v(.regions, d.regions); categories = SearchDefaults.mergeCategories(c.v(.categories, d.categories))
         checkWebsites = c.v(.checkWebsites, d.checkWebsites); refreshDays = c.v(.refreshDays, d.refreshDays)
         recheckDays = c.v(.recheckDays, d.recheckDays); maxNewPerRun = c.v(.maxNewPerRun, d.maxNewPerRun)
         endpoint = c.v(.endpoint, d.endpoint)
@@ -152,6 +152,22 @@ public struct SearchSettings: Codable, Equatable, Sendable {
         }
     }
 
+    /// Настройки нового пользователя: регионы, каналы и слова пустые, их выбирает сам человек
+    /// (мастер предлагает регион по геолокации). Остальное как по умолчанию.
+    public static var blankStart: SearchSettings {
+        var s = SearchSettings()
+        s.osm.regions = []
+        s.telegram.channels = []
+        s.telegram.keywords = []
+        return s
+    }
+
+    /// Сохранённые настройки, а для нового пользователя (в базе ничего нет) пустой старт.
+    public static func stored(_ json: String?) -> SearchSettings {
+        guard let json, !json.isEmpty else { return blankStart }
+        return decode(json)
+    }
+
     public static func decode(_ json: String?) -> SearchSettings {
         guard let json, let s = try? JSONDecoder().decode(SearchSettings.self, from: Data(json.utf8)) else { return SearchSettings() }
         return s
@@ -183,7 +199,8 @@ public enum SearchDefaults {
                     filters: [#"["leisure"="dance"]"#, #"["amenity"="dancing_school"]"#], weight: 20),
         OSMCategory(key: "restaurant", label: "Рестораны", group: "restaurant",
                     filters: [#"["amenity"="restaurant"]"#], weight: 12),
-        OSMCategory(key: "cafe", label: "Кафе", group: "restaurant", filters: [#"["amenity"="cafe"]"#], weight: 10),
+        OSMCategory(key: "cafe", label: "Кафе", group: "restaurant",
+                    filters: [#"["amenity"="cafe"]"#], weight: 10),
         OSMCategory(key: "education", label: "Образовательные центры", group: "education",
                     filters: [#"["amenity"="language_school"]"#, #"["amenity"="training"]"#, #"["amenity"="music_school"]"#], weight: 15),
         OSMCategory(key: "medical", label: "Медицина и косметология", group: "medical",
@@ -192,7 +209,131 @@ public enum SearchDefaults {
                     filters: [#"["leisure"="fitness_centre"]"#, #"["leisure"="sports_centre"]"#], weight: 15),
         OSMCategory(key: "shops", label: "Магазины", group: "shop",
                     filters: [#"["shop"="clothes"]"#, #"["shop"="gift"]"#, #"["shop"="florist"]"#], weight: 10),
+        OSMCategory(key: "massage", label: "Массаж и SPA", group: "beauty",
+                    filters: [#"["shop"="massage"]"#, #"["leisure"="sauna"]"#], enabled: false, weight: 15),
+        OSMCategory(key: "tattoo", label: "Тату-салоны", group: "beauty",
+                    filters: [#"["shop"="tattoo"]"#], enabled: false, weight: 14),
+        OSMCategory(key: "cosmetics", label: "Косметика и парфюмерия", group: "beauty",
+                    filters: [#"["shop"="cosmetics"]"#, #"["shop"="perfumery"]"#], enabled: false, weight: 10),
+        OSMCategory(key: "doctors", label: "Частные врачи", group: "medical",
+                    filters: [#"["amenity"="doctors"]"#, #"["healthcare"="doctor"]"#], enabled: false, weight: 14),
+        OSMCategory(key: "physio", label: "Реабилитация и физиотерапия", group: "medical",
+                    filters: [#"["healthcare"="physiotherapist"]"#, #"["healthcare"="alternative"]"#], enabled: false, weight: 13),
+        OSMCategory(key: "optics", label: "Оптики", group: "medical",
+                    filters: [#"["shop"="optician"]"#], enabled: false, weight: 12),
+        OSMCategory(key: "vet", label: "Ветеринарные клиники", group: "medical",
+                    filters: [#"["amenity"="veterinary"]"#], enabled: false, weight: 13),
+        OSMCategory(key: "pharmacy", label: "Аптеки", group: "medical",
+                    filters: [#"["amenity"="pharmacy"]"#], enabled: false, weight: 8),
+        OSMCategory(key: "fastfood", label: "Фастфуд", group: "restaurant",
+                    filters: [#"["amenity"="fast_food"]"#], enabled: false, weight: 8),
+        OSMCategory(key: "bar", label: "Бары и пабы", group: "restaurant",
+                    filters: [#"["amenity"="bar"]"#, #"["amenity"="pub"]"#], enabled: false, weight: 10),
+        OSMCategory(key: "bakery", label: "Пекарни и кондитерские", group: "restaurant",
+                    filters: [#"["shop"="bakery"]"#, #"["shop"="confectionery"]"#], enabled: false, weight: 10),
+        OSMCategory(key: "catering", label: "Кейтеринг", group: "restaurant",
+                    filters: [#"["craft"="caterer"]"#], enabled: false, weight: 12),
+        OSMCategory(key: "hotel", label: "Отели и гостевые дома", group: "hospitality",
+                    filters: [#"["tourism"="hotel"]"#, #"["tourism"="guest_house"]"#, #"["tourism"="hostel"]"#, #"["tourism"="motel"]"#], enabled: false, weight: 16),
+        OSMCategory(key: "apartments", label: "Апартаменты и посуточная аренда", group: "hospitality",
+                    filters: [#"["tourism"="apartment"]"#, #"["tourism"="chalet"]"#], enabled: false, weight: 14),
+        OSMCategory(key: "travel", label: "Турагентства", group: "hospitality",
+                    filters: [#"["shop"="travel_agency"]"#], enabled: false, weight: 14),
+        OSMCategory(key: "kindergarten", label: "Детские сады и центры", group: "education",
+                    filters: [#"["amenity"="kindergarten"]"#, #"["amenity"="childcare"]"#], enabled: false, weight: 12),
+        OSMCategory(key: "driving", label: "Автошколы", group: "education",
+                    filters: [#"["amenity"="driving_school"]"#], enabled: false, weight: 15),
+        OSMCategory(key: "tutoring", label: "Репетиторы и учебные центры", group: "education",
+                    filters: [#"["office"="educational_institution"]"#, #"["amenity"="prep_school"]"#], enabled: false, weight: 13),
+        OSMCategory(key: "yoga", label: "Йога и студии", group: "fitness",
+                    filters: [#"["sport"="yoga"]"#, #"["sport"="pilates"]"#], enabled: false, weight: 15),
+        OSMCategory(key: "pools", label: "Бассейны и водный спорт", group: "fitness",
+                    filters: [#"["leisure"="swimming_pool"]["access"!="private"]"#, #"["leisure"="water_park"]"#], enabled: false, weight: 9),
+        OSMCategory(key: "martial", label: "Единоборства и спортивные секции", group: "fitness",
+                    filters: [#"["sport"="martial_arts"]"#, #"["sport"="boxing"]"#, #"["sport"="karate"]"#], enabled: false, weight: 13),
+        OSMCategory(key: "carrepair", label: "Автосервисы", group: "auto",
+                    filters: [#"["shop"="car_repair"]"#, #"["craft"="mechanic"]"#], enabled: false, weight: 16),
+        OSMCategory(key: "cardealer", label: "Автосалоны", group: "auto",
+                    filters: [#"["shop"="car"]"#], enabled: false, weight: 14),
+        OSMCategory(key: "carparts", label: "Автозапчасти и шины", group: "auto",
+                    filters: [#"["shop"="car_parts"]"#, #"["shop"="tyres"]"#], enabled: false, weight: 12),
+        OSMCategory(key: "carwash", label: "Автомойки", group: "auto",
+                    filters: [#"["amenity"="car_wash"]"#], enabled: false, weight: 12),
+        OSMCategory(key: "lawyer", label: "Юристы и нотариусы", group: "services",
+                    filters: [#"["office"="lawyer"]"#, #"["office"="notary"]"#], enabled: false, weight: 16),
+        OSMCategory(key: "accountant", label: "Бухгалтерия и аудит", group: "services",
+                    filters: [#"["office"="accountant"]"#, #"["office"="tax_advisor"]"#], enabled: false, weight: 15),
+        OSMCategory(key: "realty", label: "Агентства недвижимости", group: "services",
+                    filters: [#"["office"="estate_agent"]"#], enabled: false, weight: 18),
+        OSMCategory(key: "insurance", label: "Страхование", group: "services",
+                    filters: [#"["office"="insurance"]"#], enabled: false, weight: 12),
+        OSMCategory(key: "itcompany", label: "IT-компании", group: "services",
+                    filters: [#"["office"="it"]"#], enabled: false, weight: 10),
+        OSMCategory(key: "advertising", label: "Рекламные и маркетинговые агентства", group: "services",
+                    filters: [#"["office"="advertising_agency"]"#, #"["office"="marketing"]"#], enabled: false, weight: 14),
+        OSMCategory(key: "architect", label: "Архитекторы и дизайнеры", group: "services",
+                    filters: [#"["office"="architect"]"#], enabled: false, weight: 15),
+        OSMCategory(key: "photo", label: "Фотостудии и фотографы", group: "services",
+                    filters: [#"["craft"="photographer"]"#, #"["shop"="photo"]"#], enabled: false, weight: 14),
+        OSMCategory(key: "print", label: "Типографии и копицентры", group: "services",
+                    filters: [#"["shop"="copyshop"]"#, #"["craft"="printer"]"#], enabled: false, weight: 12),
+        OSMCategory(key: "cleaning", label: "Прачечные и химчистки", group: "services",
+                    filters: [#"["shop"="laundry"]"#, #"["shop"="dry_cleaning"]"#], enabled: false, weight: 10),
+        OSMCategory(key: "tailor", label: "Ателье и пошив", group: "services",
+                    filters: [#"["craft"="tailor"]"#, #"["shop"="tailor"]"#, #"["shop"="fabric"]"#], enabled: false, weight: 11),
+        OSMCategory(key: "repair", label: "Ремонт техники и телефонов", group: "services",
+                    filters: [#"["craft"="electronics_repair"]"#, #"["shop"="mobile_phone"]"#], enabled: false, weight: 12),
+        OSMCategory(key: "construction", label: "Строительство и ремонт", group: "construction",
+                    filters: [#"["office"="construction_company"]"#, #"["craft"="builder"]"#, #"["craft"="carpenter"]"#], enabled: false, weight: 15),
+        OSMCategory(key: "engineering", label: "Электрики, сантехники, отопление", group: "construction",
+                    filters: [#"["craft"="electrician"]"#, #"["craft"="plumber"]"#, #"["craft"="hvac"]"#], enabled: false, weight: 12),
+        OSMCategory(key: "furniture", label: "Мебель и интерьер", group: "home",
+                    filters: [#"["shop"="furniture"]"#, #"["shop"="interior_decoration"]"#, #"["shop"="kitchen"]"#], enabled: false, weight: 14),
+        OSMCategory(key: "hardware", label: "Стройматериалы и инструменты", group: "home",
+                    filters: [#"["shop"="doityourself"]"#, #"["shop"="hardware"]"#, #"["shop"="trade"]"#], enabled: false, weight: 10),
+        OSMCategory(key: "electronics", label: "Электроника и компьютеры", group: "retail",
+                    filters: [#"["shop"="electronics"]"#, #"["shop"="computer"]"#, #"["shop"="appliance"]"#], enabled: false, weight: 10),
+        OSMCategory(key: "jewelry", label: "Ювелирные магазины", group: "retail",
+                    filters: [#"["shop"="jewelry"]"#], enabled: false, weight: 11),
+        OSMCategory(key: "pets", label: "Зоомагазины", group: "retail",
+                    filters: [#"["shop"="pet"]"#, #"["shop"="pet_grooming"]"#], enabled: false, weight: 11),
+        OSMCategory(key: "kids", label: "Детские товары и игрушки", group: "retail",
+                    filters: [#"["shop"="toys"]"#, #"["shop"="baby_goods"]"#], enabled: false, weight: 9),
+        OSMCategory(key: "sports", label: "Спортивные товары и велосипеды", group: "retail",
+                    filters: [#"["shop"="sports"]"#, #"["shop"="bicycle"]"#], enabled: false, weight: 9),
+        OSMCategory(key: "books", label: "Книги и канцелярия", group: "retail",
+                    filters: [#"["shop"="books"]"#, #"["shop"="stationery"]"#], enabled: false, weight: 8),
+        OSMCategory(key: "events", label: "Мероприятия и праздники", group: "leisure",
+                    filters: [#"["amenity"="events_venue"]"#, #"["shop"="party"]"#], enabled: false, weight: 13),
+        OSMCategory(key: "entertainment", label: "Квесты, боулинг, кинотеатры", group: "leisure",
+                    filters: [#"["leisure"="escape_game"]"#, #"["leisure"="bowling_alley"]"#, #"["amenity"="cinema"]"#], enabled: false, weight: 11),
+        OSMCategory(key: "nightclub", label: "Ночные клубы", group: "leisure",
+                    filters: [#"["amenity"="nightclub"]"#], enabled: false, weight: 10),
     ]
+
+    /// Названия групп категорий OpenStreetMap для интерфейса.
+    public static let osmGroupTitles: [String: String] = [
+        "beauty": "Красота и уход",
+        "dance": "Танцы",
+        "restaurant": "Питание",
+        "education": "Образование",
+        "medical": "Здоровье",
+        "fitness": "Спорт и фитнес",
+        "shop": "Магазины",
+        "retail": "Розница",
+        "hospitality": "Отели и туризм",
+        "auto": "Авто",
+        "services": "Услуги и офисы",
+        "construction": "Строительство",
+        "home": "Дом и интерьер",
+        "leisure": "Досуг и мероприятия",
+    ]
+
+    /// Сохранённые категории пользователя плюс новые из каталога (выключенные): выбор пользователя не меняется.
+    public static func mergeCategories(_ stored: [OSMCategory]) -> [OSMCategory] {
+        let known = Set(stored.map(\.key))
+        return stored + osmCategories.filter { !known.contains($0.key) }
+    }
 }
 
 /// Приведение того, что вводит пользователь, к виду, который понимает источник.

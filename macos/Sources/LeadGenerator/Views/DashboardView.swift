@@ -95,7 +95,7 @@ struct DashboardView: View {
                             .foregroundStyle(by: .value("Тип", p.kind))
                             .cornerRadius(3)
                     }
-                    .chartForegroundStyleScale(["Организации": look.accent.color, "Заказы": Color.blue.opacity(0.7)])
+                    .chartForegroundStyleScale(["Организации": look.accentColor, "Заказы": Color.blue.opacity(0.7)])
                     .frame(height: 180 * look.scale)
                     .scaledPadding(.all, 14)
                 }

@@ -47,7 +47,7 @@ struct LeadGeneratorApp: App {
                 .modifier(LookRoot(look: look))
                 .frame(minWidth: 980, minHeight: 620)
                 .background(OpenWindowBridge())
-                .onAppear { look.apply() }
+                .onAppear { look.apply(); PowerMonitor.shared.start(look: look) }
         }
         .defaultSize(width: 1440, height: 900)
         .commands { AppCommands(session: session, look: look) }

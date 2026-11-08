@@ -22,13 +22,14 @@ public sealed partial class ShellView : UserControl
         _session = session;
         InitializeComponent();
         BuildMenu();
-        Nav.OpenPaneLength = _device.NavWidth;
+        Nav.OpenPaneLength = Math.Clamp(_device.NavWidth, MinPane, MaxPane);
         PaneSplitter.DragStarted += () => _dragStartWidth = Nav.OpenPaneLength;
         PaneSplitter.Dragged += delta => SetPaneWidth(_dragStartWidth + delta, save: false);
         PaneSplitter.DragCompleted += () => _device.NavWidth = Nav.OpenPaneLength;
         PaneSplitter.ResetRequested += () => SetPaneWidth(260, save: true);
 
         _device.PropertyChanged += OnDeviceChanged;
+        App.Instance.LightMode.PropertyChanged += OnLightModeChanged;
         Model.PropertyChanged += OnModelChanged;
         Model.DataReloaded += UpdateBadges;
         Model.SearchCompleted += OnSearchCompleted;
@@ -40,7 +41,17 @@ public sealed partial class ShellView : UserControl
             UpdatePaneVisibility();
             TryPresentStartupScreens();
         };
-        Layout.SizeChanged += (_, _) => UpdatePaneVisibility();
+        Layout.SizeChanged += (_, _) =>
+        {
+            // Окно сузили (или поменялся масштаб): панель не должна занимать больше допустимой доли ширины.
+            var target = Math.Clamp(_device.NavWidth, MinPane, MaxPane);
+            if (Math.Abs(Nav.OpenPaneLength - target) > 0.5)
+            {
+                Nav.OpenPaneLength = target;
+            }
+
+            UpdatePaneVisibility();
+        };
 
         UpdateBadges();
         ApplyAnimations();
@@ -74,6 +85,7 @@ public sealed partial class ShellView : UserControl
 
         _detached = true;
         _device.PropertyChanged -= OnDeviceChanged;
+        App.Instance.LightMode.PropertyChanged -= OnLightModeChanged;
         Model.PropertyChanged -= OnModelChanged;
         Model.DataReloaded -= UpdateBadges;
         Model.SearchCompleted -= OnSearchCompleted;
@@ -172,7 +184,7 @@ public sealed partial class ShellView : UserControl
 
     private void ApplyAnimations()
     {
-        if (_device.Animations)
+        if (_device.Animations && !App.Instance.LightMode.Active)
         {
             var transitions = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection();
             transitions.Add(new Microsoft.UI.Xaml.Media.Animation.EntranceThemeTransition { FromVerticalOffset = 16 });
@@ -186,9 +198,14 @@ public sealed partial class ShellView : UserControl
 
     // MARK: Ширина и видимость панели
 
+    // Левая панель: не уже 180 и не шире 420 пикселей и не больше 40% окна, чтобы основная область не сжималась.
+    private const double MinPane = 180;
+
+    private double MaxPane => Math.Max(MinPane, Math.Min(420, (Layout.ActualWidth > 0 ? Layout.ActualWidth : 1200) * 0.4));
+
     private void SetPaneWidth(double width, bool save)
     {
-        var w = Math.Clamp(width, 180, 420);
+        var w = Math.Clamp(width, MinPane, MaxPane);
         Nav.OpenPaneLength = w;
         PositionSplitter();
         if (save)
@@ -211,6 +228,14 @@ public sealed partial class ShellView : UserControl
 
     private void OnNavPaneChanged(NavigationView sender, object args) => UpdatePaneVisibility();
 
+    private void OnLightModeChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(LightModeModel.Active))
+        {
+            ApplyAnimations();
+        }
+    }
+
     private void OnDeviceChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -219,7 +244,7 @@ public sealed partial class ShellView : UserControl
                 UpdatePaneVisibility();
                 break;
             case nameof(DevicePreferences.NavWidth):
-                Nav.OpenPaneLength = _device.NavWidth;
+                Nav.OpenPaneLength = Math.Clamp(_device.NavWidth, MinPane, MaxPane);
                 PositionSplitter();
                 break;
             case nameof(DevicePreferences.Animations):

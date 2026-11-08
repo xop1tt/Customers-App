@@ -12,8 +12,8 @@ struct WhatsNewContent: Identifiable, Equatable {
     let text: String
 }
 
-/// «Что нового в версии X.Y.Z?»: один раз для каждой установленной версии. Текст берётся из записи, сделанной перед
-/// установкой (работает без сети), иначе из истории релизов на GitHub.
+/// «Что нового»: один раз для каждой установленной версии. Описание релиза (Markdown) берётся из записи, сделанной
+/// перед установкой (работает без сети), иначе из релиза на GitHub; окно показывает его через `WhatsNewDigest`.
 @MainActor
 @Observable
 final class WhatsNewController {
@@ -32,16 +32,30 @@ final class WhatsNewController {
         case .show:
             if let saved = InstalledNotes.decode(defaults.string(forKey: UpdateController.installedNotesKey), for: current),
                !saved.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                content = WhatsNewContent(version: current.description, text: Updates.plainNotes(saved.notes))
+                content = WhatsNewContent(version: current.description, text: saved.notes)
                 return
             }
             // Показываем сразу, описание подгружается: без сети будет ссылка на страницу релизов.
             content = WhatsNewContent(version: current.description, text: "")
             Task {
                 let release = try? await Updates.fetchRelease(version: current, userAgent: "LeadGenerator/\(current) (macOS)")
-                let text = Updates.plainNotes(release?.body ?? "")
+                let text = release?.body ?? ""
                 if content?.version == current.description { content = WhatsNewContent(version: current.description, text: text) }
             }
+        }
+    }
+
+    /// Показать описание установленной версии по просьбе пользователя (кнопка в справке).
+    func presentCurrent() {
+        guard content == nil, let current = UpdateController.shared.current else { return }
+        if let saved = InstalledNotes.decode(defaults.string(forKey: UpdateController.installedNotesKey), for: current) {
+            content = WhatsNewContent(version: current.description, text: saved.notes)
+            return
+        }
+        content = WhatsNewContent(version: current.description, text: "")
+        Task {
+            let release = try? await Updates.fetchRelease(version: current, userAgent: "LeadGenerator/\(current) (macOS)")
+            if content?.version == current.description { content = WhatsNewContent(version: current.description, text: release?.body ?? "") }
         }
     }
 
@@ -50,38 +64,6 @@ final class WhatsNewController {
         if let c = content { defaults.set(c.version, forKey: Self.seenKey) }
         defaults.removeObject(forKey: UpdateController.installedNotesKey)
         content = nil
-    }
-}
-
-struct WhatsNewSheet: View {
-    let content: WhatsNewContent
-    let onClose: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Что нового в версии \(content.version)?").font(.title2.weight(.semibold))
-            ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    if content.text.isEmpty {
-                        Text("Список изменений сейчас недоступен: нет подключения к интернету. Его можно прочитать на странице версий на GitHub.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(Array(content.text.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
-                            if line.isEmpty { Spacer().frame(height: 4) } else { Text(line).textSelection(.enabled) }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(minHeight: 160, maxHeight: 360)
-            HStack {
-                Link("Все версии на GitHub", destination: Updates.releasesPage)
-                Spacer()
-                Button("Закрыть", action: onClose).keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(22)
-        .frame(width: 520)
     }
 }
 
@@ -214,13 +196,11 @@ struct WelcomeView: View {
                     Toggle("Организации на карте (OpenStreetMap)", isOn: $model.searchSettings.osm.enabled)
                     Toggle("Сообщества ВКонтакте (нужен бесплатный ключ VK)", isOn: $model.searchSettings.vk.enabled)
                 }
-                Section("Регионы для поиска организаций") {
-                    TextField("Города через запятую", text: Binding(
-                        get: { model.searchSettings.osm.regions.joined(separator: ", ") },
-                        set: { model.searchSettings.osm.regions = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
-                    ))
-                    Text("Город или область, как они называются на карте. Подробности — в разделе «Источники».").font(.caption).foregroundStyle(.secondary)
-                }
+                RegionSection(regions: $model.searchSettings.osm.regions)
+                TelegramChannelsSection(channels: $model.searchSettings.telegram.channels,
+                                        footer: "Только публичные каналы. Ничего не добавлено заранее: укажите свои или пропустите и вернитесь к этому позже в «Источниках».")
+                KeywordsSection(keywords: $model.searchSettings.telegram.keywords,
+                                footer: "Пост попадает в оценку, если в нём есть хотя бы одно слово из списка. Пусто — все посты. Фильтры можно задать позже в «Источниках».")
                 Section("Автоматический поиск") {
                     Picker("Как часто", selection: $model.autoSearchMinutes) {
                         Text("Выключен").tag(0)

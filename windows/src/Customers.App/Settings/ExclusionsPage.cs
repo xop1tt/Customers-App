@@ -7,12 +7,11 @@ internal sealed class ExclusionsPage(AppModel model, SessionModel session, Shell
 {
     protected override SettingsSection Kind => SettingsSection.Exclusions;
 
-    protected override string Lead => "Домены, телефоны, адреса почты и названия, которые не нужно показывать. Подходящие лиды уходят из списков и не возвращаются при новых поисках.";
+    protected override string Lead => "Домены, телефоны, адреса почты и названия, которые не нужно показывать: введите любое из них, формат определится сам. Подходящие лиды уходят из списков и не возвращаются при новых поисках.";
 
     protected override void Fill()
     {
-        var kind = new ComboBox { Width = 160, ItemsSource = Enum.GetValues<ExclusionKind>().Select(k => k.Title()).ToList(), SelectedIndex = 0 };
-        var value = new TextBox { PlaceholderText = "значение", MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var value = new TextBox { PlaceholderText = "домен, телефон, email или название", MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Stretch };
         void AddNew()
         {
             var text = value.Text.Trim();
@@ -21,7 +20,7 @@ internal sealed class ExclusionsPage(AppModel model, SessionModel session, Shell
                 return;
             }
 
-            Model.Exclude(Enum.GetValues<ExclusionKind>()[Math.Max(0, kind.SelectedIndex)], text);
+            Model.Exclude(text);
             Refresh();
         }
 
@@ -33,14 +32,11 @@ internal sealed class ExclusionsPage(AppModel model, SessionModel session, Shell
             }
         };
         var entry = new Grid { ColumnSpacing = 8 };
-        entry.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         entry.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         entry.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        entry.Children.Add(kind);
-        Grid.SetColumn(value, 1);
         entry.Children.Add(value);
         var add = UiKit.TextButton("Добавить", AddNew, accent: true);
-        Grid.SetColumn(add, 2);
+        Grid.SetColumn(add, 1);
         entry.Children.Add(add);
         Add(UiKit.Card(entry));
 

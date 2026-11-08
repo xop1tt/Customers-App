@@ -17,19 +17,6 @@ struct SourcesView: View {
                         SourceRow(key: key).tag(key)
                     }
                 }
-                Section("Не подключены") {
-                    ForEach(Array(SourceCatalog.unavailable.enumerated()), id: \.offset) { _, item in
-                        HStack(spacing: 10) {
-                            Image(systemName: "lock").foregroundStyle(.secondary).frame(width: 16)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.0).appFont(12.5, .medium)
-                                Text(item.1).appFont(11).foregroundStyle(.secondary).lineLimit(2)
-                            }
-                        }
-                        .scaledPadding(.vertical, 2)
-                        .selectionDisabled()
-                    }
-                }
             }
             .listStyle(.inset)
             .frame(width: 290 * look.scale)
@@ -150,17 +137,13 @@ struct SourceEditor: View {
 
     @ViewBuilder private var telegram: some View {
         @Bindable var model = model
+        TelegramChannelsSection(channels: $model.searchSettings.telegram.channels)
         Section {
-            TokenListEditor(title: "Каналы", placeholder: "имя, @имя или ссылка t.me/имя",
-                            items: $model.searchSettings.telegram.channels, normalize: SourceInput.telegramChannel,
-                            invalidHint: "Имя канала: латиница, цифры и _, от 4 символов")
             Stepper("Страниц на канал за запуск: \(model.searchSettings.telegram.maxPages)",
                     value: $model.searchSettings.telegram.maxPages, in: 1...10)
-        } header: { Text("Публичные каналы") } footer: {
-            Text("Читается веб-превью t.me/s/канал — только публичные каналы. Приватные каналы и чаты недоступны.")
         }
-        keywordsSection($model.searchSettings.telegram.keywords,
-                        footer: "Пост попадает в оценку, если содержит хотя бы одно слово. Пусто — все посты.")
+        KeywordsSection(keywords: $model.searchSettings.telegram.keywords,
+                        footer: "Пост попадает в оценку, если содержит хотя бы одно слово. Пусто — все посты. Слов по умолчанию нет: задайте свои.")
     }
 
     // MARK: VK
@@ -184,23 +167,8 @@ struct SourceEditor: View {
 
     @ViewBuilder private var osm: some View {
         @Bindable var model = model
-        Section {
-            TokenListEditor(title: "Города и регионы", placeholder: "например, Казань",
-                            items: $model.searchSettings.osm.regions, normalize: SourceInput.region,
-                            invalidHint: "Название города или региона")
-        } header: { Text("Где искать") } footer: {
-            Text("Название как в OpenStreetMap: на местном языке, по-русски или по-английски.")
-        }
-        Section("Категории организаций") {
-            ForEach($model.searchSettings.osm.categories) { $cat in
-                Toggle(isOn: $cat.enabled) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(cat.label)
-                        Text(cat.filters.joined(separator: " ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }
-            }
-        }
+        RegionSection(regions: $model.searchSettings.osm.regions)
+        OSMCategoriesEditor(categories: $model.searchSettings.osm.categories)
         Section {
             Toggle("Проверять сайты организаций", isOn: $model.searchSettings.osm.checkWebsites)
             Stepper("Новых организаций за запуск: \(model.searchSettings.osm.maxNewPerRun)",
@@ -350,6 +318,46 @@ struct SourcesInspector: View {
         HStack(alignment: .firstTextBaseline) {
             Text(k).appFont(12.5).foregroundStyle(.secondary).frame(width: 140, alignment: .leading)
             Text(v).appFont(12.5)
+        }
+    }
+}
+
+/// Категории организаций OpenStreetMap по группам: можно включить категорию или всю группу сразу.
+struct OSMCategoriesEditor: View {
+    @Binding var categories: [OSMCategory]
+
+    private var groups: [String] {
+        var seen: [String] = []
+        for c in categories where !seen.contains(c.group) { seen.append(c.group) }
+        return seen
+    }
+
+    var body: some View {
+        Section {
+            Text("Включено категорий: \(categories.filter(\.enabled).count) из \(categories.count). Чем больше категорий и регионов, тем дольше поиск: бесплатный Overpass API общий для всех.")
+                .font(.caption).foregroundStyle(.secondary)
+        } header: { Text("Категории организаций") }
+        ForEach(groups, id: \.self) { group in
+            Section {
+                ForEach($categories.filter { $0.wrappedValue.group == group }) { $cat in
+                    Toggle(isOn: $cat.enabled) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(cat.label)
+                            Text(cat.filters.joined(separator: " ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text(SearchDefaults.osmGroupTitles[group] ?? group)
+                    Spacer()
+                    let all = categories.filter { $0.group == group }.allSatisfy(\.enabled)
+                    Button(all ? "Выключить все" : "Включить все") {
+                        for i in categories.indices where categories[i].group == group { categories[i].enabled = !all }
+                    }
+                    .buttonStyle(.link).font(.caption)
+                }
+            }
         }
     }
 }

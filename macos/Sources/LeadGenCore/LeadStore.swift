@@ -427,11 +427,7 @@ public final class LeadStore: @unchecked Sendable {
             for cell in CSV.parseLine(String(line)) {
                 let v = cell.trimmingCharacters(in: .whitespaces)
                 guard !v.isEmpty else { continue }
-                let kind: ExclusionKind?
-                if v.contains("@") { kind = .email }
-                else if v.filter(\.isNumber).count >= 10 && v.allSatisfy({ $0.isNumber || " +-()".contains($0) }) { kind = .phone }
-                else if v.contains(".") && !v.contains(" ") { kind = .domain }
-                else { kind = nil }
+                let kind = ExclusionKind.detect(v)
                 if let kind {
                     let norm = Normalize.value(v, kind: kind)
                     let added = try db.run("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?,?,?)",

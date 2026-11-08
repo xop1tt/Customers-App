@@ -55,7 +55,7 @@ public sealed partial class AppModel : ObservableObject
             }
 
             _applyingRemote = true;
-            _searchSettings = SearchSettings.Decode(Store.Value("search.settings"));
+            _searchSettings = SearchSettings.Stored(Store.Value("search.settings"));
             _applyingRemote = false;
             ReloadSyncedSettings();
             Reload();
@@ -483,6 +483,9 @@ public sealed partial class AppModel : ObservableObject
         LastMessage = $"Добавлено исключение: {kind.Title().ToLowerInvariant()} {value}";
     }
 
+    /// <summary>Формат (домен, телефон, email, иначе название) определяется по самому значению.</summary>
+    public void Exclude(string value) => Exclude(EnumText.DetectExclusion(value) ?? ExclusionKind.Name, value);
+
     public void RemoveExclusion(long id) => Act(s => s.RemoveExclusion(id));
 
     public int ImportExclusions(string csvText)
@@ -574,7 +577,7 @@ public sealed partial class AppModel : ObservableObject
         _applyingRemote = true;
         try
         {
-            var s = SearchSettings.Decode(store.Value("search.settings"));
+            var s = SearchSettings.Stored(store.Value("search.settings"));
             if (s.Encoded() != _searchSettings.Encoded())
             {
                 _searchSettings = s;

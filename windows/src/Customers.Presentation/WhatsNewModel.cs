@@ -43,6 +43,7 @@ public sealed class WhatsNewModel : ObservableObject
     private readonly AppEnvironment _env;
     private readonly UpdateStage _stage;
     private IReadOnlyList<NoteLine> _lines = [];
+    private IReadOnlyList<WhatsNewFeature> _features = [];
     private bool _loading = true;
     private bool _unavailable;
     private string _title;
@@ -60,6 +61,9 @@ public sealed class WhatsNewModel : ObservableObject
     public string Title => _title;
 
     public IReadOnlyList<NoteLine> Lines { get => _lines; private set => Set(ref _lines, value); }
+
+    /// <summary>Изменения именно для Windows: отфильтрованные, сгруппированные по темам и переформулированные.</summary>
+    public IReadOnlyList<WhatsNewFeature> Features { get => _features; private set => Set(ref _features, value); }
 
     public bool Loading { get => _loading; private set => Set(ref _loading, value); }
 
@@ -103,6 +107,7 @@ public sealed class WhatsNewModel : ObservableObject
 
             var lines = ReleaseNotesText.Parse(text);
             Lines = lines;
+            Features = WhatsNewDigest.Build(text, ReleasePlatform.Windows);
             Unavailable = lines.Count == 0;
         }
         finally

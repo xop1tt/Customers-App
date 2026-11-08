@@ -232,15 +232,17 @@ internal sealed class WelcomeView : UserControl
     {
         var s = _model.SearchSettings;
         var stack = new StackPanel { Spacing = 10 };
-        stack.Children.Add(UiKit.Muted("Выберите, где искать. Подробные настройки (каналы, ключевые слова, интервалы) — в «Настройки → Источники»."));
+        stack.Children.Add(UiKit.Muted("Выберите, где искать. Всё здесь можно пропустить: пока списки пусты, приложение ничего за вас не подставляет. Те же настройки лежат в «Настройки → Источники»."));
         stack.Children.Add(UiKit.SettingRow("Ленты заказов (FL.ru и другие RSS)", "Свежие заказы с бирж фриланса.",
             UiKit.Toggle(s.Rss.Enabled, v => Change(x => x.Rss.Enabled = v))));
         stack.Children.Add(UiKit.SettingRow("Telegram-каналы", "Публичные каналы с заказами, без входа в аккаунт.",
             UiKit.Toggle(s.Telegram.Enabled, v => Change(x => x.Telegram.Enabled = v))));
         stack.Children.Add(UiKit.SettingRow("Организации на карте (OpenStreetMap)", "Компании без сайта или с устаревшим сайтом — потенциальные клиенты.",
             UiKit.Toggle(s.Osm.Enabled, v => Change(x => x.Osm.Enabled = v))));
-        stack.Children.Add(SettingsPage.ListEditor("Регионы для поиска организаций", "Город или область, как они называются на карте.",
-            () => _model.SearchSettings.Osm.Regions, v => Change(x => x.Osm.Regions = v), SourceInput.Region, "Ереван", "Пустое название"));
+        stack.Children.Add(SourceFilters.Regions(_model, autoLocate: true));
+        stack.Children.Add(SourceFilters.TelegramChannels(_model));
+        stack.Children.Add(SourceFilters.TelegramKeywords(_model));
+        stack.Children.Add(SourceFilters.Categories(_model, withWeights: false));
         stack.Children.Add(UiKit.SettingRow("Сообщества ВКонтакте", "Нужен бесплатный сервисный ключ VK — его можно добавить позже в «Источниках».",
             UiKit.Toggle(s.Vk.Enabled, v => Change(x => x.Vk.Enabled = v))));
         stack.Children.Add(UiKit.SettingRow("Автоматический поиск", "Пока приложение запущено (в том числе в области уведомлений), источники проверяются по расписанию.",

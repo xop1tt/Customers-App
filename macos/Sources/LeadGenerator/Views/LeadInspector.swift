@@ -56,7 +56,7 @@ struct LeadInspector: View {
     }
 
     private func resetDraft() {
-        let d = DraftWriter.email(for: lead.data, signature: model.signature)
+        let d = DraftWriter.email(for: lead.data, signature: "")
         subject = d.subject
         draft = d.body
     }
@@ -323,7 +323,7 @@ struct LeadInspector: View {
                     .buttonStyle(.link).appFont(11)
                 }
             }
-            Text("Черновик собран по шаблону из фактов о лиде. Письма уходят по одному, по вашей кнопке: массовой рассылки нет. Подпись задаётся в настройках.")
+            Text("Черновик собран по шаблону из фактов о лиде. Письма уходят по одному, по вашей кнопке: массовой рассылки нет.")
                 .appFont(11).foregroundStyle(.secondary)
         }
     }

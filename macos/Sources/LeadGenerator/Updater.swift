@@ -6,7 +6,8 @@ import Observation
 /// Автообновление из GitHub Releases: проверка, скачивание, проверка SHA-256, замена и перезапуск.
 ///
 /// Без серверов и ключей: публичный API релизов и файлы, которые публикует release.yml.
-/// Окна — NSAlert, чтобы не связывать обновление с графом SwiftUI.
+/// О новой версии сообщает только кнопка «Обновить» в боковой панели (без всплывающих окон);
+/// окна NSAlert остаются для ошибок и для результата ручной проверки.
 @MainActor
 @Observable
 final class UpdateController {
@@ -26,10 +27,43 @@ final class UpdateController {
 
     var phase: Phase = .idle
 
-    /// Версия скачанного и готового к установке обновления; от этого зависит кнопка «Обновить» в боковой панели.
+    /// Версия скачанного и готового к установке обновления.
     var readyVersion: String? {
         if case .ready(let v) = phase { return v }
         return nil
+    }
+
+    /// Что показывает кнопка «Обновить» в боковой панели. Одно место для всех состояний обновления,
+    /// поэтому отдельных уведомлений и дублей нет.
+    enum ButtonState: Equatable {
+        case hidden
+        /// Найдена новая версия, ещё не скачана (фоновая загрузка выключена или отложена).
+        case available(String)
+        case downloading(String?)
+        case ready(String)
+        case installing
+        /// Скачать или установить не удалось; нажатие повторяет попытку.
+        case retry(String)
+    }
+
+    var buttonState: ButtonState {
+        switch phase {
+        case .available(let v): return pending == nil ? .hidden : .available(v)
+        case .downloading: return .downloading(pending?.version.description)
+        case .ready(let v): return .ready(v)
+        case .installing: return .installing
+        case .failed: return pending.map { .retry($0.version.description) } ?? .hidden
+        default: return .hidden
+        }
+    }
+
+    /// Нажатие на кнопку «Обновить»: установить скачанное, а иначе скачать и установить.
+    func performButtonAction() {
+        switch buttonState {
+        case .ready: installReady()
+        case .available, .retry: if let pending { install(pending) }
+        default: break
+        }
     }
     private(set) var lastCheck: Date?
     /// Три последних релиза для раздела «Что нового?» (nil — ещё не загружались).
@@ -58,7 +92,6 @@ final class UpdateController {
         Interval(hours: 6, title: "Каждые 6 часов"), Interval(hours: 12, title: "Каждые 12 часов"),
         Interval(hours: 24, title: "Раз в сутки"), Interval(hours: 168, title: "Раз в неделю"),
     ]
-    private static let skipKey = "updates.skip"
     private static let lastKey = "updates.lastCheck"
 
     static let backgroundKey = "updates.background"
@@ -188,8 +221,7 @@ final class UpdateController {
         switch phase {
         case .checking, .downloading, .installing: return
         case .ready:
-            // Обновление уже скачано: ручная проверка предлагает его установить, а не качает заново.
-            if manual, let pending { offer(pending) }
+            // Обновление уже скачано: кнопка «Обновить» уже предлагает его установить.
             return
         default: break
         }
@@ -204,35 +236,17 @@ final class UpdateController {
                     if manual { alert("Установлена последняя версия", "Customers \(current) — самая новая версия.") }
                     return
                 }
+                pending = update
                 phase = .available(update.version.description)
-                if !manual, defaults.string(forKey: Self.skipKey) == update.version.description { return }
-                if !manual, backgroundDownload {
-                    // Тихая загрузка: окно не появляется, пока пользователь работает. Установка — только по кнопке «Обновить».
-                    guard !expensiveNetwork else { return }
-                    if await prepare(update) { announceReady(update.version.description) }
-                    return
+                // Окна нет: о версии сообщает кнопка «Обновить». Скачивание в фоне — если оно включено
+                // и подключение без лимита трафика; иначе кнопка скачает и установит по нажатию.
+                if backgroundDownload || manual, !expensiveNetwork || manual {
+                    await prepare(update)
                 }
-                offer(update)
             } catch {
                 phase = .failed(error.localizedDescription)
                 if manual { alert("Не удалось проверить обновления", error.localizedDescription) }
             }
-        }
-    }
-
-    private func offer(_ update: AvailableUpdate) {
-        let a = NSAlert()
-        a.messageText = "Доступна версия \(update.version)"
-        let notes = Updates.plainNotes(update.notes, limit: 900)
-        a.informativeText = "Установлена версия \(current?.description ?? "?")." + (notes.isEmpty ? "" : "\n\n\(notes)")
-        a.addButton(withTitle: "Установить и перезапустить")
-        a.addButton(withTitle: "Позже")
-        a.addButton(withTitle: "Пропустить эту версию")
-        NSApp.activate(ignoringOtherApps: true)
-        switch a.runModal() {
-        case .alertFirstButtonReturn: install(update)
-        case .alertThirdButtonReturn: defaults.set(update.version.description, forKey: Self.skipKey)
-        default: break
         }
     }
 
@@ -269,10 +283,6 @@ final class UpdateController {
         case .networkConnectionLost, .timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed: return "Соединение прервалось, обновление не скачано. Приложение работает как прежде, попробуйте позже."
         default: return error.localizedDescription
         }
-    }
-
-    private func announceReady(_ version: String) {
-        SessionModel.shared.current?.lastMessage = "Версия \(version) скачана. Нажмите «Обновить» в боковой панели, чтобы установить."
     }
 
     /// Устанавливает уже скачанное обновление и перезапускает приложение (кнопка «Обновить»).

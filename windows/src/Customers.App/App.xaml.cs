@@ -39,6 +39,11 @@ public partial class App : Application
 
     internal UpdateService Updates { get; private set; } = null!;
 
+    /// <summary>Облегчённый режим: включается по режиму экономии энергии Windows или низкому заряду.</summary>
+    public LightModeModel LightMode { get; private set; } = null!;
+
+    private PowerWatcher? _power;
+
     /// <summary>На этом компьютере уже были учётные записи до текущего запуска.</summary>
     internal bool ExistingInstall { get; private set; }
 
@@ -85,6 +90,13 @@ public partial class App : Application
         // Данные уже были до этого запуска — значит, это не первая установка (для экрана «Что нового» и мастера).
         ExistingInstall = Directory.Exists(Env.UsersDirectory) && Directory.EnumerateFileSystemEntries(Env.UsersDirectory).Any();
         Updates = new UpdateService(Env);
+        LightMode = new LightModeModel(device);
+        if (!Options.Smoke)
+        {
+            _power = new PowerWatcher(LightMode, Ui, log);
+            _power.Start();
+        }
+
         Appearance.ApplyAccent(device.Accent);
         Appearance.FollowSystemAccent(device);
         Session = new SessionModel(Env);

@@ -22,6 +22,7 @@ public sealed partial class LeadsView : UserControl, ISectionAware, IDetachable
         _shell = shell;
         InitializeComponent();
         List.ItemsSource = Model.Rows;
+        List.ContainerContentChanging += OnRowContainerChanging;
         _inspector = new LeadInspector(model, shell);
         InspectorHost.Child = _inspector;
 
@@ -566,7 +567,62 @@ public sealed partial class LeadsView : UserControl, ISectionAware, IDetachable
 
     // MARK: Таблица: размеры и оформление
 
-    private void OnTableScrollSizeChanged(object sender, SizeChangedEventArgs e) => Table.Width = Math.Max(Table.MinWidth, e.NewSize.Width);
+    // Колонки «Источник» и «Дата» убираются, когда списку не хватает ширины: горизонтальной прокрутки нет ни на узком окне,
+    // ни при крупном масштабе Windows, ни при открытой карточке.
+    private int _columnMode = 2;
+
+    private static int ColumnModeFor(double width) => width >= 640 ? 2 : width >= 460 ? 1 : 0;
+
+    private static void ApplyColumns(Grid row, int mode)
+    {
+        if (row.ColumnDefinitions.Count < 5)
+        {
+            return;
+        }
+
+        row.ColumnDefinitions[2].Width = new GridLength(mode >= 1 ? 130 : 0);
+        row.ColumnDefinitions[3].Width = new GridLength(mode >= 2 ? 120 : 0);
+        foreach (var child in row.Children.OfType<FrameworkElement>())
+        {
+            switch (Grid.GetColumn(child))
+            {
+                case 2:
+                    child.Visibility = Fmt.Vis(mode >= 1);
+                    break;
+                case 3:
+                    child.Visibility = Fmt.Vis(mode >= 2);
+                    break;
+            }
+        }
+    }
+
+    private void OnTableScrollSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        Table.Width = Math.Max(Table.MinWidth, e.NewSize.Width);
+        var mode = ColumnModeFor(e.NewSize.Width);
+        if (mode == _columnMode)
+        {
+            return;
+        }
+
+        _columnMode = mode;
+        ApplyColumns(Header, mode);
+        foreach (var item in List.ItemsPanelRoot?.Children.OfType<ListViewItem>() ?? [])
+        {
+            if (item.ContentTemplateRoot is Grid row)
+            {
+                ApplyColumns(row, mode);
+            }
+        }
+    }
+
+    private void OnRowContainerChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.ItemContainer.ContentTemplateRoot is Grid row)
+        {
+            ApplyColumns(row, _columnMode);
+        }
+    }
 
     private void ApplyRowStyle()
     {
@@ -590,7 +646,8 @@ public sealed partial class LeadsView : UserControl, ISectionAware, IDetachable
     /// <summary>Помещается ли карточка рядом со списком при текущей ширине окна.</summary>
     private bool InspectorFits => AvailableWidth <= 0 || AvailableWidth >= MinList + SplitterWidth + MinInspector;
 
-    private double MaxInspector => Math.Max(MinInspector, Math.Min(640, AvailableWidth - MinList - SplitterWidth));
+    // Верхняя граница: не шире 640 пикселей и не больше половины рабочей области, чтобы список всегда оставался главным.
+    private double MaxInspector => Math.Max(MinInspector, Math.Min(Math.Min(640, AvailableWidth * 0.5), AvailableWidth - MinList - SplitterWidth));
 
     private void ApplyInspector()
     {
