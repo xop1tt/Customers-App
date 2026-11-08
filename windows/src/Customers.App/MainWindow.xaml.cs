@@ -47,7 +47,14 @@ public sealed partial class MainWindow : Window
         Root.SizeChanged += (_, _) => UpdateInsets();
         _device.PropertyChanged += OnDeviceChanged;
         _session.PropertyChanged += OnSessionChanged;
-        Activated += (_, e) => App.Instance.Notifier.WindowActive = e.WindowActivationState != WindowActivationState.Deactivated;
+        Activated += (_, e) =>
+        {
+            App.Instance.Notifier.WindowActive = e.WindowActivationState != WindowActivationState.Deactivated;
+            if (e.WindowActivationState != WindowActivationState.Deactivated)
+            {
+                Shell?.TryPresentStartupScreens(); // запуск был в фоне: экраны первого запуска ждали показа окна
+            }
+        };
         AppWindow.Closing += OnAppWindowClosing;
         Closed += OnClosed;
         Root.KeyboardAccelerators.Add(Accelerator(Windows.System.VirtualKey.B, Windows.System.VirtualKeyModifiers.Control, TogglePane));
@@ -350,23 +357,4 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnSyncClick(object sender, RoutedEventArgs e) => _ = _watchedSync?.SyncNow();
-
-    // MARK: Обновление
-
-    public async Task InstallUpdateAsync(UpdateOffer offer)
-    {
-        try
-        {
-            App.Instance.Notifier.Info($"Скачиваю версию {offer.Version}…", "Контрольная сумма проверяется перед установкой.");
-            if (await App.Instance.Updates.InstallAsync(offer))
-            {
-                App.Instance.Background.Quit();
-            }
-        }
-        catch (Exception e) when (e is HttpFailure or HttpRequestException or TaskCanceledException or IOException or System.ComponentModel.Win32Exception)
-        {
-            App.Instance.Env.Log.Error("Обновление не установлено", e);
-            App.Instance.Notifier.Error("Не удалось обновиться", e.Message);
-        }
-    }
 }

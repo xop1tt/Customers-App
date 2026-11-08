@@ -130,7 +130,7 @@ public sealed partial class AppModel : ObservableObject
 
     // MARK: Данные
 
-    public ObservableCollection<LeadRow> Rows { get; }
+    public BulkObservableCollection<LeadRow> Rows { get; }
 
     public IReadOnlyList<LeadItem> AllLeads => _all;
 
@@ -297,7 +297,12 @@ public sealed partial class AppModel : ObservableObject
     private void RebuildRows()
     {
         var items = Visible().ToList();
-        var sameOrder = items.Count == Rows.Count && items.Select(i => i.Id).SequenceEqual(Rows.Select(r => r.Id));
+        var sameOrder = items.Count == Rows.Count;
+        for (var i = 0; sameOrder && i < items.Count; i++)
+        {
+            sameOrder = Rows[i].Id == items[i].Id;
+        }
+
         if (sameOrder)
         {
             for (var i = 0; i < items.Count; i++)
@@ -310,17 +315,32 @@ public sealed partial class AppModel : ObservableObject
         }
         else
         {
-            Rows.Clear();
+            // Строки, которые остались в списке, переиспользуются: не нужно заново создавать объекты для тысяч лидов,
+            // а интерфейс получает одно уведомление вместо тысячи.
+            var next = new List<LeadRow>(items.Count);
             foreach (var item in items)
             {
-                Rows.Add(new LeadRow(item));
-            }
-        }
+                if (_rowById.TryGetValue(item.Id, out var row))
+                {
+                    if (!ReferenceEquals(row.Item, item))
+                    {
+                        row.Update(item);
+                    }
 
-        _rowById.Clear();
-        foreach (var r in Rows)
-        {
-            _rowById[r.Id] = r;
+                    next.Add(row);
+                }
+                else
+                {
+                    next.Add(new LeadRow(item));
+                }
+            }
+
+            Rows.ReplaceAll(next);
+            _rowById.Clear();
+            foreach (var r in next)
+            {
+                _rowById[r.Id] = r;
+            }
         }
 
         RaiseAll(nameof(VisibleCount), nameof(IsEmpty), nameof(EmptyText));

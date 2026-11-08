@@ -39,6 +39,9 @@ public partial class App : Application
 
     internal UpdateService Updates { get; private set; } = null!;
 
+    /// <summary>На этом компьютере уже были учётные записи до текущего запуска.</summary>
+    internal bool ExistingInstall { get; private set; }
+
     public MainWindow MainWindow { get; private set; } = null!;
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -76,7 +79,11 @@ public partial class App : Application
             Cloud = CloudSettings.Load(),
             BuiltInOAuth = OAuthBuild.Client,
             OpenBrowser = Launcher.OpenInBrowserAsync,
+            LaunchInstaller = UpdateService.LaunchInstaller,
+            IsMetered = UpdateService.IsMetered,
         };
+        // Данные уже были до этого запуска — значит, это не первая установка (для экрана «Что нового» и мастера).
+        ExistingInstall = Directory.Exists(Env.UsersDirectory) && Directory.EnumerateFileSystemEntries(Env.UsersDirectory).Any();
         Updates = new UpdateService(Env);
         Appearance.ApplyAccent(device.Accent);
         Appearance.FollowSystemAccent(device);
@@ -140,21 +147,11 @@ public partial class App : Application
                 }
             }
 
-            if (UpdateSchedule.IsDue(Env.Device.CheckUpdates, Env.Device.UpdateCheckHours, Env.Device.LastUpdateCheck, DateTimeOffset.Now))
-            {
-                await Task.Delay(4000);
-                var found = await Updates.CheckAsync();
-                Env.Device.LastUpdateCheck = DateTimeOffset.Now;
-                if (found is { } offer)
-                {
-                    Notifier.Post(new Notice(NoticeKind.Info, $"Доступна версия {offer.Version}", "Обновление скачивается с GitHub и проверяется по контрольной сумме.",
-                        "Установить", () => _ = MainWindow.InstallUpdateAsync(offer)));
-                }
-            }
+            Updates.Start();
         }
         catch (Exception e) when (e is HttpFailure or HttpRequestException or TaskCanceledException or IOException)
         {
-            Env.Log.Warn("Проверка обновлений не удалась: " + e.Message);
+            Env.Log.Warn("Начальные действия после запуска не выполнены: " + e.Message);
         }
     }
 

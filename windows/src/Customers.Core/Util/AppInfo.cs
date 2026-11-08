@@ -139,7 +139,7 @@ public sealed record ReleaseInfo(string TagName, string? Name, string? Body, Uri
 public sealed record UpdateOffer(AppVersion Version, ReleaseInfo Release, ReleaseAsset Installer);
 
 /// <summary>Проверка обновлений: последний релиз на GitHub, установщик Windows и проверка SHA-256 перед запуском.</summary>
-public sealed class UpdateChecker(IHttpTransport transport, string repository = "xop1tt/CLIENTS")
+public sealed partial class UpdateChecker(IHttpTransport transport, string repository = "xop1tt/CLIENTS")
 {
     public async Task<UpdateOffer?> CheckAsync(AppVersion current, CancellationToken ct = default)
     {

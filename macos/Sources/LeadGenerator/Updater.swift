@@ -1,5 +1,6 @@
 import AppKit
 import LeadGenCore
+import Network
 import Observation
 
 /// Автообновление из GitHub Releases: проверка, скачивание, проверка SHA-256, замена и перезапуск.
@@ -60,6 +61,34 @@ final class UpdateController {
     private static let skipKey = "updates.skip"
     private static let lastKey = "updates.lastCheck"
 
+    static let backgroundKey = "updates.background"
+    private static let stagedKey = "updates.staged"
+    static let installedNotesKey = "updates.installedNotes"
+
+    /// Скачивать найденное обновление в фоне. Установка всё равно только по нажатию «Обновить».
+    var backgroundDownload: Bool {
+        get { access(keyPath: \.backgroundDownload); return defaults.object(forKey: Self.backgroundKey) as? Bool ?? true }
+        set { withMutation(keyPath: \.backgroundDownload) { defaults.set(newValue, forKey: Self.backgroundKey) } }
+    }
+
+    /// Скачанное и проверенное обновление, запомненное между запусками.
+    private struct StagedRecord: Codable {
+        var version: String
+        var path: String
+        var title: String
+        var notes: String
+    }
+
+    /// Подключение с лимитом трафика (точка доступа телефона, «экономия данных»): большие загрузки в фоне откладываются.
+    @ObservationIgnored private let pathMonitor = NWPathMonitor()
+    @ObservationIgnored private var expensiveNetwork = false
+
+    /// Папка со скачанными обновлениями. Не временная: система может очищать /tmp, а скачанное нужно хранить до установки.
+    nonisolated static var stageRoot: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Lead Generator", isDirectory: true).appendingPathComponent("updates", isDirectory: true)
+    }
+
     var automatic: Bool {
         get { access(keyPath: \.automatic); return defaults.object(forKey: Self.autoKey) as? Bool ?? true }
         set { withMutation(keyPath: \.automatic) { defaults.set(newValue, forKey: Self.autoKey) } }
@@ -82,6 +111,32 @@ final class UpdateController {
 
     private init() {
         lastCheck = defaults.object(forKey: Self.lastKey) as? Date
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let expensive = path.isExpensive || path.isConstrained
+            Task { @MainActor in self?.expensiveNetwork = expensive }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "updates.path"))
+        restoreStaged()
+    }
+
+    /// После перезапуска скачанное раньше обновление снова «готово к установке», если оно цело и всё ещё новее.
+    private func restoreStaged() {
+        guard let data = defaults.data(forKey: Self.stagedKey), let rec = try? JSONDecoder().decode(StagedRecord.self, from: data),
+              let v = AppVersion(rec.version), let current, current < v,
+              FileManager.default.fileExists(atPath: rec.path),
+              (NSDictionary(contentsOf: URL(fileURLWithPath: rec.path).appendingPathComponent("Contents/Info.plist")) as? [String: Any])?["CFBundleShortVersionString"] as? String == rec.version
+        else {
+            clearStaged()
+            return
+        }
+        staged = URL(fileURLWithPath: rec.path)
+        phase = .ready(rec.version)
+    }
+
+    private func clearStaged() {
+        defaults.removeObject(forKey: Self.stagedKey)
+        staged = nil
+        try? FileManager.default.removeItem(at: Self.stageRoot)
     }
 
     // MARK: Что нового
@@ -151,6 +206,12 @@ final class UpdateController {
                 }
                 phase = .available(update.version.description)
                 if !manual, defaults.string(forKey: Self.skipKey) == update.version.description { return }
+                if !manual, backgroundDownload {
+                    // Тихая загрузка: окно не появляется, пока пользователь работает. Установка — только по кнопке «Обновить».
+                    guard !expensiveNetwork else { return }
+                    if await prepare(update) { announceReady(update.version.description) }
+                    return
+                }
                 offer(update)
             } catch {
                 phase = .failed(error.localizedDescription)
@@ -185,31 +246,56 @@ final class UpdateController {
         pending = update
         phase = .downloading
         do {
-            staged = try await download(update)
+            let app = try await download(update)
+            staged = app
+            let record = StagedRecord(version: update.version.description, path: app.path, title: update.title, notes: update.notes)
+            if let data = try? JSONEncoder().encode(record) { defaults.set(data, forKey: Self.stagedKey) }
             phase = .ready(update.version.description)
             return true
         } catch {
+            // Незавершённая загрузка не оставляет мусора, установленное приложение не затронуто.
             staged = nil
-            phase = .failed(error.localizedDescription)
+            try? FileManager.default.removeItem(at: Self.stageRoot)
+            phase = .failed(Self.friendly(error))
             return false
         }
     }
 
+    /// Понятное сообщение вместо технической ошибки сети.
+    nonisolated static func friendly(_ error: Error) -> String {
+        guard let url = error as? URLError else { return error.localizedDescription }
+        switch url.code {
+        case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff: return "Нет подключения к интернету. Приложение работает как прежде, попробуйте позже."
+        case .networkConnectionLost, .timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed: return "Соединение прервалось, обновление не скачано. Приложение работает как прежде, попробуйте позже."
+        default: return error.localizedDescription
+        }
+    }
+
+    private func announceReady(_ version: String) {
+        SessionModel.shared.current?.lastMessage = "Версия \(version) скачана. Нажмите «Обновить» в боковой панели, чтобы установить."
+    }
+
     /// Устанавливает уже скачанное обновление и перезапускает приложение (кнопка «Обновить»).
     func installReady() {
-        guard let pending, let staged, readyVersion != nil else { return }
+        guard let staged, let version = readyVersion else { return }
         guard FileManager.default.fileExists(atPath: staged.path) else {
-            // Временные файлы пропали (очистка диска): скачиваем заново.
-            self.staged = nil
-            install(pending)
+            // Файлы пропали (очистка диска): скачиваем заново.
+            clearStaged()
+            phase = .idle
+            if let pending { install(pending) } else { check(manual: true) }
             return
+        }
+        // Описание версии запоминаем до установки: после перезапуска «Что нового» покажется без сети.
+        if let data = defaults.data(forKey: Self.stagedKey), let rec = try? JSONDecoder().decode(StagedRecord.self, from: data) {
+            defaults.set(InstalledNotes(version: rec.version, title: rec.title, notes: rec.notes).encoded(), forKey: Self.installedNotesKey)
         }
         phase = .installing
         do {
             try relaunch(replacingWith: staged)
         } catch {
-            phase = .ready(pending.version.description)
-            installFailed(error.localizedDescription, pending)
+            phase = .ready(version)
+            defaults.removeObject(forKey: Self.installedNotesKey)
+            if let pending { installFailed(error.localizedDescription, pending) } else { alert("Обновление не установлено", error.localizedDescription) }
         }
     }
 
@@ -236,9 +322,14 @@ final class UpdateController {
     /// Скачивает установщик, сверяет SHA-256, достаёт приложение из образа и проверяет его.
     /// Не на главном потоке: подсчёт суммы и hdiutil занимают несколько секунд.
     nonisolated private func download(_ update: AvailableUpdate) async throws -> URL {
-        let work = FileManager.default.temporaryDirectory
-            .appendingPathComponent("LeadGenerator-update-\(update.version)", isDirectory: true)
-        try? FileManager.default.removeItem(at: work)
+        // Места должно хватить на образ, его копию при распаковке и сам пакет приложения.
+        let probe = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
+            .volumeAvailableCapacityForImportantUsage ?? Int64.max
+        guard UpdateSpace.isEnough(available: probe, dmgSize: update.dmg.size) else {
+            throw UpdateError.notEnoughSpace(UpdateSpace.message(available: probe, dmgSize: update.dmg.size))
+        }
+        let work = Self.stageRoot.appendingPathComponent(update.version.description, isDirectory: true)
+        try? FileManager.default.removeItem(at: Self.stageRoot) // старые и недокачанные версии не копятся
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
 
         // Ожидаемая сумма: digest от GitHub, иначе файл .sha256 из релиза. Без суммы не ставим.
@@ -249,7 +340,16 @@ final class UpdateController {
         }
         guard let expected else { throw UpdateError.noChecksum }
 
-        let (tmp, resp) = try await URLSession.shared.download(from: update.dmg.browserDownloadURL)
+        var downloaded: (URL, URLResponse)?
+        for attempt in 1...3 {
+            do {
+                downloaded = try await URLSession.shared.download(from: update.dmg.browserDownloadURL)
+                break
+            } catch let e as URLError where attempt < 3 && [.networkConnectionLost, .timedOut, .cannotConnectToHost, .notConnectedToInternet].contains(e.code) {
+                try await Task.sleep(nanoseconds: UInt64(attempt) * 4_000_000_000) // обрыв связи: пробуем снова
+            }
+        }
+        guard let (tmp, resp) = downloaded else { throw UpdateError.network("Соединение прервалось, обновление не скачано.") }
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard code == 200 else { throw UpdateError.badResponse(code) }
         let dmg = work.appendingPathComponent(update.dmg.name)

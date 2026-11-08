@@ -42,6 +42,30 @@ public sealed class AppEnvironment
     /// <summary>Соединение с SMTP-сервером: узел, порт, шифрование с первого байта.</summary>
     public Func<string, int, bool, ISmtpTransport> SmtpTransport { get; init; } = (host, port, tls) => new TcpSmtpTransport(host, port, tls);
 
+    /// <summary>Скачивание больших файлов (установщик обновления) на диск с докачкой.</summary>
+    public Func<IFileDownloader> Downloader { get; init; } = () => new HttpFileDownloader();
+
+    /// <summary>Свободное место на диске, где лежит указанная папка, в байтах.</summary>
+    public Func<string, long> FreeSpace { get; init; } = path =>
+    {
+        try
+        {
+            return new DriveInfo(Path.GetPathRoot(Path.GetFullPath(path))!).AvailableFreeSpace;
+        }
+        catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            return long.MaxValue; // не удалось узнать — не мешаем, ошибка записи будет понятна и так
+        }
+    };
+
+    /// <summary>Запускает установщик обновления. true — запущен, приложение должно закрыться.</summary>
+    public Func<string, bool> LaunchInstaller { get; init; } = _ => false;
+
+    /// <summary>Подключение с оплатой за трафик: фоновые загрузки в нём откладываются.</summary>
+    public Func<bool> IsMetered { get; init; } = () => false;
+
+    public Func<DateTimeOffset> Now { get; init; } = () => DateTimeOffset.Now;
+
     public Func<bool> IsOnline { get; init; } = () => System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable();
 
     /// <summary>Случайный идентификатор этого компьютера для лимитов писем. Хранится в защищённом хранилище.</summary>
@@ -66,7 +90,9 @@ public sealed class AppEnvironment
     public static AppEnvironment ForTests(string root, CloudConfig? cloud = null, ICloudTransport? cloudTransport = null,
         Func<IHttpTransport>? search = null, ISecretStore? secrets = null, Func<IHttpTransport>? driveHttp = null,
         Func<IOAuthListener>? oauthListener = null, Func<Uri, Task<bool>>? openBrowser = null,
-        Func<OAuthProvider, OAuthClient?>? builtInOAuth = null, Func<string, int, bool, ISmtpTransport>? smtp = null) => new() {
+        Func<OAuthProvider, OAuthClient?>? builtInOAuth = null, Func<string, int, bool, ISmtpTransport>? smtp = null,
+        IFileDownloader? downloader = null, Func<string, long>? freeSpace = null, Func<string, bool>? launchInstaller = null,
+        Func<bool>? isMetered = null, Func<DateTimeOffset>? now = null, bool online = true) => new() {
             Root = root,
             Secrets = secrets ?? new MemorySecretStore(),
             Ui = new ImmediateDispatcher(),
@@ -75,12 +101,17 @@ public sealed class AppEnvironment
             Cloud = cloud,
             SearchTransport = search ?? (() => new HttpClientTransport()),
             CloudTransport = cloudTransport is null ? () => new HttpCloudTransport() : () => cloudTransport,
-            IsOnline = () => true,
+            IsOnline = () => online,
             DriveHttp = driveHttp ?? (() => new DirectHttpTransport()),
             OAuthListener = oauthListener ?? (() => new OAuthLoopback(0)),
             OpenBrowser = openBrowser ?? (_ => Task.FromResult(true)),
             BuiltInOAuth = builtInOAuth ?? (_ => null),
             SmtpTransport = smtp ?? ((_, _, _) => throw new InvalidOperationException("SMTP в тесте не настроен")),
             DefaultBackups = username => Path.Combine(root, "default-backups", username),
+            Downloader = downloader is null ? () => new HttpFileDownloader() : () => downloader,
+            FreeSpace = freeSpace ?? (_ => long.MaxValue),
+            LaunchInstaller = launchInstaller ?? (_ => true),
+            IsMetered = isMetered ?? (() => false),
+            Now = now ?? (() => DateTimeOffset.Now),
         };
 }

@@ -254,10 +254,12 @@ final class AppModel {
             if let r = filter.region, l.data.region != r { return false }
             if l.data.score < filter.minScore { return false }
             if !q.isEmpty {
+                // Без сборки массива строк на каждый лид: поиск по тысячам лидов идёт при каждом нажатии клавиши.
                 let d = l.data
-                let hay = [d.title, d.description, d.address ?? "", d.phone ?? "", d.website ?? "", d.region ?? "",
-                           d.category ?? "", d.customerName ?? "", l.note] + Array(d.contacts.values)
-                if !hay.contains(where: { $0.localizedCaseInsensitiveContains(q) }) { return false }
+                func has(_ text: String?) -> Bool { text.map { !$0.isEmpty && $0.localizedCaseInsensitiveContains(q) } ?? false }
+                let found = has(d.title) || has(d.description) || has(d.address) || has(d.phone) || has(d.website) || has(d.region)
+                    || has(d.category) || has(d.customerName) || has(l.note) || d.contacts.values.contains(where: { has($0) })
+                if !found { return false }
             }
             return true
         }

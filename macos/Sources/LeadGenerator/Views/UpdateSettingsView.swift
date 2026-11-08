@@ -20,6 +20,10 @@ struct UpdateSettingsView: View {
                     Spacer()
                     Text(status).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
+                if let version = updates.readyVersion {
+                    Button("Установить версию \(version) и перезапустить") { updates.installReady() }
+                        .buttonStyle(.borderedProminent)
+                }
             }
             Section("Автоматически") {
                 Toggle("Проверять обновления автоматически", isOn: $updates.automatic)
@@ -27,6 +31,10 @@ struct UpdateSettingsView: View {
                     ForEach(UpdateController.intervals, id: \.hours) { Text($0.title).tag($0.hours) }
                 }
                 .disabled(!updates.automatic)
+                Toggle("Скачивать обновления в фоне", isOn: $updates.backgroundDownload)
+                    .disabled(!updates.automatic)
+                Text("Новая версия скачивается и проверяется, пока вы работаете, и ждёт кнопки «Обновить» в боковой панели. Без вашего согласия приложение не перезапускается. На подключении с экономией трафика фоновая загрузка откладывается.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("С выбранной частотой приложение спрашивает у GitHub, вышел ли новый релиз. Если вышел, покажет, что в нём нового, и предложит установить: скачает установщик, сверит контрольную сумму SHA-256, заменит приложение и перезапустит его. Без вашего согласия ничего не устанавливается.")
                     .font(.caption).foregroundStyle(.secondary)
             }

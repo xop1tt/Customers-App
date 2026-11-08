@@ -102,10 +102,12 @@ public static class LeadQuery
         }
 
         var d = l.Data;
-        IEnumerable<string> hay = [d.Title, d.Description, d.Address ?? "", d.Phone ?? "", d.Website ?? "", d.Region ?? "",
-            d.Category ?? "", d.CustomerName ?? "", l.Note, .. d.Contacts.Values];
-        return hay.Any(h => h.Contains(q, StringComparison.CurrentCultureIgnoreCase));
+        // Без выделения памяти на каждый лид: при поиске по тысячам лидов это заметно на слабых компьютерах.
+        return Has(d.Title, q) || Has(d.Description, q) || Has(d.Address, q) || Has(d.Phone, q) || Has(d.Website, q) || Has(d.Region, q)
+            || Has(d.Category, q) || Has(d.CustomerName, q) || Has(l.Note, q) || d.Contacts.Values.Any(v => Has(v, q));
     }
+
+    private static bool Has(string? haystack, string q) => !string.IsNullOrEmpty(haystack) && haystack.Contains(q, StringComparison.CurrentCultureIgnoreCase);
 
     public static IEnumerable<LeadItem> Sort(IEnumerable<LeadItem> items, SortColumn column, bool descending)
     {

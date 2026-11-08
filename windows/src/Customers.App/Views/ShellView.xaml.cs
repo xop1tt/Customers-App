@@ -35,7 +35,11 @@ public sealed partial class ShellView : UserControl
         App.Instance.Notifier.Posted += OnNotice;
         Layout.KeyboardAccelerators.Add(Accelerator(Windows.System.VirtualKey.R, Windows.System.VirtualKeyModifiers.Control, StartSearch));
         Layout.KeyboardAccelerators.Add(Accelerator(Windows.System.VirtualKey.F5, Windows.System.VirtualKeyModifiers.None, StartSearch));
-        Loaded += (_, _) => UpdatePaneVisibility();
+        Loaded += (_, _) =>
+        {
+            UpdatePaneVisibility();
+            TryPresentStartupScreens();
+        };
         Layout.SizeChanged += (_, _) => UpdatePaneVisibility();
 
         UpdateBadges();

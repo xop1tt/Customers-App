@@ -20,6 +20,7 @@ public sealed class AccountPreferences : ObservableObject
     private string _mailAccount = "";
     private MailDelivery _mailDelivery = MailDelivery.MailApp;
     private bool _confirmCalls = true;
+    private bool _welcomeDone;
 
     public AccountPreferences(string path, string defaultBackupDirectory)
     {
@@ -54,6 +55,9 @@ public sealed class AccountPreferences : ObservableObject
 
     /// <summary>Спрашивать подтверждение перед звонком из карточки лида (по умолчанию да).</summary>
     public bool ConfirmCalls { get => _confirmCalls; set => Update(ref _confirmCalls, value); }
+
+    /// <summary>Мастер первого запуска пройден или пропущен для этой учётной записи.</summary>
+    public bool WelcomeDone { get => _welcomeDone; set => Update(ref _welcomeDone, value); }
 
     private void Update<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
     {
@@ -90,6 +94,7 @@ public sealed class AccountPreferences : ObservableObject
             {
                 _confirmCalls = Get<bool?>("confirmCalls") ?? _confirmCalls;
             }
+            _welcomeDone = Get<bool?>("welcomeDone") ?? _welcomeDone;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -112,6 +117,7 @@ public sealed class AccountPreferences : ObservableObject
             ["mailDelivery"] = MailDelivery.ToString(),
             ["confirmCalls"] = ConfirmCalls,
             ["confirmCallsVersion"] = 2,
+            ["welcomeDone"] = WelcomeDone,
         };
         try
         {

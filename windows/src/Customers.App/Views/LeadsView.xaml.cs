@@ -313,11 +313,36 @@ public sealed partial class LeadsView : UserControl, ISectionAware, IDetachable
     {
         if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput || sender.Text.Length == 0)
         {
-            Model.SearchText = sender.Text;
+            // Список перестраивается не на каждую букву, а когда пользователь на мгновение замер: с тысячами лидов иначе набор текста тормозит.
+            _searchDebounce ??= DispatcherQueue.CreateTimer();
+            _searchDebounce.Stop();
+            if (sender.Text.Length == 0)
+            {
+                Model.SearchText = "";
+                return;
+            }
+
+            _searchDebounce.Interval = TimeSpan.FromMilliseconds(180);
+            _searchDebounce.IsRepeating = false;
+            _searchDebounce.Tick -= OnSearchDebounced;
+            _searchDebounce.Tick += OnSearchDebounced;
+            _searchDebounce.Start();
         }
     }
 
-    private void OnSearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args) => Model.SearchText = sender.Text;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _searchDebounce;
+
+    private void OnSearchDebounced(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        Model.SearchText = SearchBox.Text;
+    }
+
+    private void OnSearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        _searchDebounce?.Stop();
+        Model.SearchText = sender.Text;
+    }
 
     private void OnFilterFlyoutOpening(object? sender, object e)
     {
