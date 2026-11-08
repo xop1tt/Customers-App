@@ -1,0 +1,68 @@
+/* Flat Dark: непрозрачные плоские поверхности, строгие уровни серого, один акцентный цвет. */
+:root {
+  color-scheme: dark;
+
+  --bg: #1b1c20;
+  --bg-side: #15161a;
+  --bg-raised: #212227;
+  --bg-input: #17181c;
+  --bg-hover: #25262c;
+  --bg-active: #2c2e35;
+  --bg-select: #232c3f;
+  --bg-overlay: #202126;
+  --scrim: rgba(8, 8, 10, 0.62);
+
+  --line: #2b2c33;
+  --line-strong: #3a3c45;
+
+  --text: #ececef;
+  --text-2: #a3a4ad;
+  --text-3: #6e6f79;
+  --text-on-accent: #ffffff;
+
+  --accent: #4c8dff;
+  --accent-hover: #6aa0ff;
+  --accent-soft: #1f2d49;
+
+  --red: #e5645c;
+  --red-soft: #3a2224;
+  --orange: #dc9a45;
+  --orange-soft: #3a2f1f;
+  --green: #52b476;
+  --green-soft: #1f3228;
+  --purple: #a283e0;
+  --purple-soft: #2f2640;
+
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 10px;
+
+  --font: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+  --fs-xxl: 26px;
+
+  --row-h: 44px;
+  --ctl-h: 30px;
+  --topbar-h: 48px;
+  --shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.45);
+
+  --t: 140ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Облегчённый режим и отключённые анимации: движение полностью убирается. */
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0s !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+}

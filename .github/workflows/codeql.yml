@@ -1,8 +1,7 @@
 name: CodeQL
 
-# Быстрый анализ кода в каждом PR: Actions, Python и TypeScript (функции Supabase).
-# Этим языкам сборка не нужна (build-mode: none), поэтому каждый занимает около минуты на Linux.
-# Swift анализируется отдельно (codeql-swift.yml): там нужна полная сборка на macOS, ~15 минут.
+# Быстрый анализ кода в каждом PR: Actions, Python, TypeScript (интерфейс и функции Supabase) и Rust (ядро приложения).
+# Этим языкам сборка не нужна (build-mode: none), поэтому каждый занимает несколько минут на Linux.
 # Заменяет «default setup» CodeQL в настройках репозитория; одновременно они работать не могут.
 on:
   push:
@@ -31,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [actions, python, javascript-typescript]
+        language: [actions, python, javascript-typescript, rust]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

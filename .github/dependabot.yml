@@ -12,9 +12,15 @@ updates:
     labels: [dependencies]
     groups:
       python: {patterns: ["*"], update-types: [minor, patch]}
-  - package-ecosystem: nuget   # пакеты Windows-версии (windows/)
-    directories: ["/windows/src/*", "/windows/tests/*"]
+  - package-ecosystem: npm   # интерфейс приложения (desktop/)
+    directory: /desktop
     schedule: {interval: weekly}
     labels: [dependencies]
     groups:
-      nuget: {patterns: ["*"], update-types: [minor, patch]}
+      npm: {patterns: ["*"], update-types: [minor, patch]}
+  - package-ecosystem: cargo   # ядро приложения (desktop/src-tauri)
+    directory: /desktop/src-tauri
+    schedule: {interval: weekly}
+    labels: [dependencies]
+    groups:
+      cargo: {patterns: ["*"], update-types: [minor, patch]}

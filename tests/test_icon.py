@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-MACOS = Path(__file__).resolve().parent.parent / "macos"
-ICON = MACOS / "Resources" / "AppIcon-1024.png"
+ICONS = Path(__file__).resolve().parent.parent / "desktop" / "src-tauri" / "icons"
+ICON = ICONS / "source.png"
 TILE_FROM, TILE_TO = 100, 924  # плитка macOS внутри холста 1024
 
 
@@ -72,9 +72,11 @@ def test_tile_is_dark(letter):
 
 
 def test_there_is_no_light_variant_or_dark_override():
-    assert not list((MACOS / "Resources").glob("*Dark*")), "светлого и тёмного вариантов нет, значок один"
-    build = (MACOS / "scripts" / "build-app.sh").read_text(encoding="utf-8")
-    assert "AppIcon-1024.png" in build and "Dark" not in build
-    for path in (MACOS / "Sources").rglob("*.swift"):
+    root = ICONS.parents[2]
+    assert not list(ICONS.glob("*Dark*")), "светлого и тёмного вариантов нет, значок один"
+    for path in (ICONS.parent / "src").rglob("*.rs"):
         text = path.read_text(encoding="utf-8")
-        assert not re.search(r"applicationIconImage\s*=", text), f"{path.name}: значок в Dock не подменяется"
+        assert not re.search(r"set_(dock_)?icon\s*\(", text), f"{path.name}: значок приложения не подменяется"
+    conf = (ICONS.parent / "tauri.conf.json").read_text(encoding="utf-8")
+    assert "icons/icon.icns" in conf and "icons/icon.ico" in conf
+    assert (root / "desktop" / "src-tauri" / "icons" / "icon.png").exists()
