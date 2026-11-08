@@ -43,6 +43,11 @@ jobs:
         run: |
           if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG" >&2; exit 1; fi
 
+      # Xcode 26+ (SDK macOS 26): настоящий Liquid Glass в интерфейсе. См. scripts/select-xcode.sh.
+      - name: Toolchain (Xcode 26)
+        working-directory: macos
+        run: ./scripts/select-xcode.sh
+
       - name: Tests (core)
         working-directory: macos
         run: swift test

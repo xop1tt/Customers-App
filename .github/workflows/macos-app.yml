@@ -33,17 +33,18 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Toolchain
-        run: swift --version
+      # Xcode 26+ (SDK macOS 26): настоящий Liquid Glass в интерфейсе. См. scripts/select-xcode.sh.
+      - name: Toolchain (Xcode 26)
+        run: ./scripts/select-xcode.sh
 
       # Кэш сборки SwiftPM: повторные сборки компилируют только изменённое.
       - name: Cache SwiftPM build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: macos/.build
-          key: spm-${{ runner.os }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-${{ hashFiles('macos/Sources/**', 'macos/Tests/**') }}
+          key: spm-${{ runner.os }}-${{ env.XCODE_ID }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-${{ hashFiles('macos/Sources/**', 'macos/Tests/**') }}
           restore-keys: |
-            spm-${{ runner.os }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-
+            spm-${{ runner.os }}-${{ env.XCODE_ID }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-
 
       - name: Tests (core, search, cloud, interface)
         run: swift test --enable-code-coverage
@@ -69,13 +70,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Toolchain (Xcode 26)
+        run: ./scripts/select-xcode.sh
+
       - name: Cache SwiftPM build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: macos/.build
-          key: spm-${{ runner.os }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-${{ hashFiles('macos/Sources/**', 'macos/Tests/**') }}
+          key: spm-${{ runner.os }}-${{ env.XCODE_ID }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-${{ hashFiles('macos/Sources/**', 'macos/Tests/**') }}
           restore-keys: |
-            spm-${{ runner.os }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-
+            spm-${{ runner.os }}-${{ env.XCODE_ID }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-
 
       - name: Build app
         env:

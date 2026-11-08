@@ -77,7 +77,7 @@ private struct CloudAuthForm: View {
                 .frame(width: 280)
                 .padding(.vertical, 4)
             }
-            .buttonStyle(.borderedProminent)
+            .prominentGlassButton()
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
             .disabled(session.busy || !canSubmit)
@@ -270,7 +270,7 @@ private struct LocalAuthForm: View {
                     .frame(width: 280)
                     .padding(.vertical, 4)
             }
-            .buttonStyle(.borderedProminent)
+            .prominentGlassButton()
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
             .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty || password.isEmpty)

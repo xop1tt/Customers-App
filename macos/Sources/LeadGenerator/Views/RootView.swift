@@ -9,6 +9,7 @@ struct RootView: View {
     @State private var whatsNew = WhatsNewController.shared
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var reveal = SidebarRevealModel.shared
+    @State private var settings = SettingsPresenter.shared
     @AppStorage(SidebarKeys.hover) private var hoverReveal = true
 
     /// Левая панель свёрнута кнопкой в панели инструментов.
@@ -79,6 +80,17 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        // Настройки — всплывающее окно внутри главного, а не отдельное окно.
+        .overlay {
+            if settings.shown && !welcomeShown {
+                SettingsOverlay(presenter: settings)
+                    .environment(\.appModel, model)
+                    .environment(\.look, look)
+                    .environment(\.session, SessionModel.shared)
+            }
+        }
+        .animation(look.animation(.smooth(duration: 0.2)), value: settings.shown)
+        .onDisappear { settings.dismiss() }
         .overlay {
             if let e = model.startupError {
                 ContentUnavailableView("База недоступна", systemImage: "externaldrive.badge.exclamationmark", description: Text(e))
@@ -179,7 +191,9 @@ struct SearchButton: View {
             .padding(.horizontal, 16)
             .frame(height: 28)
             .frame(minWidth: 150)
-            .background(Capsule().fill(Color(red: 0.16, green: 0.70, blue: 0.33)))
+            // Зелёная кнопка: на macOS 26+ — стекло, которое преломляет фон и светится при нажатии; раньше — сплошная капсула.
+            .glassBackground(Capsule(), tint: Color(red: 0.16, green: 0.70, blue: 0.33),
+                             prominent: true, interactive: true)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

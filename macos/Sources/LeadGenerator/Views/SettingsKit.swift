@@ -119,7 +119,9 @@ struct RowDivider: View {
     var body: some View { Divider().opacity(0.6) }
 }
 
-/// Кнопка окна настроек: скруглённая, с наведением, нажатием и недоступным состоянием.
+/// Кнопка приложения. На macOS 26+ — стеклянная капсула Liquid Glass с системным откликом на нажатие; на macOS
+/// 14–15 — кнопка в стиле этих версий: скруглённый прямоугольник со сплошной заливкой. Главная залита
+/// акцентным цветом, опасное действие — красный текст. Используется в настройках, боковой панели и мастере.
 struct PillButtonStyle: ButtonStyle {
     enum Kind { case regular, prominent, destructive }
     var kind: Kind = .regular
@@ -127,31 +129,40 @@ struct PillButtonStyle: ButtonStyle {
     @Environment(\.look) private var look
     @State private var hover = false
 
-    func makeBody(configuration: Configuration) -> some View {
-        let tint: Color = kind == .destructive ? .red : look.accentColor
-        configuration.label
-            .font(.system(size: 12.5 * look.scale, weight: .medium))
-            .foregroundStyle(kind == .prominent ? Color.white : (kind == .destructive ? Color.red : Color.primary))
-            .padding(.horizontal, 12).padding(.vertical, 5)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(fill(tint, pressed: configuration.isPressed))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(kind == .prominent ? Color.clear : Color.primary.opacity(hover ? 0.22 : 0.14), lineWidth: 1)
-            )
-            .opacity(enabled ? 1 : 0.4)
-            .scaleEffect(configuration.isPressed && !look.lightMode ? 0.97 : 1)
-            .animation(look.animation(.easeOut(duration: 0.12)), value: configuration.isPressed)
-            .onHover { hover = $0 && enabled }
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+    @ViewBuilder func makeBody(configuration: Configuration) -> some View {
+        if LiquidGlass.isNative {
+            styled(configuration, shape: Capsule(), horizontal: 14, vertical: 6)
+        } else {
+            styled(configuration, shape: RoundedRectangle(cornerRadius: 7, style: .continuous), horizontal: 12, vertical: 5)
+        }
     }
 
-    private func fill(_ tint: Color, pressed: Bool) -> Color {
+    private func styled<S: InsettableShape>(_ configuration: Configuration, shape: S, horizontal: CGFloat, vertical: CGFloat) -> some View {
+        let pressed = configuration.isPressed
+        return configuration.label
+            .font(.system(size: 12.5 * look.scale, weight: kind == .prominent ? .semibold : .medium))
+            .foregroundStyle(kind == .prominent ? Color.white : (kind == .destructive ? Color.red : Color.primary))
+            .padding(.horizontal, horizontal).padding(.vertical, vertical)
+            .glassBackground(shape, tint: tint, prominent: kind == .prominent, interactive: true)
+            // Наведение и нажатие: лёгкое изменение яркости поверх подложки.
+            .overlay(shape.fill(highlight(pressed)).allowsHitTesting(false))
+            .opacity(enabled ? 1 : 0.4)
+            .scaleEffect(pressed && !look.lightMode && LiquidGlass.isNative ? 0.96 : 1)
+            .animation(look.animation(.easeOut(duration: 0.12)), value: pressed)
+            .onHover { hover = $0 && enabled }
+            .contentShape(shape)
+    }
+
+    private func highlight(_ pressed: Bool) -> Color {
+        if kind == .prominent { return Color.black.opacity(pressed ? 0.18 : (hover ? 0.06 : 0)) }
+        return Color.primary.opacity(pressed ? 0.10 : (hover ? 0.05 : 0))
+    }
+
+    private var tint: Color? {
         switch kind {
-        case .prominent: return tint.opacity(pressed ? 0.75 : (hover ? 0.92 : 1))
-        case .destructive: return Color.red.opacity(pressed ? 0.2 : (hover ? 0.14 : 0.08))
-        case .regular: return Color.primary.opacity(pressed ? 0.14 : (hover ? 0.09 : 0.05))
+        case .prominent: return look.accentColor
+        case .destructive: return .red
+        case .regular: return nil
         }
     }
 }
@@ -202,30 +213,8 @@ struct SoftCard<Content: View>: View {
         content
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill((tint ?? Color.primary).opacity(tint == nil ? 0.05 : 0.1)))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder((tint ?? Color.primary).opacity(0.1)))
-    }
-}
-
-/// Стиль окна настроек: прозрачный заголовок, содержимое под ним, перетаскивание за фон.
-struct SettingsWindowChrome: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        DispatchQueue.main.async { Self.style(v.window) }
-        return v
-    }
-
-    func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async { Self.style(view.window) }
-    }
-
-    @MainActor
-    private static func style(_ window: NSWindow?) {
-        guard let window else { return }
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.styleMask.insert(.fullSizeContentView)
-        window.isMovableByWindowBackground = true
+            .background(RoundedRectangle(cornerRadius: LiquidGlass.isNative ? 14 : 10, style: .continuous).fill((tint ?? Color.primary).opacity(tint == nil ? 0.05 : 0.1)))
+            .overlay(RoundedRectangle(cornerRadius: LiquidGlass.isNative ? 14 : 10, style: .continuous).strokeBorder((tint ?? Color.primary).opacity(0.1)))
     }
 }
 

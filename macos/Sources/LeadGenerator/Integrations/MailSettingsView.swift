@@ -54,7 +54,7 @@ struct MailSettingsSection: View {
         }
         TextField("Логин", text: $login, prompt: Text("обычно весь адрес"))
         SecureField("Пароль приложения", text: $password, prompt: Text(mail.hasPassword ? "сохранён в Связке ключей" : ""))
-        Toggle("Копия себе (письмо появится во «Входящих» на всех устройствах)", isOn: $copyToSelf)
+        Toggle("Копия себе (письмо появится во «Входящих» на всех устройствах)", isOn: $copyToSelf).toggleStyle(.glassSwitch)
         HStack {
             Button("Сохранить") { save() }.disabled(draft.problem != nil)
             Button("Отправить проверочное письмо") { save(); Task { await mail.sendTest() } }

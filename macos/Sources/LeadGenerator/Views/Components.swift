@@ -59,10 +59,10 @@ struct Tag: View {
         Text(text)
             .appFont(11, .medium)
             .lineLimit(1)
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .foregroundStyle(color)
-            .background(RoundedRectangle(cornerRadius: 5).fill(color.opacity(0.12)))
+            .background(Capsule().fill(color.opacity(0.12)))
     }
 }
 
@@ -98,8 +98,8 @@ struct Card<Content: View>: View {
             Divider()
             content
         }
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+        .background(RoundedRectangle(cornerRadius: LiquidGlass.cardRadius, style: .continuous).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: LiquidGlass.cardRadius, style: .continuous).strokeBorder(.separator))
     }
 }
 
@@ -116,11 +116,9 @@ struct Toast: View {
             Text(text).appFont(12.5).lineLimit(3)
             Button(action: close) { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 14).padding(.vertical, 9)
-        .background(look.lightMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.regularMaterial),
-                    in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
-        .shadow(color: .black.opacity(look.lightMode ? 0 : 0.15), radius: 12, y: 4)
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        // Сообщение плавает над содержимым: стекло на macOS 26+, материал на прежних системах.
+        .glassBackground(RoundedRectangle(cornerRadius: LiquidGlass.isNative ? 20 : 10, style: .continuous), floating: true)
         .frame(maxWidth: 560)
     }
 }

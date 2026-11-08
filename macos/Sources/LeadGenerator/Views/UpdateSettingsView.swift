@@ -34,7 +34,7 @@ struct UpdateSettingsView: View {
             SettingsGroup(title: "Автоматически",
                           footer: "Новая версия скачивается и проверяется, пока вы работаете, и ждёт кнопки «Обновить» в боковой панели. Без вашего согласия приложение не перезапускается. На подключении с экономией трафика фоновая загрузка откладывается.") {
                 SettingRow(title: "Проверять обновления автоматически") {
-                    Toggle("", isOn: $updates.automatic).labelsHidden().toggleStyle(.switch)
+                    Toggle("", isOn: $updates.automatic).labelsHidden().toggleStyle(.glassSwitch)
                 }
                 RowDivider()
                 SettingRow(title: "Частота проверки") {
@@ -45,7 +45,7 @@ struct UpdateSettingsView: View {
                 }
                 RowDivider()
                 SettingRow(title: "Скачивать обновления в фоне") {
-                    Toggle("", isOn: $updates.backgroundDownload).labelsHidden().toggleStyle(.switch)
+                    Toggle("", isOn: $updates.backgroundDownload).labelsHidden().toggleStyle(.glassSwitch)
                         .disabled(!updates.automatic)
                 }
             }

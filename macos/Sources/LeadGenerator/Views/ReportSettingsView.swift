@@ -9,7 +9,7 @@ struct ReportSettingsView: View {
         @Bindable var reports = reports
         Form {
             Section("Отчёты о сбоях") {
-                Toggle("Предлагать отправить отчёт после вылета", isOn: $reports.offerAfterCrash)
+                Toggle("Предлагать отправить отчёт после вылета", isOn: $reports.offerAfterCrash).toggleStyle(.glassSwitch)
                 if let last = reports.crashes.first {
                     LabeledContent("Последний отчёт", value: "\(last.kind), \(last.date.fullRu)")
                     LabeledContent("Всего на этом Mac", value: "\(reports.crashes.count)")
@@ -25,8 +25,8 @@ struct ReportSettingsView: View {
                 }
             }
             Section("Журнал ошибок") {
-                Toggle("Записывать ошибки в журнал", isOn: $reports.logErrors)
-                Toggle("Прикладывать последние ошибки к отчёту", isOn: $reports.includeLog)
+                Toggle("Записывать ошибки в журнал", isOn: $reports.logErrors).toggleStyle(.glassSwitch)
+                Toggle("Прикладывать последние ошибки к отчёту", isOn: $reports.includeLog).toggleStyle(.glassSwitch)
                 HStack {
                     Button("Показать журнал") { reports.showLog() }
                     Button("Очистить журнал") { ErrorLog.clear() }
