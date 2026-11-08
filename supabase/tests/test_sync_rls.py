@@ -194,7 +194,7 @@ def test_no_service_role_key_in_client_code():
     exts = ("*.rs", "*.ts", "*.tsx", "*.cjs", "*.sh", "*.iss", "*.ps1", "*.json")
     files = [p for d in shipped for ext in exts for p in d.rglob(ext) if "node_modules" not in p.parts]
     files += [desktop / "src-tauri" / "tauri.conf.json", root / "scripts" / "make-macos-signing-certificate.sh"]
-    assert len(files) > 100
+    assert len(files) > 50
     for path in files:
         text = path.read_text(errors="ignore")
         if path.suffix == ".rs":

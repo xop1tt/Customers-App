@@ -53,7 +53,7 @@ export function excludeValue(l: Lead): { value: string; kind: "domain" | "email"
     const site = d.website || d.url;
     try {
       const host = new URL(/^https?:\/\//.test(site ?? "") ? (site as string) : `https://${site}`).hostname.replace(/^www\./, "");
-      if (site && host.includes(".") && !host.endsWith("openstreetmap.org")) return { value: host, kind: "domain" };
+      if (site && host.includes(".") && host !== "openstreetmap.org" && !host.endsWith(".openstreetmap.org")) return { value: host, kind: "domain" };
     } catch { /* не адрес */ }
     const email = l.emails[0];
     if (email) return { value: email, kind: "email" };
