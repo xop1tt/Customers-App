@@ -145,6 +145,7 @@ jobs:
 
       # Полный путь пользователя: установка → запуск установленной копии → удаление.
       - name: Install, smoke run of the installed app, uninstall
+        timeout-minutes: 10
         run: ./tools/installer-check.ps1 -Artifacts artifacts
 
       - name: Upload artifacts
