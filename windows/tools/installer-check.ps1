@@ -35,7 +35,9 @@ $marker = Join-Path $env:LOCALAPPDATA 'Customers'
 New-Item -ItemType Directory -Path $marker -Force | Out-Null
 Set-Content (Join-Path $marker 'keep.txt') 'data'
 # Так же, как делает само приложение при обновлении: тихо, с закрытием работающей копии и с просьбой открыть приложение снова.
-$again = Start-Process -FilePath $setup.FullName -ArgumentList @('/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS', '/RELAUNCH=1', '/CURRENTUSER', "/DIR=`"$dir`"") -Wait -PassThru
+# Без -Wait: он ждёт и все дочерние процессы, а установщик как раз запускает приложение и не дожидается его закрытия.
+$again = Start-Process -FilePath $setup.FullName -ArgumentList @('/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS', '/RELAUNCH=1', '/CURRENTUSER', "/DIR=`"$dir`"") -PassThru
+if (-not $again.WaitForExit(300000)) { $again | Stop-Process -Force; throw 'Установка поверх не завершилась за 5 минут' }
 if ($again.ExitCode -ne 0) { throw "Установка поверх завершилась с кодом $($again.ExitCode)" }
 if (-not (Test-Path (Join-Path $marker 'keep.txt'))) { throw 'Установка поверх удалила данные пользователя' }
 $relaunched = $null
