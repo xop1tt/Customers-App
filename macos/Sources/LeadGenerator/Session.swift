@@ -45,8 +45,9 @@ final class SessionModel {
 
     init() {
         do {
-            auth = try LocalAuthService(root: Self.rootDirectory)
-            existingInstallAtLaunch = auth?.hasUsers ?? false
+            let service = try LocalAuthService(root: Self.rootDirectory)
+            auth = service
+            existingInstallAtLaunch = service.hasUsers
         } catch {
             self.error = "Не удалось открыть учётные записи: \(error.localizedDescription)"
         }
