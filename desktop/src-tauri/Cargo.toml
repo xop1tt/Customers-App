@@ -57,7 +57,6 @@ rustls-pki-types = "1"
 webpki-roots = "0.26"
 uuid = { version = "1", features = ["v4"] }
 plist = "1"
-zip = { version = "2", default-features = false, features = ["deflate"] }
 fs4 = { version = "0.13", features = ["sync"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
