@@ -37,5 +37,5 @@
 - [docs/cloud.md](https://github.com/xop1tt/CLIENTS/blob/main/docs/cloud.md) — техническое устройство облака, лимиты писем, протокол синхронизации.
 - [docs/research.md](https://github.com/xop1tt/CLIENTS/blob/main/docs/research.md) — аудит источников и бесплатных сервисов: что подключено и почему.
 - [SECURITY.md](https://github.com/xop1tt/CLIENTS/blob/main/SECURITY.md) — как сообщить об уязвимости.
-- [windows/README.md](https://github.com/xop1tt/CLIENTS/blob/main/windows/README.md) — версия для Windows: установка, запуск, сборка, архитектура, обмен данными с macOS, состояние и ограничения (папка `windows/docs`).
+- [desktop/README.md](https://github.com/xop1tt/CLIENTS/blob/main/desktop/README.md) — исходники приложения для macOS и Windows (Tauri 2: Rust и React): устройство, запуск, сборка
 - [LICENSE](https://github.com/xop1tt/CLIENTS/blob/main/LICENSE) — лицензия.

@@ -189,10 +189,19 @@ def test_no_service_role_key_in_client_code():
     root = Path(__file__).resolve().parents[2]
     jwt = re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.")
     # Код, который попадает в приложение и его сборку (тесты с поддельными ключами не в счёт).
-    shipped = [root / "macos" / "Sources", root / "macos" / "scripts"]
-    for path in [p for d in shipped for ext in ("*.swift", "*.sh", "*.plist") for p in d.rglob(ext)]:
+    desktop = root / "desktop"
+    shipped = [desktop / "src", desktop / "src-tauri" / "src", desktop / "scripts", desktop / "installer"]
+    exts = ("*.rs", "*.ts", "*.tsx", "*.cjs", "*.sh", "*.iss", "*.ps1", "*.json")
+    files = [p for d in shipped for ext in exts for p in d.rglob(ext) if "node_modules" not in p.parts]
+    files += [desktop / "src-tauri" / "tauri.conf.json", root / "scripts" / "make-macos-signing-certificate.sh"]
+    assert len(files) > 100
+    for path in files:
         text = path.read_text(errors="ignore")
-        assert "SERVICE_ROLE" not in text.upper().replace("_", "_"), path
+        if path.suffix == ".rs":
+            text = text.split("#[cfg(test)]")[0]  # модульные тесты с поддельными ключами не в счёт
+        if ".test." in path.name:
+            continue
+        assert "SERVICE_ROLE" not in text.upper(), path
         assert not jwt.search(text), path
         assert not re.search(r"sb_secret_[A-Za-z0-9_-]{16,}", text), path
 

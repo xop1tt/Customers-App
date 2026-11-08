@@ -1,7 +1,8 @@
 name: Release
 
 # Один релиз для обеих систем. Создаётся пушем тега вида v1.0.0 или вручную (Actions → Release → Run workflow):
-# параллельно собираются приложение для macOS (dmg) и установщик для Windows, затем одна задача создаёт
+# параллельно собираются приложение для macOS (универсальный dmg: Apple Silicon и Intel) и установщик для Windows,
+# оба из одного кода desktop/ (Tauri 2: Rust + React), затем одна задача создаёт
 # GitHub Release с заметками из .github/release-notes/<тег>.md и прикладывает все файлы.
 # При ручном запуске тег ставится на выбранный коммит ветки; обе сборки берут этот же коммит.
 # Если одна из сборок упала, релиз не создаётся.
@@ -23,15 +24,18 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DOTNET_NOLOGO: "1"
-  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   # Сборки идут без прав на запись: токен не достаётся ни сборочным скриптам, ни установщику Inno Setup, ни чужим пакетам.
   macos:
     name: Build macOS app
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: desktop
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,17 +47,27 @@ jobs:
         run: |
           if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG" >&2; exit 1; fi
 
-      # Xcode 26+ (SDK macOS 26): настоящий Liquid Glass в интерфейсе. См. scripts/select-xcode.sh.
-      - name: Toolchain (Xcode 26)
-        working-directory: macos
-        run: ./scripts/select-xcode.sh
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Rust targets (Apple Silicon and Intel)
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Version from the tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: node scripts/set-version.cjs "${TAG#v}"
+      - run: npm ci --no-audit --no-fund
+
+      - name: Tests (interface)
+        run: npm test
 
       - name: Tests (core)
-        working-directory: macos
-        run: swift test
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       # Постоянная подпись своим сертификатом (секреты MACOS_SIGN_P12 и MACOS_SIGN_PASSWORD,
-      # создаются скриптом macos/scripts/make-signing-certificate.sh). Без секретов — ad-hoc подпись.
+      # создаются скриптом scripts/make-macos-signing-certificate.sh). Без секретов — ad-hoc подпись.
       - name: Signing certificate
         env:
           P12: ${{ secrets.MACOS_SIGN_P12 }}
@@ -72,13 +86,11 @@ jobs:
           rm -f "$RUNNER_TEMP/sign.p12"
           ID="$(security find-identity -p codesigning "$KC" | awk '/\)/ {print $2; exit}')"
           if [ -z "$ID" ]; then echo "::warning::В сертификате нет ключа подписи кода"; exit 0; fi
-          echo "LEADGEN_SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
-          echo "LEADGEN_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
+          echo "SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
+          echo "SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
 
       - name: Build app
-        working-directory: macos
         env:
-          UNIVERSAL: "1"
           # Облако: адрес проекта и ПУБЛИЧНЫЙ ключ из переменных репозитория (не секретов).
           # Не заданы — собирается версия только с локальными учётными записями.
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
@@ -88,31 +100,41 @@ jobs:
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
           MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
+        run: npx tauri build --bundles app --target universal-apple-darwin
+
+      - name: Sign, check and pack
+        env:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          export LEADGEN_VERSION="${TAG#v}"
-          ./scripts/build-app.sh build
-          ./scripts/smoke-test.sh
-          ./scripts/make-dmg.sh "build/Customers-${TAG}-macOS.dmg"
-          (cd build && shasum -a 256 "Customers-${TAG}-macOS.dmg" | tee "Customers-${TAG}-macOS.dmg.sha256")
+          APP="$PWD/src-tauri/target/universal-apple-darwin/release/bundle/macos/Customers.app"
+          ID="${SIGN_IDENTITY:--}"
+          codesign --force --deep --sign "$ID" ${SIGN_KEYCHAIN:+--keychain "$SIGN_KEYCHAIN"} "$APP"
+          codesign --verify --deep --strict "$APP"
+          codesign -dr - "$APP" 2>&1 | sed 's/^/Требование подписи: /' || true
+          lipo -archs "$APP/Contents/MacOS/customers" | grep -q arm64
+          lipo -archs "$APP/Contents/MacOS/customers" | grep -q x86_64
+          plutil -extract CFBundleURLTypes xml1 -o - "$APP/Contents/Info.plist" | grep -q leadgenerator
+          mkdir -p "$PWD/out"
+          ./scripts/make-dmg.sh "$PWD/out/Customers-${TAG}-macOS.dmg" "$APP"
+          (cd out && shasum -a 256 "Customers-${TAG}-macOS.dmg" | tee "Customers-${TAG}-macOS.dmg.sha256")
 
       - name: Upload macOS files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-macos
           path: |
-            macos/build/Customers-v*-macOS.dmg
-            macos/build/Customers-v*-macOS.dmg.sha256
+            desktop/out/Customers-v*-macOS.dmg
+            desktop/out/Customers-v*-macOS.dmg.sha256
           if-no-files-found: error
           retention-days: 14
 
   windows:
     name: Build Windows installer
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
-        working-directory: windows
+        working-directory: desktop
         shell: pwsh
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
@@ -123,37 +145,39 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          global-json-file: windows/global.json
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
 
       - name: Версия из тега
         run: |
           if ($env:TAG -notmatch '^v(\d+\.\d+\.\d+(?:\.\d+)?)$') { throw "Тег должен иметь вид vX.Y.Z или vX.Y.Z.W, получено: $env:TAG" }
-          $version = $Matches[1]
-          # Версия сборки всегда из четырёх чисел: 1.0.9 → 1.0.9.0
-          $assembly = if (($version -split '\.').Count -eq 3) { "$version.0" } else { $version }
-          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "ASSEMBLY_VERSION=$assembly" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VERSION=$($Matches[1])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          node scripts/set-version.cjs $Matches[1]
 
-      - name: Tests
-        run: |
-          dotnet test tests/Customers.Core.Tests -c Release
-          dotnet test tests/Customers.Presentation.Tests -c Release
+      - run: npm ci --no-audit --no-fund
 
-      - name: Publish (self-contained)
-        run: >
-          dotnet publish src/Customers.App -c Release -r win-x64 --self-contained true
-          -p:Version=$env:VERSION -p:AssemblyVersion="$env:ASSEMBLY_VERSION" -p:FileVersion="$env:ASSEMBLY_VERSION"
-          -o "${{ github.workspace }}/windows/artifacts/publish"
+      - name: Tests (interface)
+        run: npm test
+
+      - name: Tests (core)
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build app
+        run: npx tauri build --no-bundle
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
           MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
 
-      - name: Smoke run
-        run: ./tools/smoke.ps1 -Exe artifacts/publish/Customers.exe -Output artifacts/smoke-publish
+      - name: Stage the installer contents
+        run: |
+          New-Item -ItemType Directory -Path dist-installer -Force | Out-Null
+          Copy-Item src-tauri/target/release/customers.exe dist-installer/Customers.exe
+          "{0:N1} МБ" -f ((Get-Item dist-installer/Customers.exe).Length / 1MB)
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
@@ -161,11 +185,11 @@ jobs:
       - name: Build installer
         run: |
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          & $iscc /Qp "/DAppVersion=$env:VERSION" /DSourceDir="$PWD\artifacts\publish" /DOutputDir="$PWD\artifacts" installer/Customers.iss
+          & $iscc /Qp "/DAppVersion=$env:VERSION" /DSourceDir="$PWD\dist-installer" /DOutputDir="$PWD\artifacts" installer/Customers.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC завершился с кодом $LASTEXITCODE" }
 
       - name: Installer check
-        run: ./tools/installer-check.ps1 -Artifacts artifacts
+        run: ./installer/check.ps1 -Artifacts artifacts
 
       - name: Checksum
         run: |
@@ -179,20 +203,18 @@ jobs:
         with:
           name: release-windows
           path: |
-            windows/artifacts/Customers-v*-Windows-x64-Setup.exe
-            windows/artifacts/Customers-v*-Windows-x64-Setup.exe.sha256
+            desktop/artifacts/Customers-v*-Windows-x64-Setup.exe
+            desktop/artifacts/Customers-v*-Windows-x64-Setup.exe.sha256
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload artifacts
+      - name: Upload installer log
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-windows-checks
-          path: |
-            windows/artifacts/smoke-publish
-            windows/artifacts/smoke-installed
-            windows/artifacts/install.log
+          path: desktop/artifacts/install.log
+          if-no-files-found: ignore
           retention-days: 14
 
   # Единственное место с правом записи: берёт готовые файлы обеих сборок и кладёт их в релиз. Код проекта здесь не выполняется.

@@ -355,6 +355,5 @@ mod tests {
         assert!(f.transport.requests.lock().unwrap().is_empty(), "второй поиск не запускается");
         core.stop_search().unwrap();
         assert_eq!(core.search_status().unwrap().progress.as_deref(), Some("Останавливаю…"));
-        let _ = CmdError::msg("");
     }
 }
