@@ -386,14 +386,31 @@ impl Core {
         let bitrix = self.crm_secret(&s, CrmKind::Bitrix).and_then(|w| Bitrix24::new(&w).ok()).map(|d| d.target());
         let webhook = self.crm_secret(&s, CrmKind::Webhook).and_then(|w| WebhookDestination::new(&w).ok()).map(|d| d.target());
         let notion_connected = self.crm_secret(&s, CrmKind::Notion).is_some();
-        let link = self.notion_link(&s);
+        let notion = match (notion_connected, self.notion_link(&s)) {
+            (true, Some(l)) => {
+                let props: Vec<Value> = l.properties.iter().map(|p| json!({"name": p.name, "type": p.kind, "typeTitle": p.type_title(), "writable": p.is_writable()})).collect();
+                let mapping: BTreeMap<&String, &'static str> = l.mapping.iter().map(|(k, f)| (k, f.key())).collect();
+                let has_title = l.properties.iter().any(|p| p.kind == "title" && l.mapping.contains_key(&p.name));
+                json!({"connected": true, "title": l.title, "database": l.database, "properties": props, "mapping": mapping, "hasTitle": has_title})
+            }
+            _ => json!({"connected": false}),
+        };
         Ok(json!({
             "bitrix": {"connected": bitrix.is_some(), "target": bitrix},
             "webhook": {"connected": webhook.is_some(), "target": webhook},
-            "notion": {"connected": notion_connected && link.is_some(), "link": link, "writable": link.as_ref().map(|l| l.properties.iter().filter(|p| p.is_writable()).count())},
+            "notion": notion,
             "lastTab": s.account_prefs().export_last_tab,
-            "fields": crate::export::fields_for_ui(),
         }))
+    }
+
+    /// Сколько из выбранных лидов уже отправлено в это назначение (для флажка «Отправить повторно»).
+    pub fn crm_sent_count(&self, kind: &str, ids: &[String]) -> CmdResult<usize> {
+        let s = self.require()?;
+        let k = CrmKind::parse(kind).ok_or("Неизвестное назначение")?;
+        let dest = self.destination(&s, k)?;
+        let key = ExportLedger::storage_key(k, &dest.target());
+        let ledger = ExportLedger::decode(s.with_store(|st| st.value(&key)).as_deref());
+        Ok(ids.iter().filter(|id| ledger.sent.contains_key(*id)).count())
     }
 
     pub async fn connect_bitrix(&self, webhook: &str) -> CmdResult<()> {

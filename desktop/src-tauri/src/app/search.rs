@@ -2,7 +2,7 @@
 
 use super::session::{Core, Session};
 use super::system::KeepAwake;
-use super::{CmdError, CmdResult};
+use super::CmdResult;
 use crate::search::engine::{SearchEngine, SearchOptions, SearchReport, StoreRepo};
 use crate::search::settings::{source_problem, SearchSecrets, SearchSettings};
 use crate::secrets;
@@ -60,6 +60,14 @@ impl Core {
         secrets::put(self.env.secrets.as_ref(), &s.vk_secret_name(), token.trim())?;
         self.env.emit("search-settings", Value::Null);
         Ok(())
+    }
+
+    /// Текущие настройки поиска, ключ VK (есть или нет) и причины, по которым источники не работают.
+    pub fn search_overview(&self) -> CmdResult<Value> {
+        let s = self.require()?;
+        let settings = s.settings.lock().unwrap().clone();
+        let problems: serde_json::Map<String, Value> = crate::search::settings::ALL_SOURCES.iter().map(|k| (k.to_string(), self.source_problem(&s, k).map(Value::from).unwrap_or(Value::Null))).collect();
+        Ok(json!({"settings": settings, "hasVkToken": !self.vk_token(&s).is_empty(), "problems": problems, "autoSearchMinutes": s.account_prefs().auto_search_minutes}))
     }
 
     /// Почему источник не может работать, или None.

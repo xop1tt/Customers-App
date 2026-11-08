@@ -27,6 +27,7 @@ tauri-plugin-single-instance = { version = "2.5", features = ["deep-link"] }
 tauri-plugin-notification = "2.8"
 tauri-plugin-clipboard-manager = "2.5"
 tauri-plugin-window-state = "2.5"
+tauri-plugin-autostart = "2.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
