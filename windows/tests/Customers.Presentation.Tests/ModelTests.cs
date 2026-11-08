@@ -161,6 +161,49 @@ public class AppModelTests : IDisposable
     }
 
     [Fact]
+    public void FilteringReusesRowsAndNotifiesOnce()
+    {
+        using var scope = new Scope(Model());
+        var m = scope.Model;
+        Data.Seed(m);
+        var before = m.Rows.ToDictionary(r => r.Id);
+        var changes = 0;
+        System.Collections.Specialized.NotifyCollectionChangedEventArgs? last = null;
+        m.Rows.CollectionChanged += (_, e) =>
+        {
+            changes++;
+            last = e;
+        };
+
+        m.HideRejected = false; // в списке появляется ещё одна строка
+        Assert.Equal(1, changes);
+        Assert.Equal(System.Collections.Specialized.NotifyCollectionChangedAction.Reset, last!.Action);
+        Assert.Equal(4, m.Rows.Count);
+        Assert.All(before, kv => Assert.Same(kv.Value, m.Rows.Single(r => r.Id == kv.Key))); // прежние строки не пересоздаются
+
+        changes = 0;
+        m.HideRejected = false; // ничего не изменилось
+        Assert.Equal(0, changes);
+    }
+
+    [Fact]
+    public void BulkCollectionReplacesWithSingleResetAndKeepsCount()
+    {
+        var c = new BulkObservableCollection<int>();
+        var resets = 0;
+        var countChanged = false;
+        c.CollectionChanged += (_, _) => resets++;
+        ((System.ComponentModel.INotifyPropertyChanged)c).PropertyChanged += (_, e) => countChanged |= e.PropertyName == "Count";
+        c.ReplaceAll([1, 2, 3]);
+        Assert.Equal([1, 2, 3], c);
+        Assert.Equal(1, resets);
+        Assert.True(countChanged);
+        c.ReplaceAll([]);
+        Assert.Empty(c);
+        Assert.Equal(2, resets);
+    }
+
+    [Fact]
     public void SectionsFiltersAndCounts()
     {
         using var scope = new Scope(Model());

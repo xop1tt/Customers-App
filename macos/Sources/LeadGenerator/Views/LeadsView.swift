@@ -12,6 +12,8 @@ struct LeadsView: View {
 
     var body: some View {
         @Bindable var model = model
+        // Фильтрация и сортировка тысяч лидов — один раз за отрисовку, а не при каждом обращении к списку.
+        let items = self.items
         VStack(spacing: 0) {
             filterBar
             Divider()
@@ -19,7 +21,7 @@ struct LeadsView: View {
                 // Пустой экран занимает всё место, чтобы строка состояния оставалась внизу.
                 emptyState.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                table
+                table(items)
             }
             if !model.selection.isEmpty && model.selection.count > 1 { bulkBar }
             Divider()
@@ -35,7 +37,7 @@ struct LeadsView: View {
 
     // MARK: Таблица
 
-    private var table: some View {
+    private func table(_ items: [LeadItem]) -> some View {
         @Bindable var model = model
         return Table(items, selection: Binding(get: { model.selection },
                                                set: { if $0 != model.selection { model.selection = $0 } }),
