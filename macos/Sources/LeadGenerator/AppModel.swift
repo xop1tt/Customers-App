@@ -111,15 +111,6 @@ final class AppModel {
             }
         }
     }
-    var signature: String {
-        didSet {
-            defaults.set(signature, forKey: key("draft.signature"))
-            if !applyingRemote, oldValue != signature {
-                try? store?.setSyncedValue("draft.signature", JSONValue.string(signature).text)
-                onLocalChange?()
-            }
-        }
-    }
     var backupDirectory: String { didSet { defaults.set(backupDirectory, forKey: key("data.backupDir")) } }
     var autoBackup: Bool { didSet { defaults.set(autoBackup, forKey: key("data.autoBackup")) } }
     var keepBackups: Int { didSet { defaults.set(keepBackups, forKey: key("data.keepBackups")) } }
@@ -156,7 +147,6 @@ final class AppModel {
         defaultDatabasePath = dataDirectory.appendingPathComponent("leads.db").path
         let interval = defaults.object(forKey: "search.auto.\(username.lowercased())") as? Int
         autoSearchMinutes = interval ?? 60
-        signature = defaults.string(forKey: "draft.signature.\(username.lowercased())") ?? ""
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         backupDirectory = defaults.string(forKey: "data.backupDir.\(username.lowercased())")
             ?? docs.appendingPathComponent("Lead Generator Backups").appendingPathComponent(username).path
@@ -172,7 +162,7 @@ final class AppModel {
             if isCloud && !store.syncTracking { try store.enableSyncTracking() }
             self.store = store
             applyingRemote = true
-            searchSettings = SearchSettings.decode(store.value("search.settings"))
+            searchSettings = SearchSettings.stored(store.value("search.settings"))
             applyingRemote = false
             reloadSyncedSettings()
             reload()
@@ -193,9 +183,8 @@ final class AppModel {
         guard let store else { return }
         applyingRemote = true
         defer { applyingRemote = false }
-        let s = SearchSettings.decode(store.value("search.settings"))
+        let s = SearchSettings.stored(store.value("search.settings"))
         if s != searchSettings { searchSettings = s }
-        if let v = store.value("draft.signature").flatMap(JSONValue.parse)?.stringValue, v != signature { signature = v }
         if let v = store.value("search.auto").flatMap({ Int($0) }), v != autoSearchMinutes { autoSearchMinutes = v }
     }
 
@@ -297,6 +286,8 @@ final class AppModel {
         act { try $0.addExclusion(kind, value) }
         lastMessage = "Добавлено исключение: \(kind.title.lowercased()) \(value)"
     }
+    /// Формат (домен, телефон, email, иначе название) определяется по самому значению.
+    func exclude(_ value: String) { exclude(ExclusionKind.detect(value) ?? .name, value) }
     func removeExclusion(_ id: Int64) { act { try $0.removeExclusion(id) } }
 
     func importExclusions(from url: URL) {

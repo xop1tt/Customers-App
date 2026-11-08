@@ -90,6 +90,29 @@ public static class EnumText
         _ => null,
     };
 
+    /// <summary>Формат введённого значения по его виду: email, телефон (от 10 цифр), домен или адрес сайта.
+    /// null — не похоже ни на одно из них (для ручного ввода это название организации).</summary>
+    public static ExclusionKind? DetectExclusion(string? raw)
+    {
+        var v = (raw ?? "").Trim();
+        if (v.Length == 0)
+        {
+            return null;
+        }
+
+        if (v.Contains('@'))
+        {
+            return v.Contains(' ') ? null : ExclusionKind.Email;
+        }
+
+        if (v.Count(char.IsNumber) >= 10 && v.All(c => char.IsNumber(c) || " +-()".Contains(c)))
+        {
+            return ExclusionKind.Phone;
+        }
+
+        return v.Contains('.') && !v.Contains(' ') && v.Any(char.IsLetter) ? ExclusionKind.Domain : null;
+    }
+
     public static string Title(this ExclusionKind k) => k switch {
         ExclusionKind.Domain => "Домен",
         ExclusionKind.Phone => "Телефон",

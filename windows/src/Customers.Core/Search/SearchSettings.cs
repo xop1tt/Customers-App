@@ -109,6 +109,22 @@ public sealed class SearchSettings
         _ => 24,
     };
 
+    /// <summary>
+    /// Настройки нового пользователя: регионы, каналы и слова пустые, их выбирает сам человек
+    /// (мастер предлагает регион по геолокации). Остальное как по умолчанию.
+    /// </summary>
+    public static SearchSettings BlankStart()
+    {
+        var s = new SearchSettings();
+        s.Osm.Regions = [];
+        s.Telegram.Channels = [];
+        s.Telegram.Keywords = [];
+        return s;
+    }
+
+    /// <summary>Сохранённые настройки, а для нового пользователя (в базе ничего нет) пустой старт.</summary>
+    public static SearchSettings Stored(string? json) => string.IsNullOrWhiteSpace(json) ? BlankStart() : Decode(json);
+
     /// <summary>Читает настройки; любой сбой — настройки по умолчанию (как в macOS-версии).</summary>
     public static SearchSettings Decode(string? json)
     {
@@ -119,7 +135,9 @@ public sealed class SearchSettings
 
         try
         {
-            return JsonSerializer.Deserialize<SearchSettings>(json, Options) ?? new SearchSettings();
+            var settings = JsonSerializer.Deserialize<SearchSettings>(json, Options) ?? new SearchSettings();
+            settings.Osm.Categories = SearchDefaults.MergeCategories(settings.Osm.Categories);
+            return settings;
         }
         catch (JsonException)
         {
@@ -153,7 +171,84 @@ public static class SearchDefaults
         new() { Key = "medical", Label = "Медицина и косметология", Group = "medical", Filters = ["[\"amenity\"=\"dentist\"]", "[\"healthcare\"=\"clinic\"]", "[\"amenity\"=\"clinic\"]"], Weight = 15 },
         new() { Key = "fitness", Label = "Спорт и фитнес", Group = "fitness", Filters = ["[\"leisure\"=\"fitness_centre\"]", "[\"leisure\"=\"sports_centre\"]"], Weight = 15 },
         new() { Key = "shops", Label = "Магазины", Group = "shop", Filters = ["[\"shop\"=\"clothes\"]", "[\"shop\"=\"gift\"]", "[\"shop\"=\"florist\"]"], Weight = 10 },
+        new() { Key = "massage", Label = "Массаж и SPA", Group = "beauty", Filters = ["[\"shop\"=\"massage\"]", "[\"leisure\"=\"sauna\"]"], Enabled = false, Weight = 15 },
+        new() { Key = "tattoo", Label = "Тату-салоны", Group = "beauty", Filters = ["[\"shop\"=\"tattoo\"]"], Enabled = false, Weight = 14 },
+        new() { Key = "cosmetics", Label = "Косметика и парфюмерия", Group = "beauty", Filters = ["[\"shop\"=\"cosmetics\"]", "[\"shop\"=\"perfumery\"]"], Enabled = false, Weight = 10 },
+        new() { Key = "doctors", Label = "Частные врачи", Group = "medical", Filters = ["[\"amenity\"=\"doctors\"]", "[\"healthcare\"=\"doctor\"]"], Enabled = false, Weight = 14 },
+        new() { Key = "physio", Label = "Реабилитация и физиотерапия", Group = "medical", Filters = ["[\"healthcare\"=\"physiotherapist\"]", "[\"healthcare\"=\"alternative\"]"], Enabled = false, Weight = 13 },
+        new() { Key = "optics", Label = "Оптики", Group = "medical", Filters = ["[\"shop\"=\"optician\"]"], Enabled = false, Weight = 12 },
+        new() { Key = "vet", Label = "Ветеринарные клиники", Group = "medical", Filters = ["[\"amenity\"=\"veterinary\"]"], Enabled = false, Weight = 13 },
+        new() { Key = "pharmacy", Label = "Аптеки", Group = "medical", Filters = ["[\"amenity\"=\"pharmacy\"]"], Enabled = false, Weight = 8 },
+        new() { Key = "fastfood", Label = "Фастфуд", Group = "restaurant", Filters = ["[\"amenity\"=\"fast_food\"]"], Enabled = false, Weight = 8 },
+        new() { Key = "bar", Label = "Бары и пабы", Group = "restaurant", Filters = ["[\"amenity\"=\"bar\"]", "[\"amenity\"=\"pub\"]"], Enabled = false, Weight = 10 },
+        new() { Key = "bakery", Label = "Пекарни и кондитерские", Group = "restaurant", Filters = ["[\"shop\"=\"bakery\"]", "[\"shop\"=\"confectionery\"]"], Enabled = false, Weight = 10 },
+        new() { Key = "catering", Label = "Кейтеринг", Group = "restaurant", Filters = ["[\"craft\"=\"caterer\"]"], Enabled = false, Weight = 12 },
+        new() { Key = "hotel", Label = "Отели и гостевые дома", Group = "hospitality", Filters = ["[\"tourism\"=\"hotel\"]", "[\"tourism\"=\"guest_house\"]", "[\"tourism\"=\"hostel\"]", "[\"tourism\"=\"motel\"]"], Enabled = false, Weight = 16 },
+        new() { Key = "apartments", Label = "Апартаменты и посуточная аренда", Group = "hospitality", Filters = ["[\"tourism\"=\"apartment\"]", "[\"tourism\"=\"chalet\"]"], Enabled = false, Weight = 14 },
+        new() { Key = "travel", Label = "Турагентства", Group = "hospitality", Filters = ["[\"shop\"=\"travel_agency\"]"], Enabled = false, Weight = 14 },
+        new() { Key = "kindergarten", Label = "Детские сады и центры", Group = "education", Filters = ["[\"amenity\"=\"kindergarten\"]", "[\"amenity\"=\"childcare\"]"], Enabled = false, Weight = 12 },
+        new() { Key = "driving", Label = "Автошколы", Group = "education", Filters = ["[\"amenity\"=\"driving_school\"]"], Enabled = false, Weight = 15 },
+        new() { Key = "tutoring", Label = "Репетиторы и учебные центры", Group = "education", Filters = ["[\"office\"=\"educational_institution\"]", "[\"amenity\"=\"prep_school\"]"], Enabled = false, Weight = 13 },
+        new() { Key = "yoga", Label = "Йога и студии", Group = "fitness", Filters = ["[\"sport\"=\"yoga\"]", "[\"sport\"=\"pilates\"]"], Enabled = false, Weight = 15 },
+        new() { Key = "pools", Label = "Бассейны и водный спорт", Group = "fitness", Filters = ["[\"leisure\"=\"swimming_pool\"][\"access\"!=\"private\"]", "[\"leisure\"=\"water_park\"]"], Enabled = false, Weight = 9 },
+        new() { Key = "martial", Label = "Единоборства и спортивные секции", Group = "fitness", Filters = ["[\"sport\"=\"martial_arts\"]", "[\"sport\"=\"boxing\"]", "[\"sport\"=\"karate\"]"], Enabled = false, Weight = 13 },
+        new() { Key = "carrepair", Label = "Автосервисы", Group = "auto", Filters = ["[\"shop\"=\"car_repair\"]", "[\"craft\"=\"mechanic\"]"], Enabled = false, Weight = 16 },
+        new() { Key = "cardealer", Label = "Автосалоны", Group = "auto", Filters = ["[\"shop\"=\"car\"]"], Enabled = false, Weight = 14 },
+        new() { Key = "carparts", Label = "Автозапчасти и шины", Group = "auto", Filters = ["[\"shop\"=\"car_parts\"]", "[\"shop\"=\"tyres\"]"], Enabled = false, Weight = 12 },
+        new() { Key = "carwash", Label = "Автомойки", Group = "auto", Filters = ["[\"amenity\"=\"car_wash\"]"], Enabled = false, Weight = 12 },
+        new() { Key = "lawyer", Label = "Юристы и нотариусы", Group = "services", Filters = ["[\"office\"=\"lawyer\"]", "[\"office\"=\"notary\"]"], Enabled = false, Weight = 16 },
+        new() { Key = "accountant", Label = "Бухгалтерия и аудит", Group = "services", Filters = ["[\"office\"=\"accountant\"]", "[\"office\"=\"tax_advisor\"]"], Enabled = false, Weight = 15 },
+        new() { Key = "realty", Label = "Агентства недвижимости", Group = "services", Filters = ["[\"office\"=\"estate_agent\"]"], Enabled = false, Weight = 18 },
+        new() { Key = "insurance", Label = "Страхование", Group = "services", Filters = ["[\"office\"=\"insurance\"]"], Enabled = false, Weight = 12 },
+        new() { Key = "itcompany", Label = "IT-компании", Group = "services", Filters = ["[\"office\"=\"it\"]"], Enabled = false, Weight = 10 },
+        new() { Key = "advertising", Label = "Рекламные и маркетинговые агентства", Group = "services", Filters = ["[\"office\"=\"advertising_agency\"]", "[\"office\"=\"marketing\"]"], Enabled = false, Weight = 14 },
+        new() { Key = "architect", Label = "Архитекторы и дизайнеры", Group = "services", Filters = ["[\"office\"=\"architect\"]"], Enabled = false, Weight = 15 },
+        new() { Key = "photo", Label = "Фотостудии и фотографы", Group = "services", Filters = ["[\"craft\"=\"photographer\"]", "[\"shop\"=\"photo\"]"], Enabled = false, Weight = 14 },
+        new() { Key = "print", Label = "Типографии и копицентры", Group = "services", Filters = ["[\"shop\"=\"copyshop\"]", "[\"craft\"=\"printer\"]"], Enabled = false, Weight = 12 },
+        new() { Key = "cleaning", Label = "Прачечные и химчистки", Group = "services", Filters = ["[\"shop\"=\"laundry\"]", "[\"shop\"=\"dry_cleaning\"]"], Enabled = false, Weight = 10 },
+        new() { Key = "tailor", Label = "Ателье и пошив", Group = "services", Filters = ["[\"craft\"=\"tailor\"]", "[\"shop\"=\"tailor\"]", "[\"shop\"=\"fabric\"]"], Enabled = false, Weight = 11 },
+        new() { Key = "repair", Label = "Ремонт техники и телефонов", Group = "services", Filters = ["[\"craft\"=\"electronics_repair\"]", "[\"shop\"=\"mobile_phone\"]"], Enabled = false, Weight = 12 },
+        new() { Key = "construction", Label = "Строительство и ремонт", Group = "construction", Filters = ["[\"office\"=\"construction_company\"]", "[\"craft\"=\"builder\"]", "[\"craft\"=\"carpenter\"]"], Enabled = false, Weight = 15 },
+        new() { Key = "engineering", Label = "Электрики, сантехники, отопление", Group = "construction", Filters = ["[\"craft\"=\"electrician\"]", "[\"craft\"=\"plumber\"]", "[\"craft\"=\"hvac\"]"], Enabled = false, Weight = 12 },
+        new() { Key = "furniture", Label = "Мебель и интерьер", Group = "home", Filters = ["[\"shop\"=\"furniture\"]", "[\"shop\"=\"interior_decoration\"]", "[\"shop\"=\"kitchen\"]"], Enabled = false, Weight = 14 },
+        new() { Key = "hardware", Label = "Стройматериалы и инструменты", Group = "home", Filters = ["[\"shop\"=\"doityourself\"]", "[\"shop\"=\"hardware\"]", "[\"shop\"=\"trade\"]"], Enabled = false, Weight = 10 },
+        new() { Key = "electronics", Label = "Электроника и компьютеры", Group = "retail", Filters = ["[\"shop\"=\"electronics\"]", "[\"shop\"=\"computer\"]", "[\"shop\"=\"appliance\"]"], Enabled = false, Weight = 10 },
+        new() { Key = "jewelry", Label = "Ювелирные магазины", Group = "retail", Filters = ["[\"shop\"=\"jewelry\"]"], Enabled = false, Weight = 11 },
+        new() { Key = "pets", Label = "Зоомагазины", Group = "retail", Filters = ["[\"shop\"=\"pet\"]", "[\"shop\"=\"pet_grooming\"]"], Enabled = false, Weight = 11 },
+        new() { Key = "kids", Label = "Детские товары и игрушки", Group = "retail", Filters = ["[\"shop\"=\"toys\"]", "[\"shop\"=\"baby_goods\"]"], Enabled = false, Weight = 9 },
+        new() { Key = "sports", Label = "Спортивные товары и велосипеды", Group = "retail", Filters = ["[\"shop\"=\"sports\"]", "[\"shop\"=\"bicycle\"]"], Enabled = false, Weight = 9 },
+        new() { Key = "books", Label = "Книги и канцелярия", Group = "retail", Filters = ["[\"shop\"=\"books\"]", "[\"shop\"=\"stationery\"]"], Enabled = false, Weight = 8 },
+        new() { Key = "events", Label = "Мероприятия и праздники", Group = "leisure", Filters = ["[\"amenity\"=\"events_venue\"]", "[\"shop\"=\"party\"]"], Enabled = false, Weight = 13 },
+        new() { Key = "entertainment", Label = "Квесты, боулинг, кинотеатры", Group = "leisure", Filters = ["[\"leisure\"=\"escape_game\"]", "[\"leisure\"=\"bowling_alley\"]", "[\"amenity\"=\"cinema\"]"], Enabled = false, Weight = 11 },
+        new() { Key = "nightclub", Label = "Ночные клубы", Group = "leisure", Filters = ["[\"amenity\"=\"nightclub\"]"], Enabled = false, Weight = 10 },
     ];
+
+    /// <summary>Названия групп категорий OpenStreetMap для интерфейса.</summary>
+    public static readonly IReadOnlyDictionary<string, string> OsmGroupTitles = new Dictionary<string, string> {
+        ["beauty"] = "Красота и уход",
+        ["dance"] = "Танцы",
+        ["restaurant"] = "Питание",
+        ["education"] = "Образование",
+        ["medical"] = "Здоровье",
+        ["fitness"] = "Спорт и фитнес",
+        ["shop"] = "Магазины",
+        ["retail"] = "Розница",
+        ["hospitality"] = "Отели и туризм",
+        ["auto"] = "Авто",
+        ["services"] = "Услуги и офисы",
+        ["construction"] = "Строительство",
+        ["home"] = "Дом и интерьер",
+        ["leisure"] = "Досуг и мероприятия",
+    };
+
+    /// <summary>Сохранённые категории пользователя плюс новые из каталога (выключенные): выбор пользователя не меняется.</summary>
+    public static List<OSMCategory> MergeCategories(IEnumerable<OSMCategory> stored)
+    {
+        var list = stored.ToList();
+        var known = list.Select(c => c.Key).ToHashSet();
+        list.AddRange(OsmCategories().Where(c => !known.Contains(c.Key)));
+        return list;
+    }
 }
 
 /// <summary>Приведение того, что вводит пользователь, к виду, который понимает источник.</summary>

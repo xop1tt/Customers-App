@@ -7,10 +7,16 @@ struct RootView: View {
     @Environment(\.look) private var look
     @State private var welcomeShown = false
     @State private var whatsNew = WhatsNewController.shared
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var reveal = SidebarRevealModel.shared
+    @AppStorage(SidebarKeys.hover) private var hoverReveal = true
+
+    /// Левая панель свёрнута кнопкой в панели инструментов.
+    private var collapsed: Bool { columnVisibility == .detailOnly }
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240 * look.scale, max: 360)
         } detail: {
@@ -47,7 +53,11 @@ struct RootView: View {
                         }
                 }
             }
+            // Свёрнутая панель выезжает при подведении курсора к левому краю окна.
+            .overlay(alignment: .leading) { hoverSidebar }
         }
+        .onChange(of: collapsed) { _, now in if !now { reveal.reset() } }
+        .onChange(of: hoverReveal) { _, on in if !on { reveal.reset() } }
         .sheet(item: $model.exportTab) { tab in
             ExportSheet(items: model.exportItems, tab: tab)
                 .environment(\.appModel, model)
@@ -75,6 +85,32 @@ struct RootView: View {
                     .background(.background)
             }
         }
+    }
+
+    /// Узкая зона у левого края и сама выехавшая панель. Зона не перехватывает нажатия.
+    @ViewBuilder private var hoverSidebar: some View {
+        if collapsed && hoverReveal {
+            ZStack(alignment: .leading) {
+                EdgeHoverArea { reveal.edge($0) }
+                    .frame(width: 8)
+                    .frame(maxHeight: .infinity)
+                if reveal.revealed {
+                    RevealedSidebar(pin: { pin() }, reveal: reveal)
+                        .environment(\.appModel, model)
+                        .environment(\.look, look)
+                        .environment(\.session, SessionModel.shared)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+            }
+            .frame(maxHeight: .infinity)
+            .animation(look.animation(.smooth(duration: 0.22)), value: reveal.revealed)
+        }
+    }
+
+    /// «Закрепить»: панель остаётся раскрытой, как после нажатия кнопки в панели инструментов.
+    private func pin() {
+        reveal.reset()
+        columnVisibility = .all
     }
 
     /// Первый запуск: мастер настройки; иначе после обновления — «Что нового». Одновременно оба не показываются.

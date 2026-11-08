@@ -71,6 +71,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>NSLocationUsageDescription</key><string>Определить ваш город, чтобы предложить регион для поиска организаций. Местоположение не сохраняется и никуда не отправляется.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Определить ваш город, чтобы предложить регион для поиска организаций. Местоположение не сохраняется и никуда не отправляется.</string>
   <key>CFBundleURLTypes</key>
   <array><dict>
     <key>CFBundleURLName</key><string>local.leadgenerator.app.auth</string>

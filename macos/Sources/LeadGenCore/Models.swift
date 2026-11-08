@@ -274,6 +274,17 @@ public enum ExclusionKind: String, CaseIterable, Codable, Sendable {
         case .name: return "Название"
         }
     }
+
+    /// Формат введённого значения по его виду: email, телефон (от 10 цифр), домен или адрес сайта.
+    /// nil — не похоже ни на одно из них (для ручного ввода это название организации).
+    public static func detect(_ raw: String) -> ExclusionKind? {
+        let v = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !v.isEmpty else { return nil }
+        if v.contains("@") { return v.contains(" ") ? nil : .email }
+        if v.filter(\.isNumber).count >= 10 && v.allSatisfy({ $0.isNumber || " +-()".contains($0) }) { return .phone }
+        if v.contains(".") && !v.contains(" ") && v.contains(where: \.isLetter) { return .domain }
+        return nil
+    }
 }
 
 public struct Exclusion: Identifiable, Hashable, Sendable {

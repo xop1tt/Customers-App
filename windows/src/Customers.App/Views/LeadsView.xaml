@@ -123,7 +123,13 @@
                 </Button>
 
                 <!-- Команды в своей строке на всю ширину списка: лишние уходят в меню «…» и не заезжают под карточку лида. -->
-                <CommandBar x:Name="Commands" Grid.Row="1" Grid.ColumnSpan="2" DefaultLabelPosition="Collapsed" Background="Transparent" OverflowButtonVisibility="Auto" HorizontalAlignment="Left" IsDynamicOverflowEnabled="True">
+                <!-- Справа от команд, у самого края строки: показать или скрыть карточку лида. -->
+                <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <CommandBar x:Name="Commands" Grid.Column="0" DefaultLabelPosition="Collapsed" Background="Transparent" OverflowButtonVisibility="Auto" HorizontalAlignment="Left" IsDynamicOverflowEnabled="True">
                     <AppBarButton x:Name="FilterButton" Label="Фильтры" ToolTipService.ToolTip="Фильтры">
                         <AppBarButton.Icon>
                             <FontIcon Glyph="&#xE71C;" />
@@ -174,11 +180,6 @@
                             <FontIcon Glyph="&#xE896;" />
                         </AppBarButton.Icon>
                     </AppBarButton>
-                    <AppBarToggleButton x:Name="InspectorToggle" Label="Карточка" ToolTipService.ToolTip="Показать или скрыть карточку лида (Ctrl+I)" Click="OnInspectorToggleClick">
-                        <AppBarToggleButton.Icon>
-                            <FontIcon Glyph="&#xE89F;" />
-                        </AppBarToggleButton.Icon>
-                    </AppBarToggleButton>
                     <CommandBar.SecondaryCommands>
                         <AppBarButton Label="Передать выбранные в CRM…" Click="OnCrmClick" />
                         <AppBarButton Label="Отметить всё прочитанным" Click="OnMarkAllSeenClick" />
@@ -187,6 +188,15 @@
                         <AppBarButton Label="Удалить выбранные" Click="OnDeleteClick" />
                     </CommandBar.SecondaryCommands>
                 </CommandBar>
+                <ToggleButton x:Name="InspectorToggle" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="10,6"
+                              Click="OnInspectorToggleClick" AutomationProperties.Name="Карточка лида"
+                              ToolTipService.ToolTip="Показать или скрыть карточку лида (Ctrl+I)">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE89F;" FontSize="14" />
+                        <TextBlock x:Name="InspectorToggleText" Text="Карточка" />
+                    </StackPanel>
+                </ToggleButton>
+                </Grid>
             </Grid>
 
             <!-- Ход поиска и итог последнего запуска -->
@@ -211,7 +221,7 @@
             <Border Grid.Row="3" Style="{StaticResource CardStyle}" Padding="0">
                 <Grid>
                     <ScrollViewer x:Name="TableScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalScrollMode="Auto" SizeChanged="OnTableScrollSizeChanged">
-                        <Grid x:Name="Table" MinWidth="560">
+                        <Grid x:Name="Table" MinWidth="300">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />

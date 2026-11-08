@@ -36,6 +36,8 @@ public sealed class DevicePreferences : ObservableObject
     private bool _inspectorShown = true;
     private bool _compactRows;
     private bool _animations = true;
+    private bool _lightModeAuto = true;
+    private int _lightModeThreshold = PowerPolicy.DefaultThreshold;
     private bool _checkUpdates = true;
     private int _updateCheckHours = UpdateSchedule.DefaultHours;
     private DateTimeOffset? _lastUpdateCheck;
@@ -78,6 +80,12 @@ public sealed class DevicePreferences : ObservableObject
     public bool CompactRows { get => _compactRows; set => Update(ref _compactRows, value); }
 
     public bool Animations { get => _animations; set => Update(ref _animations, value); }
+
+    /// <summary>Автоматический облегчённый режим: включается при режиме экономии Windows или низком заряде батареи.</summary>
+    public bool LightModeAuto { get => _lightModeAuto; set => Update(ref _lightModeAuto, value); }
+
+    /// <summary>Заряд в процентах, ниже которого включается облегчённый режим (5–50, по умолчанию 20).</summary>
+    public int LightModeThreshold { get => _lightModeThreshold; set => Update(ref _lightModeThreshold, PowerPolicy.Clamp(value)); }
 
     public bool CheckUpdates { get => _checkUpdates; set => Update(ref _checkUpdates, value); }
 
@@ -159,6 +167,8 @@ public sealed class DevicePreferences : ObservableObject
             _inspectorShown = Get<bool?>("inspectorShown") ?? _inspectorShown;
             _compactRows = Get<bool?>("compactRows") ?? _compactRows;
             _animations = Get<bool?>("animations") ?? _animations;
+            _lightModeAuto = Get<bool?>("lightModeAuto") ?? _lightModeAuto;
+            _lightModeThreshold = PowerPolicy.Clamp(Get<int?>("lightModeThreshold") ?? _lightModeThreshold);
             _checkUpdates = Get<bool?>("checkUpdates") ?? _checkUpdates;
             _updateCheckHours = UpdateSchedule.Normalize(Get<int?>("updateCheckHours") ?? _updateCheckHours);
             _lastUpdateCheck = DateTimeOffset.TryParse(Get<string>("lastUpdateCheck"), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var last) ? last : null;
@@ -194,6 +204,8 @@ public sealed class DevicePreferences : ObservableObject
             ["inspectorShown"] = InspectorShown,
             ["compactRows"] = CompactRows,
             ["animations"] = Animations,
+            ["lightModeAuto"] = LightModeAuto,
+            ["lightModeThreshold"] = LightModeThreshold,
             ["checkUpdates"] = CheckUpdates,
             ["updateCheckHours"] = UpdateCheckHours,
             ["lastUpdateCheck"] = LastUpdateCheck?.ToString("O", System.Globalization.CultureInfo.InvariantCulture),

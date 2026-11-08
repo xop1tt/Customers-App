@@ -1,4 +1,5 @@
 import AppKit
+import LeadGenCore
 import SwiftUI
 
 /// Тема, шрифт и масштаб интерфейса. Хранятся в UserDefaults, применяются ко всем окнам сразу.
@@ -40,6 +41,8 @@ enum Density: String, CaseIterable, Identifiable {
     }
 }
 
+/// Готовые цветовые схемы. Вместе с режимом «Как в системе» (`AppearanceSettings.accentFollowsSystem`) это всё,
+/// что можно выбрать: произвольный цвет задать нельзя.
 enum AccentChoice: String, CaseIterable, Identifiable {
     case emerald, blue, violet, amber, graphite
     var id: String { rawValue }
@@ -82,6 +85,51 @@ final class AppearanceSettings {
     var scale: Double { didSet { defaults.set(scale, forKey: "appearance.scale") } }
     var density: Density { didSet { defaults.set(density.rawValue, forKey: "appearance.density") } }
     var accent: AccentChoice { didSet { defaults.set(accent.rawValue, forKey: "appearance.accent") } }
+    /// Цвет берётся из настроек macOS, а не из готовых схем.
+    var accentFollowsSystem: Bool { didSet { defaults.set(accentFollowsSystem, forKey: "appearance.accentSystem") } }
+
+    /// Цвет, которым закрашиваются кнопки, выделение и переключатели.
+    var accentColor: Color { accentFollowsSystem ? Color(nsColor: .controlAccentColor) : accent.color }
+
+    /// Выбор в списке цветовых схем: nil — «Как в системе».
+    var accentSelection: AccentChoice? {
+        get { accentFollowsSystem ? nil : accent }
+        set { if let newValue { accent = newValue; accentFollowsSystem = false } else { accentFollowsSystem = true } }
+    }
+
+    // MARK: Облегчённый режим
+
+    /// Автоматически упрощать оформление при энергосбережении и низком заряде.
+    var lightModeAuto: Bool {
+        didSet { defaults.set(lightModeAuto, forKey: "power.auto"); refreshLightMode() }
+    }
+    /// Порог заряда в процентах, ниже которого включается облегчённый режим.
+    var lightModeThreshold: Int {
+        didSet {
+            let v = PowerPolicy.clamp(lightModeThreshold)
+            if v != lightModeThreshold { lightModeThreshold = v; return }
+            defaults.set(v, forKey: "power.threshold"); refreshLightMode()
+        }
+    }
+    /// Последнее известное состояние питания.
+    private(set) var power = PowerState()
+    /// Почему включён облегчённый режим; nil — обычный режим.
+    private(set) var lightModeReason: LightModeReason?
+    var lightMode: Bool { lightModeReason != nil }
+
+    func updatePower(_ state: PowerState) {
+        guard state != power else { return }
+        power = state
+        refreshLightMode()
+    }
+
+    private func refreshLightMode() {
+        let reason = PowerPolicy.evaluate(power, automatic: lightModeAuto, threshold: lightModeThreshold)
+        if reason != lightModeReason { lightModeReason = reason }
+    }
+
+    /// Анимация, которую в облегчённом режиме нужно отключить.
+    func animation(_ a: Animation = .smooth(duration: 0.25)) -> Animation? { lightMode ? nil : a }
 
     init() {
         theme = ThemeMode(rawValue: defaults.string(forKey: "appearance.theme") ?? "") ?? .system
@@ -91,6 +139,10 @@ final class AppearanceSettings {
         scale = s == 0 ? 1.0 : min(max(s, Self.scaleRange.lowerBound), Self.scaleRange.upperBound)
         density = Density(rawValue: defaults.string(forKey: "appearance.density") ?? "") ?? .regular
         accent = AccentChoice(rawValue: defaults.string(forKey: "appearance.accent") ?? "") ?? .emerald
+        accentFollowsSystem = defaults.bool(forKey: "appearance.accentSystem")
+        lightModeAuto = defaults.object(forKey: "power.auto") as? Bool ?? true
+        let t = defaults.integer(forKey: "power.threshold")
+        lightModeThreshold = t == 0 ? PowerPolicy.defaultThreshold : PowerPolicy.clamp(t)
     }
 
     /// Тема применяется на уровне приложения, чтобы её получили и окно настроек, и меню.
@@ -168,7 +220,7 @@ struct LookRoot: ViewModifier {
         content
             .environment(\.look, look)
             .font(look.font(13))
-            .tint(look.accent.color)
+            .tint(look.accentColor)
             .controlSize(look.controlSize)
     }
 }

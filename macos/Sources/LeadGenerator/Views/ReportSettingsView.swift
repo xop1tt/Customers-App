@@ -40,7 +40,7 @@ struct ReportSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
+        .settingsForm()
         .onAppear { reports.refresh() }
     }
 }

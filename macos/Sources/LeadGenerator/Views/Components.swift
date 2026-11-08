@@ -105,6 +105,7 @@ struct Card<Content: View>: View {
 
 /// Сообщение об ошибке или успехе внизу окна.
 struct Toast: View {
+    @Environment(\.look) private var look
     let text: String
     let isError: Bool
     let close: () -> Void
@@ -116,9 +117,10 @@ struct Toast: View {
             Button(action: close) { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14).padding(.vertical, 9)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(look.lightMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.regularMaterial),
+                    in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
-        .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+        .shadow(color: .black.opacity(look.lightMode ? 0 : 0.15), radius: 12, y: 4)
         .frame(maxWidth: 560)
     }
 }

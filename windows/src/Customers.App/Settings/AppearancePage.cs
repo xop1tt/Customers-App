@@ -13,7 +13,39 @@ internal sealed class AppearancePage(AppModel model, SessionModel session, Shell
         ("Розовый", "#C239B3"), ("Красный", "#C42B1C"), ("Оранжевый", "#CA5010"), ("Графитовый", "#515C6B"),
     ];
 
+    private TextBlock? _lightStatus;
+
     protected override SettingsSection Kind => SettingsSection.Appearance;
+
+    /// <summary>Пока страница открыта, строка о причине облегчённого режима следует за состоянием питания.</summary>
+    private void Subscribe()
+    {
+        Loaded += (_, _) =>
+        {
+            App.Instance.LightMode.PropertyChanged += OnLightModeChanged;
+            UpdateLightStatus();
+        };
+        Unloaded += (_, _) => App.Instance.LightMode.PropertyChanged -= OnLightModeChanged;
+    }
+
+    private bool _subscribed;
+
+    private void OnLightModeChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => UpdateLightStatus();
+
+    private void UpdateLightStatus()
+    {
+        if (_lightStatus is null)
+        {
+            return;
+        }
+
+        var mode = App.Instance.LightMode;
+        _lightStatus.Text = mode.Reason is { } reason
+            ? "Сейчас включён. " + reason.Explanation + " Когда причина исчезнет, обычный вид вернётся сам."
+            : mode.HasBattery
+                ? $"Сейчас выключен. Заряд {mode.State.BatteryPercent}%."
+                : "Сейчас выключен. Заряда батареи компьютер не сообщает, поэтому учитывается только режим экономии энергии Windows.";
+    }
 
     protected override string Lead => "Оформление хранится на этом компьютере и не зависит от учётной записи.";
 
@@ -32,6 +64,30 @@ internal sealed class AppearancePage(AppModel model, SessionModel session, Shell
             }, 180);
         Add(UiKit.SettingRow("Материал окна", null, backdrop));
         Add(note);
+
+        Heading("Энергосбережение");
+        Add(UiKit.SettingRow("Облегчённый режим автоматически",
+            "Отключает анимации и прозрачные материалы окна, когда в Windows включена экономия энергии или заряд батареи ниже порога.",
+            UiKit.Toggle(Device.LightModeAuto, v =>
+            {
+                Device.LightModeAuto = v;
+                UpdateLightStatus();
+            })));
+        Add(UiKit.SettingRow("Порог заряда батареи, %", "От 5 до 50. Если компьютер заряжается, порог не учитывается.",
+            UiKit.Number(Device.LightModeThreshold, PowerPolicy.MinThreshold, PowerPolicy.MaxThreshold, v =>
+            {
+                Device.LightModeThreshold = (int)Math.Round(v);
+                UpdateLightStatus();
+            }, 1, null, 120)));
+        _lightStatus = UiKit.Muted("");
+        _lightStatus.TextWrapping = TextWrapping.Wrap;
+        Add(_lightStatus);
+        UpdateLightStatus();
+        if (!_subscribed)
+        {
+            _subscribed = true;
+            Subscribe();
+        }
 
         Heading("Акцентный цвет");
         Add(BuildAccent());
@@ -82,32 +138,28 @@ internal sealed class AppearancePage(AppModel model, SessionModel session, Shell
             wrap.Children.Add(button);
         }
 
-        var hexBox = new TextBox { Text = current ?? "", PlaceholderText = "#RRGGBB", Width = 130, Header = "Свой цвет" };
-        var error = new TextBlock { Foreground = UiKit.ThemeBrush("SystemFillColorCriticalBrush"), Visibility = Visibility.Collapsed };
-        var apply = UiKit.TextButton("Применить", () =>
-        {
-            if (DevicePreferences.NormalizeColor(hexBox.Text) is { } normalized)
-            {
-                Device.Accent = normalized;
-                Refresh();
-            }
-            else
-            {
-                error.Text = "Цвет задаётся в виде #RRGGBB, например #0067C0.";
-                error.Visibility = Visibility.Visible;
-            }
-        });
-        var reset = UiKit.TextButton("Как в системе", () =>
+        var system = new Button {
+            Height = 36,
+            Padding = new Thickness(12, 0, 12, 0),
+            CornerRadius = new CornerRadius(18),
+            BorderThickness = new Thickness(current is null ? 3 : 1),
+            BorderBrush = current is null ? UiKit.ThemeBrush("TextFillColorPrimaryBrush") : UiKit.ThemeBrush("ControlStrokeColorDefaultBrush"),
+            Content = current is null ? "✓ Как в системе" : "Как в системе",
+        };
+        ToolTipService.SetToolTip(system, "Цвет, выбранный в настройках Windows");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(system, "Как в системе");
+        system.Click += (_, _) =>
         {
             Device.Accent = null;
             Refresh();
-        });
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Bottom };
-        row.Children.Add(hexBox);
-        row.Children.Add(apply);
-        row.Children.Add(reset);
-        var body = UiKit.VStack(12, UiKit.Strong("Цвет выделения, кнопок и переключателей"), wrap, row, error,
-            UiKit.Muted("Цвет применяется сразу, перезапускать приложение не нужно."));
+        };
+        wrap.Children.Insert(0, system);
+        var presetNames = Presets.Select(p => p.Hex).ToArray();
+        var custom = current is not null && !presetNames.Contains(current, StringComparer.OrdinalIgnoreCase);
+        var body = UiKit.VStack(12, UiKit.Strong("Цвет выделения, кнопок и переключателей"), wrap,
+            UiKit.Muted(custom
+                ? "Сейчас задан цвет из прошлой версии. Выберите оттенок из набора или «Как в системе»."
+                : "Цвет применяется сразу, перезапускать приложение не нужно."));
         return UiKit.Card(body);
     }
 }

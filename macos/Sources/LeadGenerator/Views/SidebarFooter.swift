@@ -11,25 +11,19 @@ struct SidebarFooter: View {
     @State private var accountShown = false
     @State private var helpShown = false
     @State private var integrationsShown = false
+    @State private var customizeShown = false
     @State private var updates = UpdateController.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Только когда обновление уже скачано и проверено; иначе место не занимается.
-            if let version = updates.readyVersion {
-                Button { updates.installReady() } label: {
-                    Label("Обновить", systemImage: "arrow.down.circle.fill").appFont(12, .semibold)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                }
-                .buttonStyle(.borderedProminent).controlSize(.small)
-                .help("Установить версию \(version) и перезапустить приложение")
-                .accessibilityIdentifier("update-ready-button")
-                .padding(.leading, 6)
-            }
+            // Кнопка «Обновить» одна на все состояния обновления и появляется, только когда есть что делать.
+            updateButton
+            // Настройка панели стоит выше учётной записи, отдельной строкой: нажатия не пересекаются с «Обновить».
+            customizeRow
             footerRow
         }
         .scaledPadding(.horizontal, 8)
-        .padding(.bottom, updates.readyVersion == nil ? 0 : 4)
+        .padding(.bottom, updates.buttonState == .hidden ? 0 : 4)
         // Окружение передаётся явно: лист живёт в отдельном NSHostingView.
         .sheet(isPresented: $integrationsShown) {
             IntegrationsSheet(model: model)
@@ -38,6 +32,84 @@ struct SidebarFooter: View {
                 .environment(\.look, look)
         }
         .onAppear { updates.refreshRecentReleases() }
+        // Пока открыто любое окно из панели, раскрытая наведением панель не сворачивается.
+        .onChange(of: accountShown || helpShown || integrationsShown || customizeShown) { _, busy in
+            SidebarRevealModel.shared.busy(busy)
+        }
+    }
+
+    // MARK: Обновление
+
+    @ViewBuilder private var updateButton: some View {
+        switch updates.buttonState {
+        case .hidden:
+            EmptyView()
+        case .available(let version):
+            updateAction("Обновить", icon: "arrow.down.circle.fill", detail: version,
+                         help: "Скачать версию \(version) и установить, затем перезапустить приложение")
+        case .ready(let version):
+            updateAction("Обновить", icon: "arrow.down.circle.fill", detail: version,
+                         help: "Установить версию \(version) и перезапустить приложение")
+        case .retry(let version):
+            updateAction("Повторить обновление", icon: "arrow.clockwise.circle.fill", detail: version,
+                         help: "Не удалось скачать или установить версию \(version). Нажмите, чтобы повторить")
+        case .downloading(let version):
+            updateProgress("Загрузка обновления…", version: version)
+        case .installing:
+            updateProgress("Установка…", version: nil)
+        }
+    }
+
+    private func updateAction(_ title: String, icon: String, detail: String, help: String) -> some View {
+        Button { updates.performButtonAction() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                Text(title).appFont(12, .semibold)
+                Spacer(minLength: 4)
+                Text(detail).appFont(11).opacity(0.85)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.pillProminent)
+        .help(help)
+        .accessibilityIdentifier("update-ready-button")
+        .accessibilityLabel("\(title), версия \(detail)")
+    }
+
+    private func updateProgress(_ title: String, version: String?) -> some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(title).appFont(12, .medium)
+            Spacer(minLength: 4)
+            if let version { Text(version).appFont(11).foregroundStyle(.secondary) }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.06)))
+        .accessibilityIdentifier("update-progress")
+    }
+
+    // MARK: Настройка панели
+
+    private var customizeRow: some View {
+        Button { customizeShown.toggle() } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "slider.horizontal.3").font(.system(size: 12.5 * look.scale)).frame(width: 18)
+                Text("Настроить панель").appFont(12.5)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(FooterButtonStyle(active: customizeShown))
+        .help("Какие разделы показывать и как ведёт себя панель")
+        .accessibilityIdentifier("sidebar-customize-button")
+        .popover(isPresented: $customizeShown, arrowEdge: .top) {
+            SidebarCustomizeView { customizeShown = false }.environment(\.look, look)
+        }
     }
 
     private var footerRow: some View {
@@ -124,7 +196,10 @@ struct SidebarFooter: View {
             MenuRow("Получить поддержку", icon: "bubble.left") { helpShown = false; NSWorkspace.shared.open(Updates.wikiPage) }
                 .padding(6)
             Divider()
-            Text("Что нового?").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.secondary)
+            MenuRow("Что нового в этой версии", icon: "sparkles") { helpShown = false; WhatsNewController.shared.presentCurrent() }
+                .padding(6)
+            Divider()
+            Text("Все выпуски").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(.secondary)
                 .padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 4)
             VStack(alignment: .leading, spacing: 0) {
                 if let releases = updates.recentReleases, !releases.isEmpty {

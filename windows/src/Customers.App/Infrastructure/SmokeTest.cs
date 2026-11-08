@@ -491,6 +491,7 @@ public sealed class SmokeTest
         await Pause(900);
         Require(WhatsNewDialog.Current is not null, "окно «Что нового» не показано");
         Require(model!.Lines.Count == 4 && model.Lines.All(l => !l.Text.Contains("**", StringComparison.Ordinal)), "в списке изменений остались служебные символы");
+        Require(model.Features.Count > 0 && model.Features.SelectMany(f => f.Items).All(t => !t.Contains("http", StringComparison.OrdinalIgnoreCase)), "в «Что нового» нет сгруппированных пунктов или остались ссылки");
         await Shot("whats-new");
         WhatsNewDialog.Current!.Hide();
         await shown;

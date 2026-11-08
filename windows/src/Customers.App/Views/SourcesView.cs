@@ -55,13 +55,6 @@ public sealed class SourcesView : UserControl, ISectionAware, IDetachable
             _root.Children.Add(BuildCard(key));
         }
 
-        _root.Children.Add(new TextBlock { Text = "Недоступные источники", Style = UiKit.Style("SectionTitleStyle"), Margin = new Thickness(0, 12, 0, 0) });
-        _root.Children.Add(UiKit.Muted("Эти площадки не подключены: у них нет разрешённого публичного доступа."));
-        foreach (var (name, reason) in SourceCatalog.Unavailable)
-        {
-            _root.Children.Add(UiKit.SettingRow(name, reason, null, ""));
-        }
-
         _rebuilding = false;
     }
 

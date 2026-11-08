@@ -17,7 +17,7 @@ struct CloudAccountSettingsView: View {
             ImportLocalSection()
             DeleteAccountSection()
         }
-        .formStyle(.grouped)
+        .settingsForm()
         .onAppear { session.reloadCloudUser() }
     }
 }

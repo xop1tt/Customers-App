@@ -7,8 +7,10 @@ struct SidebarView: View {
     @Environment(\.look) private var look
     @Environment(\.session) private var session
     @AppStorage("sidebar.hidden") private var hiddenRaw = ""
+    @AppStorage(SidebarKeys.counts) private var showCounts = true
+    @AppStorage(SidebarKeys.sources) private var showSources = true
 
-    private var hidden: Set<String> { Set(hiddenRaw.split(separator: ",").map(String.init)) }
+    private var hidden: Set<String> { SidebarPrefs.parse(hidden: hiddenRaw) }
 
     var body: some View {
         @Bindable var model = model
@@ -26,7 +28,7 @@ struct SidebarView: View {
                     row(.archive, count: model.count(.archive))
                     row(.excluded, count: model.count(.excluded))
                 }
-                if !model.allSources.isEmpty {
+                if showSources, !model.allSources.isEmpty {
                     Section("Источники лидов") {
                         ForEach(model.allSources, id: \.self) { src in
                             Button {
@@ -47,11 +49,11 @@ struct SidebarView: View {
             .listStyle(.sidebar)
             .contextMenu {
                 Menu("Показывать разделы") {
-                    ForEach([NavSection.home, .new, .favorites, .sources, .runs, .archive, .excluded]) { s in
+                    ForEach(SidebarKeys.configurable) { s in
                         Toggle(s.title, isOn: Binding(get: { !hidden.contains(s.rawValue) }, set: { show in
                             var h = hidden
                             if show { h.remove(s.rawValue) } else { h.insert(s.rawValue) }
-                            hiddenRaw = h.sorted().joined(separator: ",")
+                            hiddenRaw = SidebarPrefs.serialize(hidden: h)
                         }))
                     }
                 }
@@ -69,7 +71,7 @@ struct SidebarView: View {
                     Text(s.title).appFont(13)
                     Spacer()
                     if alert { Circle().fill(.orange).frame(width: 6, height: 6) }
-                    if let count, count > 0 {
+                    if showCounts, let count, count > 0 {
                         if highlight {
                             Text("\(count)").appFont(10.5, .semibold).foregroundStyle(.white)
                                 .padding(.horizontal, 6).padding(.vertical, 1)

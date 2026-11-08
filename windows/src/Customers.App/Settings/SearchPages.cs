@@ -66,18 +66,15 @@ internal sealed class SourcesSettingsPage(AppModel model, SessionModel session, 
         Add(IntervalRow(S.Rss.IntervalHours, v => Change(s => s.Rss.IntervalHours = v)));
         Add(ListEditor("Адреса лент", "Любая публичная лента заказов или вакансий.", () => S.Rss.Feeds, v => Change(s => s.Rss.Feeds = v),
             SourceInput.FeedUrl, "https://example.com/rss.xml", "Не похоже на публичный адрес ленты"));
-        Add(ListEditor("Ключевые слова", "Пусто — берутся все записи ленты.", () => S.Rss.Keywords, v => Change(s => s.Rss.Keywords = v),
-            SourceInput.Keyword, "слово или фраза", "Пустое слово"));
+        Add(SourceFilters.FeedKeywords(Model));
 
         // Telegram
         Heading("Telegram");
         Add(UiKit.SettingRow("Публичные каналы", "Читаются через открытую веб-страницу t.me/s/…, без входа в аккаунт.", UiKit.Toggle(S.Telegram.Enabled, v => Change(s => s.Telegram.Enabled = v))));
         Add(IntervalRow(S.Telegram.IntervalHours, v => Change(s => s.Telegram.IntervalHours = v)));
         Add(UiKit.SettingRow("Страниц на канал", "Сколько страниц истории читать за один запуск.", UiKit.Number(S.Telegram.MaxPages, 1, 10, v => Change(s => s.Telegram.MaxPages = (int)v))));
-        Add(ListEditor("Каналы", "Имя, @имя или ссылка t.me/…", () => S.Telegram.Channels, v => Change(s => s.Telegram.Channels = v),
-            SourceInput.TelegramChannel, "@канал", "Не похоже на имя канала"));
-        Add(ListEditor("Ключевые слова", "Сообщение попадает в оценку, если в нём есть одно из слов.", () => S.Telegram.Keywords, v => Change(s => s.Telegram.Keywords = v),
-            SourceInput.Keyword, "слово или фраза", "Пустое слово"));
+        Add(SourceFilters.TelegramChannels(Model));
+        Add(SourceFilters.TelegramKeywords(Model));
 
         // VK
         Heading("ВКонтакте");
@@ -95,8 +92,7 @@ internal sealed class SourcesSettingsPage(AppModel model, SessionModel session, 
         Heading("OpenStreetMap");
         Add(UiKit.SettingRow("Организации по регионам", "Компании без сайта или с неработающим сайтом — потенциальные клиенты.", UiKit.Toggle(S.Osm.Enabled, v => Change(s => s.Osm.Enabled = v))));
         Add(IntervalRow(S.Osm.IntervalHours, v => Change(s => s.Osm.IntervalHours = v)));
-        Add(ListEditor("Регионы", "Город или область, как они называются на карте.", () => S.Osm.Regions, v => Change(s => s.Osm.Regions = v),
-            SourceInput.Region, "Ереван", "Пустое название"));
+        Add(SourceFilters.Regions(Model));
         Add(UiKit.SettingRow("Проверять сайты организаций", "Открывать сайт и оценивать, насколько он устарел или не работает.", UiKit.Toggle(S.Osm.CheckWebsites, v => Change(s => s.Osm.CheckWebsites = v))));
         Add(UiKit.SettingRow("Новых за один запуск", "Ограничение, чтобы не перегружать общедоступный сервер.", UiKit.Number(S.Osm.MaxNewPerRun, 1, 500, v => Change(s => s.Osm.MaxNewPerRun = (int)v), 10)));
         Add(UiKit.SettingRow("Обновлять запрос не чаще, дней", null, UiKit.Number(S.Osm.RefreshDays, 1, 90, v => Change(s => s.Osm.RefreshDays = v))));
@@ -124,7 +120,7 @@ internal sealed class SourcesSettingsPage(AppModel model, SessionModel session, 
     {
         if (await Dialogs.ConfirmAsync("Сбросить настройки источников?", "Списки, ключевые слова и интервалы вернутся к значениям по умолчанию. Найденные лиды не затрагиваются.", "Сбросить"))
         {
-            var fresh = new SearchSettings();
+            var fresh = SearchSettings.BlankStart();
             Change(s =>
             {
                 s.Rss = fresh.Rss;
@@ -156,31 +152,6 @@ internal sealed class FiltersPage(AppModel model, SessionModel session, ShellVie
         })));
 
         Heading("Категории организаций");
-        Add(UiKit.Muted("Какие виды бизнеса искать в OpenStreetMap и насколько важен каждый: вес добавляется к оценке лида."));
-        var groups = Model.SearchSettings.Osm.Categories.GroupBy(c => c.Group);
-        foreach (var group in groups)
-        {
-            var body = UiKit.VStack(6, UiKit.Strong(string.IsNullOrEmpty(group.Key) ? "Прочее" : group.Key));
-            foreach (var category in group)
-            {
-                var key = category.Key;
-                var enable = new ToggleSwitch { IsOn = category.Enabled, OnContent = "", OffContent = "", MinWidth = 0 };
-                enable.Toggled += (_, _) => Model.UpdateSearchSettings(s => s.Osm.Categories.First(c => c.Key == key).Enabled = enable.IsOn);
-                var weight = UiKit.Number(category.Weight, 0, 50, v => Model.UpdateSearchSettings(s => s.Osm.Categories.First(c => c.Key == key).Weight = v), 1, width: 130);
-                var row = new Grid { ColumnSpacing = 12 };
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                row.Children.Add(enable);
-                var label = new TextBlock { Text = category.Label, VerticalAlignment = VerticalAlignment.Center };
-                Grid.SetColumn(label, 1);
-                row.Children.Add(label);
-                Grid.SetColumn(weight, 2);
-                row.Children.Add(weight);
-                body.Children.Add(row);
-            }
-
-            Add(UiKit.Card(body));
-        }
+        Add(SourceFilters.Categories(Model));
     }
 }

@@ -125,3 +125,29 @@ public struct WelcomeFlow: Equatable, Sendable {
         configured ? .configured : (skipped.contains(step) ? .skipped : .pending)
     }
 }
+
+/// Название региона для поиска организаций по результату определения местоположения.
+public enum RegionSuggestion {
+    /// Город или населённый пункт; если его нет — район или область. Лишние слова вроде «городской округ» убираются.
+    /// nil — местоположение не определилось, регион выбирает пользователь.
+    public static func name(locality: String?, subAdministrativeArea: String? = nil, administrativeArea: String? = nil) -> String? {
+        for raw in [locality, subAdministrativeArea, administrativeArea] {
+            guard var s = raw?.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\"", with: ""), !s.isEmpty else { continue }
+            for prefix in ["городской округ ", "город ", "г. ", "муниципальный округ "] where s.lowercased().hasPrefix(prefix) {
+                s = String(s.dropFirst(prefix.count))
+            }
+            for suffix in [" городской округ", " (город)"] where s.lowercased().hasSuffix(suffix) {
+                s = String(s.dropLast(suffix.count))
+            }
+            s = s.trimmingCharacters(in: .whitespaces)
+            if !s.isEmpty { return s }
+        }
+        return nil
+    }
+
+    /// Добавляет предложенный регион, если пользователь ещё ничего не выбрал: уже заданное не трогаем.
+    public static func applying(_ suggestion: String?, to regions: [String]) -> [String] {
+        guard regions.isEmpty, let suggestion, !suggestion.isEmpty else { return regions }
+        return [suggestion]
+    }
+}
