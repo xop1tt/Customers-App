@@ -55,14 +55,22 @@ enum AccentChoice: String, CaseIterable, Identifiable {
         case .graphite: return "Графит"
         }
     }
+    /// Цвета в духе палитры Liquid Glass: насыщенные, светлее в тёмной теме, чтобы читаться сквозь стекло.
     var color: Color {
         switch self {
-        case .emerald: return Color(nsColor: NSColor(name: nil) { $0.isDark ? NSColor(srgbRed: 0.21, green: 0.76, blue: 0.65, alpha: 1) : NSColor(srgbRed: 0.06, green: 0.48, blue: 0.41, alpha: 1) })
-        case .blue: return Color(nsColor: NSColor(name: nil) { $0.isDark ? NSColor(srgbRed: 0.47, green: 0.65, blue: 0.94, alpha: 1) : NSColor(srgbRed: 0.18, green: 0.44, blue: 0.82, alpha: 1) })
-        case .violet: return Color(nsColor: NSColor(name: nil) { $0.isDark ? NSColor(srgbRed: 0.66, green: 0.57, blue: 0.94, alpha: 1) : NSColor(srgbRed: 0.45, green: 0.33, blue: 0.79, alpha: 1) })
-        case .amber: return Color(nsColor: NSColor(name: nil) { $0.isDark ? NSColor(srgbRed: 0.88, green: 0.66, blue: 0.31, alpha: 1) : NSColor(srgbRed: 0.72, green: 0.47, blue: 0.12, alpha: 1) })
+        case .emerald: return Self.dynamic(light: (0.00, 0.60, 0.45), dark: (0.19, 0.82, 0.62))
+        case .blue: return Self.dynamic(light: (0.00, 0.47, 1.00), dark: (0.04, 0.52, 1.00))
+        case .violet: return Self.dynamic(light: (0.53, 0.30, 0.93), dark: (0.69, 0.50, 1.00))
+        case .amber: return Self.dynamic(light: (0.90, 0.53, 0.00), dark: (1.00, 0.70, 0.16))
         case .graphite: return Color(nsColor: NSColor(name: nil) { $0.isDark ? NSColor(white: 0.82, alpha: 1) : NSColor(white: 0.25, alpha: 1) })
         }
+    }
+
+    private static func dynamic(light: (CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat)) -> Color {
+        Color(nsColor: NSColor(name: nil) {
+            let c = $0.isDark ? dark : light
+            return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: 1)
+        })
     }
 }
 

@@ -6,12 +6,17 @@ import UniformTypeIdentifiers
 /// Действия, которые верхнее меню берёт из окна (SwiftUI отдаёт их только представлениям).
 @MainActor
 enum MenuActions {
+    /// Замена действия «открыть настройки» (для тестов). По умолчанию настройки всплывают в главном окне.
     static var openSettingsAction: (() -> Void)?
 
-    /// Открыть настройки на разделе.
+    /// Открыть настройки на разделе: всплывающее окно поверх главного окна.
     static func openSettings(_ section: SettingsSection? = nil) {
         if let section { UserDefaults.standard.set(section.rawValue, forKey: "settings.section") }
-        openSettingsAction?()
+        if let openSettingsAction { openSettingsAction(); return }
+        // Без учётной записи настроек нет: они у каждого пользователя свои.
+        guard SessionModel.shared.current != nil else { showMainWindow(); return }
+        showMainWindow()
+        SettingsPresenter.shared.present()
     }
 
     /// Показать главное окно (если оно закрыто, а приложение работает в фоне).
@@ -57,7 +62,12 @@ struct AppCommands: Commands {
         CommandGroup(after: .appInfo) {
             Button("Проверить обновления…") { UpdateController.shared.check(manual: true) }
         }
-        CommandGroup(after: .appSettings) {
+        // Отдельного окна настроек нет: ⌘, открывает их поверх главного окна.
+        // Одна группа: в теле меню не больше десяти групп.
+        CommandGroup(replacing: .appSettings) {
+            Button("Настройки…") { MenuActions.openSettings() }
+                .keyboardShortcut(",", modifiers: .command)
+                .disabled(model == nil)
             Button("Учётная запись…") { MenuActions.openSettings(.account) }
                 .disabled(model == nil)
             Button("Синхронизировать сейчас") { session.sync?.syncNow() }

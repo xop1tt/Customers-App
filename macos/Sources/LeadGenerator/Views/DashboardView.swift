@@ -135,8 +135,8 @@ struct DashboardView: View {
             kpi("Исключено", "\(model.count(.excluded))", "по вашим правилам")
         }
         .fixedSize(horizontal: false, vertical: true)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+        .background(RoundedRectangle(cornerRadius: LiquidGlass.cardRadius, style: .continuous).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: LiquidGlass.cardRadius, style: .continuous).strokeBorder(.separator))
     }
 
     private func kpi(_ title: String, _ value: String, _ note: String) -> some View {

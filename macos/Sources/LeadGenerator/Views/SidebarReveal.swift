@@ -18,7 +18,7 @@ final class SidebarRevealModel {
 
     func edge(_ inside: Bool) { machine.setEdge(inside, now: Self.now); sync() }
     func panel(_ inside: Bool) { machine.setPanel(inside, now: Self.now); sync() }
-    /// Открыто меню или окно из панели (учётная запись, настройка панели): панель не сворачивается.
+    /// Открыто меню или окно из панели (учётная запись) или идёт настройка панели: панель не сворачивается.
     func busy(_ value: Bool) { machine.setBusy(value, now: Self.now); sync() }
     /// Свернуть сразу: панель закреплена, функция выключена.
     func reset() { machine.reset(); task?.cancel(); if revealed { revealed = false } }
@@ -85,86 +85,44 @@ struct RevealedSidebar: View {
             SidebarView()
         }
         .frame(width: 252 * look.scale)
-        .background(panelBackground)
-        .clipShape(UnevenRoundedRectangle(bottomTrailingRadius: 14, topTrailingRadius: 14, style: .continuous))
-        .overlay(UnevenRoundedRectangle(bottomTrailingRadius: 14, topTrailingRadius: 14, style: .continuous)
-            .strokeBorder(Color.primary.opacity(0.12)))
-        .shadow(color: .black.opacity(look.lightMode ? 0 : 0.22), radius: 18, x: 4)
+        .modifier(RevealedPanelChrome())
         .onHover { reveal.panel($0) }
-    }
-
-    /// Полупрозрачная подложка; в облегчённом режиме сплошная, без размытия.
-    @ViewBuilder private var panelBackground: some View {
-        if look.lightMode {
-            Color(nsColor: .windowBackgroundColor)
-        } else {
-            Rectangle().fill(.regularMaterial)
-        }
     }
 }
 
-/// Настройка боковой панели: какие разделы показывать и как панель себя ведёт. Всплывает у кнопки в нижней части панели.
-struct SidebarCustomizeView: View {
+/// Вид выехавшей панели по системе: на macOS 26+ — плавающая стеклянная панель с отступом от краёв окна,
+/// как боковая панель Liquid Glass; на 14–15 — панель у края окна на материале, как было в этих версиях.
+private struct RevealedPanelChrome: ViewModifier {
     @Environment(\.look) private var look
-    @AppStorage("sidebar.hidden") private var hiddenRaw = ""
-    @AppStorage(SidebarKeys.counts) private var showCounts = true
-    @AppStorage(SidebarKeys.sources) private var showSources = true
-    @AppStorage(SidebarKeys.hover) private var hoverReveal = true
-    let done: () -> Void
 
-    private var hidden: Set<String> { SidebarPrefs.parse(hidden: hiddenRaw) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Настройка панели").font(.system(size: 14, weight: .semibold)).padding(.horizontal, 16).padding(.top, 14)
-            Text("Что показывать слева и как панель ведёт себя").font(.system(size: 11.5)).foregroundStyle(.secondary)
-                .padding(.horizontal, 16).padding(.top, 2).padding(.bottom, 8)
-            Divider()
-            VStack(spacing: 0) {
-                ForEach(SidebarKeys.configurable) { s in
-                    toggleRow(s.title, icon: s.icon, isOn: Binding(get: { !hidden.contains(s.rawValue) }, set: { show in
-                        var h = hidden
-                        if show { h.remove(s.rawValue) } else { h.insert(s.rawValue) }
-                        hiddenRaw = SidebarPrefs.serialize(hidden: h)
-                    }))
-                }
-            }
-            .padding(.horizontal, 8).padding(.vertical, 6)
-            Divider()
-            VStack(spacing: 0) {
-                toggleRow("Счётчики у разделов", icon: "number", isOn: $showCounts)
-                toggleRow("Список источников", icon: "cylinder.split.1x2", isOn: $showSources)
-                toggleRow("Раскрывать при наведении", icon: "cursorarrow.motionlines", isOn: $hoverReveal)
-            }
-            .padding(.horizontal, 8).padding(.vertical, 6)
-            Text("Когда панель свёрнута, она выезжает при подведении курсора к левому краю окна и убирается, когда курсор уходит.")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 16).padding(.bottom, 8)
-            Button(action: done) { Text("Готово").frame(maxWidth: .infinity) }
-                .buttonStyle(.pillProminent)
-                .keyboardShortcut(.defaultAction)
-                .padding(.horizontal, 16).padding(.bottom, 14)
+    @ViewBuilder func body(content: Content) -> some View {
+        if LiquidGlass.isNative {
+            content
+                .glassPanel(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .padding(.vertical, 8).padding(.leading, 8)
+        } else {
+            let shape = UnevenRoundedRectangle(bottomTrailingRadius: 14, topTrailingRadius: 14, style: .continuous)
+            content
+                .background(look.lightMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.regularMaterial))
+                .clipShape(shape)
+                .overlay(shape.strokeBorder(Color.primary.opacity(0.12)))
+                .shadow(color: .black.opacity(look.lightMode ? 0 : 0.22), radius: 18, x: 4)
         }
-        .frame(width: 290)
-    }
-
-    private func toggleRow(_ title: String, icon: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon).frame(width: 20).foregroundStyle(.secondary)
-            Text(title).font(.system(size: 13))
-            Spacer()
-            Toggle("", isOn: isOn).labelsHidden().toggleStyle(.switch).controlSize(.small)
-        }
-        .padding(.horizontal, 8).padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
     }
 }
 
 enum SidebarKeys {
+    static let hidden = "sidebar.hidden"
+    static let hiddenSources = "sidebar.hiddenSources"
+    /// Порядок разделов внутри категорий и порядок источников.
+    static let order = "sidebar.order"
+    static let sourceOrder = "sidebar.sourceOrder"
     static let counts = "sidebar.counts"
     static let sources = "sidebar.sources"
     static let hover = "sidebar.hover"
     /// Разделы, которые можно скрыть.
     static let configurable: [NavSection] = [.home, .new, .favorites, .sources, .runs, .archive, .excluded]
+    /// Категории панели: пункты переставляются только внутри своей категории.
+    static let mainGroup: [NavSection] = [.home, .all, .new, .favorites]
+    static let workGroup: [NavSection] = [.sources, .runs, .archive, .excluded]
 }

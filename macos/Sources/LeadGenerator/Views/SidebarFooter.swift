@@ -7,11 +7,10 @@ struct SidebarFooter: View {
     let model: AppModel
     let session: SessionModel
     let look: AppearanceSettings
-    @Environment(\.openSettings) private var openSettings
     @State private var accountShown = false
     @State private var helpShown = false
     @State private var integrationsShown = false
-    @State private var customizeShown = false
+    @State private var editor = SidebarEditModel.shared
     @State private var updates = UpdateController.shared
 
     var body: some View {
@@ -33,7 +32,7 @@ struct SidebarFooter: View {
         }
         .onAppear { updates.refreshRecentReleases() }
         // Пока открыто любое окно из панели, раскрытая наведением панель не сворачивается.
-        .onChange(of: accountShown || helpShown || integrationsShown || customizeShown) { _, busy in
+        .onChange(of: accountShown || helpShown || integrationsShown || editor.editing) { _, busy in
             SidebarRevealModel.shared.busy(busy)
         }
     }
@@ -86,29 +85,46 @@ struct SidebarFooter: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.06)))
+        .glassBackground(RoundedRectangle(cornerRadius: LiquidGlass.fieldRadius, style: .continuous))
         .accessibilityIdentifier("update-progress")
     }
 
     // MARK: Настройка панели
 
-    private var customizeRow: some View {
-        Button { customizeShown.toggle() } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 12.5 * look.scale)).frame(width: 18)
-                Text("Настроить панель").appFont(12.5)
-                Spacer(minLength: 0)
+    /// «Настроить панель» сразу включает настройку в самой панели; на её месте появляются «Отменить» и «Готово».
+    @ViewBuilder private var customizeRow: some View {
+        if editor.editing {
+            HStack(spacing: 6) {
+                Button("Отменить") { editor.cancel() }
+                    .buttonStyle(.pill)
+                    .keyboardShortcut(.cancelAction)
+                    .help("Вернуть панель как было (Esc)")
+                    .accessibilityIdentifier("sidebar-customize-cancel")
+                Button { editor.commit() } label: {
+                    Label("Готово", systemImage: "checkmark").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.pillProminent)
+                .keyboardShortcut(.defaultAction)
+                .help("Сохранить порядок и видимость разделов")
+                .accessibilityIdentifier("sidebar-customize-done")
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(FooterButtonStyle(active: customizeShown))
-        .help("Какие разделы показывать и как ведёт себя панель")
-        .accessibilityIdentifier("sidebar-customize-button")
-        .popover(isPresented: $customizeShown, arrowEdge: .top) {
-            SidebarCustomizeView { customizeShown = false }.environment(\.look, look)
+            .padding(.vertical, 2)
+            .transition(.opacity)
+        } else {
+            Button { editor.begin() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "slider.horizontal.3").font(.system(size: 12.5 * look.scale)).frame(width: 18)
+                    Text("Настроить панель").appFont(12.5)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(FooterButtonStyle(active: false))
+            .help("Скрыть, показать или переставить разделы прямо в панели")
+            .accessibilityIdentifier("sidebar-customize-button")
         }
     }
 
@@ -175,7 +191,7 @@ struct SidebarFooter: View {
 
             Divider()
             VStack(spacing: 0) {
-                MenuRow("Настройки…", icon: "gearshape") { accountShown = false; openSettings() }
+                MenuRow("Настройки…", icon: "gearshape") { accountShown = false; MenuActions.openSettings() }
                 MenuRow("Интеграции…", icon: "puzzlepiece.extension") { accountShown = false; integrationsShown = true }
                 if let sync = session.sync {
                     MenuRow("Синхронизировать сейчас", icon: "arrow.triangle.2.circlepath") { accountShown = false; sync.syncNow() }
@@ -279,7 +295,7 @@ private struct MenuRow: View {
             }
             .padding(.horizontal, 8)
             .frame(height: timeline ? 30 : 28)
-            .background(RoundedRectangle(cornerRadius: 6).fill(hover ? Color.primary.opacity(0.08) : .clear))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hover ? Color.primary.opacity(0.08) : .clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -293,7 +309,7 @@ private struct FooterButtonStyle: ButtonStyle {
     @State private var hover = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(RoundedRectangle(cornerRadius: 6)
+            .background(RoundedRectangle(cornerRadius: LiquidGlass.controlRadius, style: .continuous)
                 .fill(Color.primary.opacity(active || configuration.isPressed ? 0.1 : hover ? 0.06 : 0)))
             .onHover { hover = $0 }
     }

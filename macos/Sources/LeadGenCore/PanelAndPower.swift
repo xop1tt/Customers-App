@@ -141,4 +141,46 @@ public struct SidebarPrefs: Equatable, Sendable {
     }
 
     public static func serialize(hidden: Set<String>) -> String { hidden.sorted().joined(separator: ",") }
+
+    /// Порядок элементов внутри категории хранится строкой «a,b,c». Повторы и пустые значения отбрасываются.
+    public static func parse(order raw: String) -> [String] {
+        var seen = Set<String>()
+        return raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    public static func serialize(order: [String]) -> String { order.joined(separator: ",") }
+
+    /// Элементы категории в сохранённом порядке. Элементы, которых нет в сохранённом порядке (новые разделы или
+    /// источники), идут в конце в исходном порядке; сохранённые, но уже не существующие, пропускаются.
+    public static func ordered(_ items: [String], by order: [String]) -> [String] {
+        let present = Set(items)
+        var result = order.filter { present.contains($0) }
+        var seen = Set(result)
+        for item in items where seen.insert(item).inserted { result.append(item) }
+        return result
+    }
+
+    /// Перенос элементов внутри категории (как `onMove` в списке): `offsets` — исходные позиции,
+    /// `destination` — позиция вставки в исходном массиве. Неверные позиции игнорируются.
+    public static func move(_ items: [String], from offsets: IndexSet, to destination: Int) -> [String] {
+        let valid = IndexSet(offsets.filter { items.indices.contains($0) })
+        guard !valid.isEmpty, (0...items.count).contains(destination) else { return items }
+        let moving = valid.map { items[$0] }
+        var rest: [String] = []
+        var insertAt = 0
+        for (i, item) in items.enumerated() where !valid.contains(i) {
+            if i < destination { insertAt += 1 }
+            rest.append(item)
+        }
+        rest.insert(contentsOf: moving, at: insertAt)
+        return rest
+    }
+
+    /// Изменение видимости одного элемента.
+    public static func toggled(_ hidden: Set<String>, _ item: String, visible: Bool) -> Set<String> {
+        var h = hidden
+        if visible { h.remove(item) } else { h.insert(item) }
+        return h
+    }
 }

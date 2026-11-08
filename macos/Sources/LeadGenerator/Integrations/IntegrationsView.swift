@@ -262,7 +262,6 @@ struct WebDAVConnectSheet: View {
 struct IntegrationsSheet: View {
     let model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openSettings) private var openSettings
     @State private var controller: IntegrationsController
     @State private var mail: MailController
 
@@ -302,9 +301,8 @@ struct IntegrationsSheet: View {
                         }
                         Spacer()
                         Button(mail.smtpReady ? "Настроить" : "Подключить почту") {
-                            UserDefaults.standard.set(SettingsSection.outreach.rawValue, forKey: "settings.section")
                             dismiss()
-                            openSettings()
+                            MenuActions.openSettings(.outreach)
                         }
                     }
                 }

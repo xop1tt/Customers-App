@@ -92,7 +92,7 @@ struct SourceEditor: View {
                     Tag(text: SourceCatalog.known[key]?.access ?? "—",
                         color: SourceCatalog.known[key]?.access == "Бесплатно" ? .green : .blue)
                 }
-                Toggle("Включён", isOn: enabledBinding)
+                Toggle("Включён", isOn: enabledBinding).toggleStyle(.glassSwitch)
                 Picker("Проверять", selection: intervalBinding) {
                     ForEach(intervals, id: \.self) { h in Text(intervalTitle(h)).tag(h) }
                 }
@@ -170,7 +170,7 @@ struct SourceEditor: View {
         RegionSection(regions: $model.searchSettings.osm.regions)
         OSMCategoriesEditor(categories: $model.searchSettings.osm.categories)
         Section {
-            Toggle("Проверять сайты организаций", isOn: $model.searchSettings.osm.checkWebsites)
+            Toggle("Проверять сайты организаций", isOn: $model.searchSettings.osm.checkWebsites).toggleStyle(.glassSwitch)
             Stepper("Новых организаций за запуск: \(model.searchSettings.osm.maxNewPerRun)",
                     value: $model.searchSettings.osm.maxNewPerRun, in: 5...200, step: 5)
             Stepper("Повторять одинаковый запрос не чаще чем раз в \(Int(model.searchSettings.osm.refreshDays)) дн.",

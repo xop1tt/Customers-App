@@ -131,7 +131,7 @@ struct WelcomeView: View {
             Spacer()
             if flow.canSkip { Button("Пропустить") { flow.skip() }.help("Перейти дальше, не настраивая этот шаг") }
             Button(flow.isLast ? "Готово — открыть главную" : "Далее") { flow.next() }
-                .buttonStyle(.borderedProminent)
+                .prominentGlassButton()
                 .keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, 24).padding(.vertical, 14)

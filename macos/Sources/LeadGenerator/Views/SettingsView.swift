@@ -80,7 +80,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     }
 }
 
-/// Окно настроек: слева поиск и разделы по группам, справа крупный заголовок и страница.
+/// Настройки: всплывающее окно поверх главного (см. `SettingsOverlay`). Слева поиск и разделы по группам,
+/// справа крупный заголовок и страница.
 struct SettingsView: View {
     @AppStorage("settings.section") private var selectedRaw = SettingsSection.appearance.rawValue
     @Environment(\.look) private var look
@@ -103,17 +104,19 @@ struct SettingsView: View {
                     .transition(.opacity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(Color(nsColor: .windowBackgroundColor).opacity(look.lightMode || !LiquidGlass.isNative ? 1 : 0.55))
             .animation(look.animation(.easeInOut(duration: 0.18)), value: selected)
         }
-        .frame(minWidth: 820, idealWidth: 920, minHeight: 560, idealHeight: 660)
-        .background(SettingsWindowChrome())
+        .frame(minWidth: 720, idealWidth: 1040, minHeight: 480, idealHeight: 740)
     }
 
-    /// Полупрозрачная подложка списка; в облегчённом режиме — сплошная.
+    /// Список разделов: на macOS 26+ лежит прямо на стекле окна, на прежних системах — на материале,
+    /// в облегчённом режиме — на сплошной подложке.
     @ViewBuilder private var sidebarBackground: some View {
         if look.lightMode {
             Color(nsColor: .controlBackgroundColor)
+        } else if LiquidGlass.isNative {
+            Color.clear
         } else {
             Rectangle().fill(.thinMaterial)
         }
@@ -135,10 +138,9 @@ struct SettingsView: View {
                         .accessibilityLabel("Очистить поиск")
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.primary.opacity(0.06)))
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
-            .padding(.horizontal, 12).padding(.top, 44).padding(.bottom, 10)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .glassBackground(RoundedRectangle(cornerRadius: LiquidGlass.fieldRadius, style: .continuous))
+            .padding(.horizontal, 12).padding(.top, 18).padding(.bottom, 10)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -171,7 +173,7 @@ struct SettingsView: View {
             Text(selected.subtitle).font(.system(size: 13.5 * look.scale)).foregroundStyle(.secondary)
         }
         .frame(maxWidth: 680, alignment: .leading)
-        .padding(.horizontal, 32).padding(.top, 40).padding(.bottom, 18)
+        .padding(.horizontal, 32).padding(.top, 28).padding(.bottom, 18)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
@@ -206,8 +208,8 @@ private struct SettingsNavRow: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selected ? Color.primary.opacity(0.1) : (hover ? Color.primary.opacity(0.05) : .clear)))
+            .background(RoundedRectangle(cornerRadius: LiquidGlass.controlRadius, style: .continuous)
+                .fill(selected ? look.accentColor.opacity(0.16) : (hover ? Color.primary.opacity(0.06) : .clear)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -311,7 +313,7 @@ private struct LightModeGroup: View {
         SettingsGroup(title: "Облегчённый режим",
                       footer: "В облегчённом режиме отключаются анимации и прозрачность, остальное работает как обычно: поиск, список лидов и все кнопки на месте.") {
             SettingRow(title: "Включать автоматически", detail: "При режиме энергосбережения macOS или низком заряде батареи") {
-                Toggle("", isOn: $look.lightModeAuto).labelsHidden().toggleStyle(.switch)
+                Toggle("", isOn: $look.lightModeAuto).labelsHidden().toggleStyle(.glassSwitch)
             }
             RowDivider()
             SettingRow(title: "Порог заряда", detail: "Ниже этого заряда (если Mac не на зарядке) включится облегчённый режим") {
@@ -391,7 +393,7 @@ struct SearchSettingsView: View {
                               ? "Если закрыть окно, приложение остаётся в строке меню и продолжает искать лиды по расписанию. Открыть окно или завершить работу можно через значок в строке меню."
                               : "Закрытие окна завершает приложение, поиск по расписанию останавливается.") {
                 SettingRow(title: "Продолжать работу в фоне") {
-                    Toggle("", isOn: $keepRunning).labelsHidden().toggleStyle(.switch)
+                    Toggle("", isOn: $keepRunning).labelsHidden().toggleStyle(.glassSwitch)
                 }
             }
         }
@@ -430,7 +432,7 @@ struct AccountSettingsView: View {
                 RowDivider()
                 SettingRow(title: "Запомнить вход на этом Mac", detail: "Не спрашивать пароль при следующем запуске") {
                     Toggle("", isOn: Binding(get: { session.remembered }, set: { session.setRemembered($0) }))
-                        .labelsHidden().toggleStyle(.switch)
+                        .labelsHidden().toggleStyle(.glassSwitch)
                 }
                 RowDivider()
                 SettingRow(title: "Выйти из учётной записи") {
@@ -506,7 +508,7 @@ struct DataSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Резервные копии") {
-                Toggle("Делать копию раз в сутки при запуске", isOn: $model.autoBackup)
+                Toggle("Делать копию раз в сутки при запуске", isOn: $model.autoBackup).toggleStyle(.glassSwitch)
                 Stepper("Хранить копий: \(model.keepBackups)", value: $model.keepBackups, in: 1...60)
                 LabeledContent("Папка") {
                     Text(model.backupDirectory.replacingOccurrences(of: NSHomeDirectory(), with: "~")).lineLimit(1).truncationMode(.middle)

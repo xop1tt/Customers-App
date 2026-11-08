@@ -52,12 +52,6 @@ struct LeadGeneratorApp: App {
         .defaultSize(width: 1440, height: 900)
         .commands { AppCommands(session: session, look: look) }
 
-        Settings {
-            SettingsRoot()
-                .environment(\.session, session)
-                .modifier(LookRoot(look: look))
-        }
-
     }
 }
 
@@ -78,19 +72,5 @@ struct SessionRoot: View {
         // Ссылки из писем (leadgenerator://auth/callback) открываются в этом же окне.
         .onOpenURL { session.handle(url: $0) }
         .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
-    }
-}
-
-struct SettingsRoot: View {
-    @Environment(\.session) private var session
-
-    var body: some View {
-        if let model = session.current {
-            SettingsView().environment(\.appModel, model)
-        } else {
-            ContentUnavailableView("Войдите в учётную запись", systemImage: "person.crop.circle",
-                                   description: Text("Настройки поиска и данных у каждого пользователя свои."))
-                .frame(width: 480, height: 300)
-        }
     }
 }

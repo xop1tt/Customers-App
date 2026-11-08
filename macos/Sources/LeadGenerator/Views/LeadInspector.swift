@@ -5,7 +5,6 @@ import SwiftUI
 struct LeadInspector: View {
     @Environment(\.appModel) private var model
     @Environment(\.look) private var look
-    @Environment(\.openSettings) private var openSettings
     let lead: LeadItem
 
     @State private var tab = 0
@@ -184,8 +183,8 @@ struct LeadInspector: View {
         }
         .scaledPadding(.all, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+        .background(RoundedRectangle(cornerRadius: LiquidGlass.cardRadius, style: .continuous).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: LiquidGlass.cardRadius, style: .continuous).strokeBorder(.separator))
     }
 
     @ViewBuilder private var contacts: some View {
@@ -291,7 +290,7 @@ struct LeadInspector: View {
             HStack {
                 if smtp {
                     Button { sendNow() } label: { Label("Отправить", systemImage: "paperplane.fill") }
-                        .buttonStyle(.borderedProminent)
+                        .prominentGlassButton()
                         .disabled(!ContactLinks.isEmail(recipient) || mail?.sending == true)
                     if mail?.sending == true { ProgressView().controlSize(.small) }
                     Button { openInMail() } label: { Label("В Почте", systemImage: "envelope") }
@@ -299,7 +298,7 @@ struct LeadInspector: View {
                         .help("Открыть письмо в программе «Почта»")
                 } else {
                     Button { openInMail() } label: { Label("Открыть в Почте", systemImage: "envelope") }
-                        .buttonStyle(.borderedProminent)
+                        .prominentGlassButton()
                         .disabled(!ContactLinks.isEmail(recipient))
                 }
                 Spacer()
@@ -317,8 +316,7 @@ struct LeadInspector: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("Письмо откроется в «Почте». Чтобы отправлять прямо отсюда, подключите почту.").appFont(11).foregroundStyle(.secondary)
                     Button("Настроить") {
-                        UserDefaults.standard.set(SettingsSection.outreach.rawValue, forKey: "settings.section")
-                        openSettings()
+                        MenuActions.openSettings(.outreach)
                     }
                     .buttonStyle(.link).appFont(11)
                 }

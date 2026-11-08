@@ -41,6 +41,9 @@ jobs:
           build-mode: manual
       # Собираем только приложение (с ним — все библиотеки), без тестовых таргетов.
       # Кэш .build здесь не подключаем: CodeQL видит только то, что реально компилируется.
+      - name: Toolchain (Xcode 26)
+        working-directory: macos
+        run: ./scripts/select-xcode.sh
       - name: Build app (debug, no tests)
         working-directory: macos
         run: swift build --product LeadGenerator
