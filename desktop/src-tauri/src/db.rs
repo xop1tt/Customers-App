@@ -385,13 +385,18 @@ mod tests {
     #[test]
     fn migration_reads_uncheckpointed_wal() {
         let d = tempdir().unwrap();
+        let src = d.path().join("src.db");
         let p = d.path().join("a.db");
-        let c = open_connection(&p, false, None).unwrap();
+        let c = open_connection(&src, false, None).unwrap();
         c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE t(a); INSERT INTO t VALUES(1),(2),(3);").unwrap();
-        // соединение не закрыто: данные только в WAL
+        // Данные только в WAL, как после аварийного завершения: копируем файлы при живом соединении.
+        // Саму базу с открытым соединением переименовать нельзя на Windows, да и в приложении миграция идёт до открытия.
+        fs::copy(&src, &p).unwrap();
+        fs::copy(with_suffix(&src, "-wal"), with_suffix(&p, "-wal")).unwrap();
+        drop(c);
+        assert!(fs::metadata(with_suffix(&p, "-wal")).unwrap().len() > 0, "в WAL лежат данные");
         let key = DbKey::random();
         migrate_plaintext(&p, &key).unwrap();
-        drop(c);
         let c2 = open_connection(&p, false, Some(&key)).unwrap();
         assert_eq!(row_counts(&c2).unwrap()["t"], 3);
     }
