@@ -39,9 +39,14 @@ final class SessionModel {
     /// Одна сессия на приложение: её используют и окна SwiftUI, и значок в строке меню (AppKit).
     static let shared = SessionModel()
 
+    /// На этом Mac уже были учётные записи до запуска: это обновление, а не первая установка
+    /// (для экрана «Что нового»).
+    private(set) var existingInstallAtLaunch = false
+
     init() {
         do {
             auth = try LocalAuthService(root: Self.rootDirectory)
+            existingInstallAtLaunch = auth?.hasUsers ?? false
         } catch {
             self.error = "Не удалось открыть учётные записи: \(error.localizedDescription)"
         }

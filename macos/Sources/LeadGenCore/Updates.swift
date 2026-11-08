@@ -97,6 +97,8 @@ public enum UpdateError: LocalizedError {
     case checksumMismatch
     case wrongApp(String)
     case cannotInstall(String)
+    case notEnoughSpace(String)
+    case network(String)
 
     public var errorDescription: String? {
         switch self {
@@ -106,6 +108,8 @@ public enum UpdateError: LocalizedError {
         case .checksumMismatch: return "Контрольная сумма скачанного файла не совпала: файл повреждён или подменён"
         case .wrongApp(let why): return "В установщике не то приложение: \(why)"
         case .cannotInstall(let why): return "Не удалось установить обновление: \(why)"
+        case .notEnoughSpace(let why): return why
+        case .network(let why): return why
         }
     }
 }
@@ -215,6 +219,23 @@ public enum Updates {
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard code == 200 else { throw UpdateError.badResponse(code) }
         return recent(from: try JSONDecoder().decode([ReleaseInfo].self, from: data), limit: limit)
+    }
+
+    /// Релиз по номеру версии (для «Что нового» после ручной установки). nil — такого релиза нет.
+    public static func fetchRelease(version: AppVersion, userAgent: String, session: URLSession = .shared) async throws -> ReleaseInfo? {
+        for tag in ["v\(version)", "\(version)"] {
+            var r = URLRequest(url: URL(string: "https://api.github.com/repos/\(repository)/releases/tags/\(tag)")!,
+                               cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+            r.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            r.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+            r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            let (data, resp) = try await session.data(for: r)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if code == 404 { continue }
+            guard code == 200 else { throw UpdateError.badResponse(code) }
+            if let release = try? JSONDecoder().decode(ReleaseInfo.self, from: data), !release.draft { return release }
+        }
+        return nil
     }
 
     /// Есть ли в релизе версия новее установленной.

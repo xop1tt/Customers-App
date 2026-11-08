@@ -5,6 +5,8 @@ import SwiftUI
 struct RootView: View {
     @Environment(\.appModel) private var model
     @Environment(\.look) private var look
+    @State private var welcomeShown = false
+    @State private var whatsNew = WhatsNewController.shared
 
     var body: some View {
         @Bindable var model = model
@@ -51,11 +53,40 @@ struct RootView: View {
                 .environment(\.appModel, model)
                 .environment(\.look, look)
         }
+        .sheet(item: Binding(get: { whatsNew.content }, set: { if $0 == nil { whatsNew.dismiss() } })) { c in
+            WhatsNewSheet(content: c) { whatsNew.dismiss() }
+        }
+        .task(id: model.username) { presentStartupScreens() }
+        .overlay {
+            if welcomeShown {
+                WelcomeView(model: model) {
+                    WelcomeGate.markDone(model)
+                    welcomeShown = false
+                    model.section = .home
+                }
+                .environment(\.appModel, model)
+                .environment(\.look, look)
+                .transition(.opacity)
+            }
+        }
         .overlay {
             if let e = model.startupError {
                 ContentUnavailableView("База недоступна", systemImage: "externaldrive.badge.exclamationmark", description: Text(e))
                     .background(.background)
             }
+        }
+    }
+
+    /// Первый запуск: мастер настройки; иначе после обновления — «Что нового». Одновременно оба не показываются.
+    private func presentStartupScreens() {
+        guard model.startupError == nil, !model.isInert else { return }
+        let existing = SessionModel.shared.existingInstallAtLaunch
+        if WelcomeGate.isNeeded(model) {
+            // Новичку список изменений не нужен: версия запоминается молча.
+            WhatsNewController.shared.evaluate(existingInstall: false)
+            welcomeShown = true
+        } else {
+            WhatsNewController.shared.evaluate(existingInstall: existing)
         }
     }
 
