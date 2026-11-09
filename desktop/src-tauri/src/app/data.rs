@@ -245,6 +245,7 @@ impl Core {
                 s.search.lock().unwrap().reschedule.notify_one();
                 self.sync_soon(&s);
             }
+            self.push_account_prefs(&s, changes);
             self.env.emit("account-prefs", json.clone());
         }
         Ok(json)

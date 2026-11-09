@@ -12,7 +12,7 @@ export function Appearance() {
   const current = d.accent ?? DEFAULT_ACCENT;
   return (
     <>
-      <Group title="Оформление">
+      <Group title="Оформление" sub="look">
         <SettingRow title="Акцентный цвет" hint="Используется для кнопок, выделения и переключателей.">
           <div className="swatches" role="radiogroup" aria-label="Акцентный цвет">
             {ACCENTS.map((c) => (
@@ -28,7 +28,7 @@ export function Appearance() {
         <SettingRow title="Анимации" hint="Плавные переходы и появление окон."><Switch checked={d.animations} onChange={(v) => void patchDevice({ animations: v })} /></SettingRow>
       </Group>
 
-      <Group title="Боковая панель">
+      <Group title="Боковая панель" sub="sidebar">
         <SettingRow title="Числа у разделов"><Switch checked={d.sidebarCounts} onChange={(v) => void patchDevice({ sidebarCounts: v })} /></SettingRow>
         <SettingRow title="Список источников"><Switch checked={d.sidebarSources} onChange={(v) => void patchDevice({ sidebarSources: v })} /></SettingRow>
         <SettingRow title="Показ при наведении" hint="Свёрнутая панель выезжает, когда курсор у левого края окна."><Switch checked={d.sidebarHover} onChange={(v) => void patchDevice({ sidebarHover: v })} /></SettingRow>
@@ -44,12 +44,12 @@ export function SystemSection() {
   const light = useStore((s) => s.lightMode);
   return (
     <>
-      <Group title="Запуск и фон">
+      <Group title="Запуск и фон" sub="startup">
         <SettingRow title="Запускать при входе в систему"><Switch checked={d.launchAtLogin} onChange={(v) => void patchDevice({ launchAtLogin: v })} /></SettingRow>
         <SettingRow title="Запускать свёрнутым" hint="Окно не показывается при запуске, приложение работает в фоне и в значке в трее."><Switch checked={d.startMinimized} onChange={(v) => void patchDevice({ startMinimized: v })} /></SettingRow>
         <SettingRow title="Закрытие окна сворачивает в трей" hint="Автопоиск и синхронизация продолжают работать. Выйти полностью можно из меню значка."><Switch checked={d.closeToTray} onChange={(v) => void patchDevice({ closeToTray: v })} /></SettingRow>
       </Group>
-      <Group title="Экономия энергии">
+      <Group title="Экономия энергии" sub="power">
         <SettingRow title="Облегчённый режим автоматически" hint="Отключает анимации, когда включено энергосбережение или заряд батареи низкий.">
           <Switch checked={d.lightModeAuto} onChange={(v) => void patchDevice({ lightModeAuto: v })} />
         </SettingRow>

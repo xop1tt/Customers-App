@@ -12,13 +12,13 @@ export function OutreachSection() {
   if (!a) return null;
   return (
     <>
-      <Group title="Почта"><MailPanel /></Group>
-      <Group title="Подпись" note="Добавляется в конец писем, которые создаёт приложение.">
+      <Group title="Почта" sub="mail"><MailPanel /></Group>
+      <Group title="Подпись" sub="signature" note="Добавляется в конец писем, которые создаёт приложение.">
         <div style={{ paddingTop: 12 }}>
           <TextArea value={signature} onChange={setSignature} onBlur={() => { if (signature !== a.signature) void patchAccount({ signature }); }} placeholder={"С уважением,\nИмя Фамилия\n+7 …"} rows={4} />
         </div>
       </Group>
-      <Group title="Звонки">
+      <Group title="Звонки" sub="calls">
         <CallApps />
         <SettingRow title="Спрашивать перед звонком" hint="Перед открытием приложения для звонков показывается подтверждение."><Switch checked={a.confirmCalls} onChange={(v) => void patchAccount({ confirmCalls: v })} /></SettingRow>
       </Group>
