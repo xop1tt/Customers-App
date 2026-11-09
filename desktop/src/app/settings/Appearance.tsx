@@ -8,7 +8,6 @@ const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2].map((v) => ({ value: v, la
 
 export function Appearance() {
   const d = useStore((s) => s.device);
-  const light = useStore((s) => s.lightMode);
   const [hex, setHex] = useState(d.accent ?? "");
   const current = d.accent ?? DEFAULT_ACCENT;
   return (
@@ -29,6 +28,27 @@ export function Appearance() {
         <SettingRow title="Анимации" hint="Плавные переходы и появление окон."><Switch checked={d.animations} onChange={(v) => void patchDevice({ animations: v })} /></SettingRow>
       </Group>
 
+      <Group title="Боковая панель">
+        <SettingRow title="Числа у разделов"><Switch checked={d.sidebarCounts} onChange={(v) => void patchDevice({ sidebarCounts: v })} /></SettingRow>
+        <SettingRow title="Список источников"><Switch checked={d.sidebarSources} onChange={(v) => void patchDevice({ sidebarSources: v })} /></SettingRow>
+        <SettingRow title="Показ при наведении" hint="Свёрнутая панель выезжает, когда курсор у левого края окна."><Switch checked={d.sidebarHover} onChange={(v) => void patchDevice({ sidebarHover: v })} /></SettingRow>
+        <SettingRow title="Порядок и видимость разделов"><Button onClick={() => setState({ settings: null, customizeNav: true })}>Настроить панель</Button></SettingRow>
+      </Group>
+
+    </>
+  );
+}
+
+export function SystemSection() {
+  const d = useStore((s) => s.device);
+  const light = useStore((s) => s.lightMode);
+  return (
+    <>
+      <Group title="Запуск и фон">
+        <SettingRow title="Запускать при входе в систему"><Switch checked={d.launchAtLogin} onChange={(v) => void patchDevice({ launchAtLogin: v })} /></SettingRow>
+        <SettingRow title="Запускать свёрнутым" hint="Окно не показывается при запуске, приложение работает в фоне и в значке в трее."><Switch checked={d.startMinimized} onChange={(v) => void patchDevice({ startMinimized: v })} /></SettingRow>
+        <SettingRow title="Закрытие окна сворачивает в трей" hint="Автопоиск и синхронизация продолжают работать. Выйти полностью можно из меню значка."><Switch checked={d.closeToTray} onChange={(v) => void patchDevice({ closeToTray: v })} /></SettingRow>
+      </Group>
       <Group title="Экономия энергии">
         <SettingRow title="Облегчённый режим автоматически" hint="Отключает анимации, когда включено энергосбережение или заряд батареи низкий.">
           <Switch checked={d.lightModeAuto} onChange={(v) => void patchDevice({ lightModeAuto: v })} />
@@ -41,18 +61,6 @@ export function Appearance() {
         {light && <Notice tone="info">{explanation(light)}</Notice>}
       </Group>
 
-      <Group title="Боковая панель">
-        <SettingRow title="Числа у разделов"><Switch checked={d.sidebarCounts} onChange={(v) => void patchDevice({ sidebarCounts: v })} /></SettingRow>
-        <SettingRow title="Список источников"><Switch checked={d.sidebarSources} onChange={(v) => void patchDevice({ sidebarSources: v })} /></SettingRow>
-        <SettingRow title="Показ при наведении" hint="Свёрнутая панель выезжает, когда курсор у левого края окна."><Switch checked={d.sidebarHover} onChange={(v) => void patchDevice({ sidebarHover: v })} /></SettingRow>
-        <SettingRow title="Порядок и видимость разделов"><Button onClick={() => setState({ settings: null, customizeNav: true })}>Настроить панель</Button></SettingRow>
-      </Group>
-
-      <Group title="Запуск и фон">
-        <SettingRow title="Запускать при входе в систему"><Switch checked={d.launchAtLogin} onChange={(v) => void patchDevice({ launchAtLogin: v })} /></SettingRow>
-        <SettingRow title="Запускать свёрнутым" hint="Окно не показывается при запуске, приложение работает в фоне и в значке в трее."><Switch checked={d.startMinimized} onChange={(v) => void patchDevice({ startMinimized: v })} /></SettingRow>
-        <SettingRow title="Закрытие окна сворачивает в трей" hint="Автопоиск и синхронизация продолжают работать. Выйти полностью можно из меню значка."><Switch checked={d.closeToTray} onChange={(v) => void patchDevice({ closeToTray: v })} /></SettingRow>
-      </Group>
     </>
   );
 }

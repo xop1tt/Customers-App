@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS sync_dirty (
 ";
 
 /// Ключи kv, которые уходят в облако. Значения — JSON-текст.
-pub const SYNCED_KEYS: [&str; 3] = ["search.settings", "draft.signature", "search.auto"];
+pub const SYNCED_KEYS: [&str; 5] = ["search.settings", "draft.signature", "search.auto", "profile.name", "profile.avatar"];
 const LEAD_FIELDS: [&str; 6] = ["data", "favorite", "archived", "deleted", "seen", "note"];
 
 /// Время изменения для перенесённых данных: раньше любых изменений в облаке (2000-01-01).

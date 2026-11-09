@@ -126,7 +126,7 @@ let device: DevicePrefs = { ...baseDevice };
 
 let account: AccountPrefs = {
   autoSearchMinutes: 60, signature: "", backupDirectory: "~/Documents/Customers Backups/anna", autoBackup: true, keepBackups: 14, dataPath: null,
-  notifyNewLeads: true, notifyErrors: true, notifySync: false, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1,
+  notifyNewLeads: true, notifyErrors: true, notifySync: false, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1, callApp: "system",
   welcomeDone: !demo.has("welcome"), exportLastTab: "file",
 };
 
@@ -175,8 +175,9 @@ let search: SearchStatus = {
 
 let signedIn = demo.has("auth") ? false : !demo.has("local");
 let cloud = demo.has("cloud");
+let profile: { name: string | null; avatar: string | null } = { name: null, avatar: null };
 const session = (): SessionInfo => ({
-  id: cloud ? "cloud-1" : "anna", displayName: cloud ? "anna@example.ru" : "anna", isCloud: cloud,
+  id: cloud ? "cloud-1" : "anna", displayName: profile.name ?? (cloud ? "anna@example.ru" : "anna"), avatar: profile.avatar, isCloud: cloud,
   cloudUser: cloud ? { id: "1", email: "anna@example.ru", newEmail: null, confirmed: true } : null, databasePath: "/Users/anna/Library/Application Support/Lead Generator/anna/leads.db",
 });
 
@@ -242,7 +243,21 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
       emit("session-changed", session());
       return null;
     case "cloud_sign_up":
+      profile = { ...profile, name: String(args.username ?? "") || null };
       return String(args.email);
+    case "set_profile":
+      if (args.name != null) profile = { ...profile, name: String(args.name) };
+      if (args.avatar != null) profile = { ...profile, avatar: String(args.avatar) || null };
+      emit("session-changed", session());
+      return session();
+    case "call_apps":
+      return [
+        { id: "system", title: "Стандартное приложение системы", installed: true, opensChat: false },
+        { id: "whatsapp", title: "WhatsApp", installed: true, opensChat: true },
+        { id: "telegram", title: "Telegram", installed: true, opensChat: true },
+        { id: "viber", title: "Viber", installed: false, opensChat: true },
+        { id: "skype", title: "Skype", installed: false, opensChat: false },
+      ];
     case "cloud_confirm":
     case "cloud_finish_reset":
     case "cloud_set_password_after_recovery":

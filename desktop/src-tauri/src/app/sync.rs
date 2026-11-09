@@ -184,6 +184,8 @@ impl Core {
         if pulled > 0 {
             self.env.emit("data-changed", Value::Null);
             self.reload_synced_settings(s);
+            // Имя и аватар тоже приходят из облака.
+            self.env.emit("session-changed", serde_json::to_value(self.info()).unwrap_or(Value::Null));
         }
         if let Err(e) = &result {
             if !matches!(e, CloudError::Network(_)) {

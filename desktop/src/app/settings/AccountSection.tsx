@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { fullRu } from "../../lib/format";
+import { avatarFromFile } from "../../lib/avatar";
 import { Avatar, Button, Field, Group, Notice, PasswordInput, SettingRow, Switch, Tag, TextInput } from "../../ui/kit";
 import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, leaveSession, toast, useStore } from "../../state/store";
@@ -13,15 +14,48 @@ export function AccountSection() {
   return (
     <>
       <div className="acct-head">
-        <Avatar name={session.displayName} size={44} />
+        <Avatar name={session.displayName} src={session.avatar} size={56} />
         <div className="col grow" style={{ gap: 2 }}>
           <h3 className="ellipsis">{session.displayName}</h3>
           <span className="muted">{session.isCloud ? "Облачный аккаунт: данные синхронизируются между устройствами" : "Локальный аккаунт: данные хранятся только на этом компьютере"}</span>
         </div>
         <Button icon="logout" onClick={() => void leaveSession()}>Выйти</Button>
       </div>
+      <ProfileGroup />
       {session.isCloud ? <CloudAccount /> : <LocalAccount />}
     </>
+  );
+}
+
+function ProfileGroup() {
+  const session = useStore((s) => s.session);
+  const [name, setName] = useState(session?.displayName ?? "");
+  const [busy, setBusy] = useState(false);
+  const file = useRef<HTMLInputElement>(null);
+  useEffect(() => setName(session?.displayName ?? ""), [session?.displayName]);
+  if (!session) return null;
+  const saveName = async () => {
+    setBusy(true);
+    await attempt(() => api.setProfile(name.trim()));
+    setBusy(false);
+  };
+  const pick = async (f: File | undefined) => {
+    if (!f) return;
+    const url = await attempt(() => avatarFromFile(f));
+    if (url) { await attempt(() => api.setProfile(undefined, url)); toast(session.isCloud ? "Фото сохранено и появится на других устройствах" : "Фото сохранено", "success"); }
+  };
+  return (
+    <Group title="Профиль" note={session.isCloud ? "Имя и фото хранятся в облаке и одинаковы на всех ваших устройствах." : "Имя и фото хранятся на этом компьютере."}>
+      <SettingRow title="Фото" hint="Квадратная картинка, лучше от 200 пикселей.">
+        <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
+        <Button icon="upload" onClick={() => file.current?.click()}>{session.avatar ? "Заменить" : "Выбрать"}</Button>
+        {session.avatar && <Button variant="ghost" onClick={() => void attempt(() => api.setProfile(undefined, ""))}>Убрать</Button>}
+      </SettingRow>
+      <SettingRow title="Имя" hint="Показывается в приложении вместо адреса почты.">
+        <TextInput value={name} onChange={setName} maxLength={40} wrapClass="w-name" onKeyDown={(e) => { if (e.key === "Enter" && name.trim() && name.trim() !== session.displayName) void saveName(); }} />
+        <Button busy={busy} disabled={!name.trim() || name.trim() === session.displayName} onClick={() => void saveName()}>Сохранить</Button>
+      </SettingRow>
+    </Group>
   );
 }
 

@@ -19,11 +19,15 @@ import { LeadsPage } from "./pages/LeadsPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { RunsPage } from "./pages/RunsPage";
 import { Settings } from "./settings/Settings";
+import { ReportDialog } from "./settings/SystemSections";
 import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
 import { useViewportWidth } from "../state/hooks";
 
 const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+const MIN_CENTER = 560;
+const INSP_MIN = 300;
+const INSP_MAX = 640;
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
 export function App() {
@@ -115,7 +119,7 @@ function Resizer({ side, value, min, max, onLive, onCommit }: { side: "left" | "
       aria-orientation="vertical"
       aria-valuenow={value}
       tabIndex={0}
-      onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture(e.pointerId); start.current = { x: e.clientX, w: value }; }}
+      onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture(e.pointerId); start.current = { x: e.clientX, w: value }; last.current = value; document.body.classList.add("resizing"); }}
       onPointerMove={(e) => {
         if (!start.current) return;
         const dx = e.clientX - start.current.x;
@@ -123,7 +127,8 @@ function Resizer({ side, value, min, max, onLive, onCommit }: { side: "left" | "
         last.current = w;
         onLive(w);
       }}
-      onPointerUp={() => { if (start.current) { start.current = null; onCommit(last.current); } }}
+      onPointerUp={() => { document.body.classList.remove("resizing"); if (start.current) { start.current = null; onCommit(last.current); } }}
+      onPointerCancel={() => { document.body.classList.remove("resizing"); if (start.current) { start.current = null; onCommit(last.current); } }}
       onDoubleClick={() => onCommit(side === "left" ? 260 : 400)}
       onKeyDown={(e) => {
         const step = e.shiftKey ? 40 : 12;
@@ -181,15 +186,20 @@ function Shell() {
     void api.whatsNew().then((w) => { if (w.show) setState({ whatsNewOpen: true }); }).catch(() => {});
   }, []);
 
+  const reportOpen = useStore((s) => s.reportOpen);
   const width = useViewportWidth();
   const narrow = width < 900;
-  const floatInsp = width < 1240;
+  // Рабочая область не должна становиться уже MIN_CENTER: иначе панель сведений наезжает на кнопки верхней панели.
+  const navTaken = narrow || !device.navOpen ? 0 : navW;
+  const room = width - navTaken - MIN_CENTER;
+  const floatInsp = room < INSP_MIN;
+  const inspDock = clamp(inspW, INSP_MIN, Math.max(INSP_MIN, Math.min(INSP_MAX, room)));
   const selected = useStore((st) => st.selection.length);
   const peek = useStore((st) => st.navPeek);
   const showInsp = lead && device.inspectorShown && (!floatInsp || selected === 1);
 
   return (
-    <div className="shell" style={{ ["--nav-w" as string]: `${navW}px`, ["--insp-w" as string]: `${inspW}px` }}>
+    <div className="shell" style={{ ["--nav-w" as string]: `${navW}px`, ["--insp-w" as string]: `${floatInsp ? Math.min(inspW, 460) : inspDock}px` }}>
       {narrow ? (
         peek && (
           <>
@@ -220,7 +230,7 @@ function Shell() {
           </aside>
         ) : (
           <>
-            <Resizer side="right" value={inspW} min={300} max={640} onLive={setInspLive} onCommit={(v) => { setInspLive(null); void patchDevice({ inspectorWidth: v }); }} />
+            <Resizer side="right" value={inspDock} min={INSP_MIN} max={Math.max(INSP_MIN, Math.min(INSP_MAX, room))} onLive={setInspLive} onCommit={(v) => { setInspLive(null); void patchDevice({ inspectorWidth: v }); }} />
             <aside className="inspector" aria-label="Сведения о лиде">
               <Inspector />
             </aside>
@@ -229,6 +239,7 @@ function Shell() {
       )}
       {exportOpen && <ExportDialog />}
       {whatsNew && <WhatsNewDialog />}
+      {reportOpen && <ReportDialog onClose={() => setState({ reportOpen: false })} />}
       <CrashPrompt />
     </div>
   );

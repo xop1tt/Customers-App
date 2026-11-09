@@ -3,8 +3,9 @@ import { api } from "../api";
 import type { CrmReport, CrmState, ExportFieldInfo } from "../api/types";
 import { integer, plural } from "../lib/format";
 import { pickSavePath } from "../lib/platform";
-import { Button, Checkbox, Field, Notice, PasswordInput, ProgressBar, Segmented, Select, SettingRow, Tabs, TextInput } from "../ui/kit";
+import { Button, Checkbox, Notice, ProgressBar, Segmented, Select, SettingRow, Tabs } from "../ui/kit";
 import { Dialog, confirmDialog } from "../ui/overlay";
+import { Connect, TITLES } from "./panels/CrmPanel";
 import { attempt, patchAccount, setState, toast, useStore } from "../state/store";
 import { useEvent } from "../state/hooks";
 
@@ -70,49 +71,9 @@ function FileTab({ ids, onDone }: { ids: string[]; onDone: () => void }) {
   );
 }
 
-const TITLES = { bitrix: "Битрикс24", notion: "Notion", webhook: "Вебхук" } as const;
-
 function CrmTab({ kind, crm, ids }: { kind: "bitrix" | "notion" | "webhook"; crm: CrmState; ids: string[] }) {
   const connected = crm[kind].connected;
   return connected ? <Connected kind={kind} crm={crm} ids={ids} /> : <Connect kind={kind} />;
-}
-
-function Connect({ kind }: { kind: "bitrix" | "notion" | "webhook" }) {
-  const [url, setUrl] = useState("");
-  const [token, setToken] = useState("");
-  const [db, setDb] = useState("");
-  const [busy, setBusy] = useState(false);
-  const go = async () => {
-    setBusy(true);
-    const ok = await attempt(async () => {
-      if (kind === "bitrix") await api.connectBitrix(url.trim());
-      else if (kind === "webhook") await api.connectWebhook(url.trim());
-      else await api.connectNotion(token.trim(), db.trim(), false);
-      return true;
-    });
-    setBusy(false);
-    if (ok) toast(`${TITLES[kind]} подключён`, "success");
-  };
-  return (
-    <div className="col" style={{ gap: 14 }}>
-      {kind === "bitrix" && <>
-        <p className="muted">Создайте входящий вебхук в Битрикс24 (Разработчикам → Другое → Входящий вебхук) с правом CRM и вставьте его адрес. Лиды попадут в CRM как лиды.</p>
-        <Field label="Адрес вебхука"><TextInput value={url} onChange={setUrl} placeholder="https://company.bitrix24.ru/rest/1/xxxxxxxx/" /></Field>
-      </>}
-      {kind === "webhook" && <>
-        <p className="muted">Приложение отправит каждый лид POST-запросом в формате JSON на ваш адрес (Zapier, Make, n8n или собственный сервер).</p>
-        <Field label="Адрес"><TextInput value={url} onChange={setUrl} placeholder="https://hooks.example.com/…" /></Field>
-      </>}
-      {kind === "notion" && <>
-        <p className="muted">Создайте внутреннюю интеграцию на notion.so/my-integrations, откройте ей доступ к базе данных и вставьте токен и адрес базы.</p>
-        <Field label="Токен интеграции"><PasswordInput value={token} onChange={setToken} /></Field>
-        <Field label="Адрес или идентификатор базы"><TextInput value={db} onChange={setDb} placeholder="https://www.notion.so/…" /></Field>
-      </>}
-      <div className="row" style={{ justifyContent: "flex-end" }}>
-        <Button variant="primary" busy={busy} disabled={kind === "notion" ? !token.trim() || !db.trim() : !url.trim()} onClick={() => void go()}>Подключить</Button>
-      </div>
-    </div>
-  );
 }
 
 function Connected({ kind, crm, ids }: { kind: "bitrix" | "notion" | "webhook"; crm: CrmState; ids: string[] }) {

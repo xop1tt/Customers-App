@@ -113,9 +113,18 @@ export interface CloudUserInfo {
 export interface SessionInfo {
   id: string;
   displayName: string;
+  /** Аватар в виде data-URL; приходит из облака вместе с остальными настройками. */
+  avatar?: string | null;
   isCloud: boolean;
   cloudUser: CloudUserInfo | null;
   databasePath: string;
+}
+
+export interface CallAppInfo {
+  id: string;
+  title: string;
+  installed: boolean;
+  opensChat: boolean;
 }
 
 export interface DevicePrefs {
@@ -171,6 +180,7 @@ export interface AccountPrefs {
   mailDelivery: string;
   confirmCalls: boolean;
   confirmCallsVersion: number;
+  callApp: string;
   welcomeDone: boolean;
   exportLastTab: string;
 }

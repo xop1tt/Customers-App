@@ -25,6 +25,9 @@ pub struct CloudUser {
     pub email_confirmed_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
+    /// Пользовательские данные Auth: сюда при регистрации попадает имя пользователя.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_metadata: Option<Value>,
 }
 
 fn non_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
@@ -32,6 +35,11 @@ fn non_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D
 }
 
 impl CloudUser {
+    /// Имя пользователя, указанное при регистрации.
+    pub fn username(&self) -> Option<String> {
+        let name = self.user_metadata.as_ref()?.get("display_name")?.as_str()?.trim();
+        (!name.is_empty()).then(|| name.to_string())
+    }
     pub fn is_confirmed(&self) -> bool {
         self.email_confirmed_at.as_deref().map(|s| !s.is_empty()).unwrap_or(false)
     }
@@ -238,12 +246,20 @@ impl CloudAuth {
 
     /// Регистрация. Если адрес уже занят, ответ такой же, как для нового: письмо просто не придёт.
     pub async fn sign_up(&self, raw_email: &str, password: &str) -> CloudResult<()> {
+        self.sign_up_named(raw_email, password, None).await
+    }
+
+    /// Регистрация с именем пользователя: оно сохраняется в данных учётной записи и показывается в приложении.
+    pub async fn sign_up_named(&self, raw_email: &str, password: &str, username: Option<&str>) -> CloudResult<()> {
         let email = Self::valid_email(raw_email)?;
         if let Some(p) = validation::password_problem(password) {
             return Err(CloudError::WeakPassword(Some(p)));
         }
         self.gate(MailAction::Signup, &email).await?;
-        let body = json!({"email": email, "password": password, "options": {"email_redirect_to": REDIRECT_URL}});
+        let mut body = json!({"email": email, "password": password, "options": {"email_redirect_to": REDIRECT_URL}});
+        if let Some(name) = username.map(str::trim).filter(|n| !n.is_empty()) {
+            body["data"] = json!({"display_name": name});
+        }
         let data = self.auth("POST", &format!("/signup?redirect_to={}", redirect_param()), Some(&body), None).await?;
         // Если на сервере выключено подтверждение почты, Auth сразу возвращает сессию.
         if json_text(&data).get("access_token").is_some() {

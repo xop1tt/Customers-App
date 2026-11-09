@@ -2,7 +2,7 @@
 
 import { call } from "./backend";
 import type {
-  AccountPrefs, AuthCallback, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
+  AccountPrefs, AuthCallback, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
 } from "./types";
@@ -20,7 +20,8 @@ export const api = {
   isRemembered: () => call<boolean>("is_remembered"),
   changePassword: (old: string, next: string, confirm: string) => call("change_password", { old, new: next, confirm }),
   cloudSignIn: (email: string, password: string) => call("cloud_sign_in", { email, password }),
-  cloudSignUp: (email: string, password: string, confirm: string) => call<string | null>("cloud_sign_up", { email, password, confirm }),
+  cloudSignUp: (email: string, password: string, confirm: string, username: string) => call<string | null>("cloud_sign_up", { email, password, confirm, username }),
+  setProfile: (name?: string, avatar?: string) => call<SessionInfo>("set_profile", { name: name ?? null, avatar: avatar ?? null }),
   cloudConfirm: (email: string, code: string) => call("cloud_confirm", { email, code }),
   cloudResendConfirmation: (email: string) => call("cloud_resend_confirmation", { email }),
   cloudRequestReset: (email: string) => call<string>("cloud_request_reset", { email }),
@@ -91,6 +92,7 @@ export const api = {
   mailSend: (to: string, subject: string, body: string, leadId?: string) => call<string>("mail_send", { to, subject, body, leadId: leadId ?? null }),
   mailTest: () => call<string>("mail_test"),
   openInMailApp: (to: string, subject: string, body: string, leadId?: string) => call("open_in_mail_app", { to, subject, body, leadId: leadId ?? null }),
+  callApps: () => call<CallAppInfo[]>("call_apps"),
   callPhone: (phone: string, leadId?: string) => call("call_phone", { phone, leadId: leadId ?? null }),
   crmState: () => call<CrmState>("crm_state"),
   crmSentCount: (kind: string, list: string[]) => call<number>("crm_sent_count", { kind, ...ids(list) }),

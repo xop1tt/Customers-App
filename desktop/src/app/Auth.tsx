@@ -26,6 +26,7 @@ export function AuthScreen() {
   const [busy, setBusy] = useState(false);
 
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
@@ -70,7 +71,7 @@ export function AuthScreen() {
     }
     switch (stage) {
       case "signIn": return run(async () => { await api.cloudSignIn(email.trim(), password); await finish(); });
-      case "signUp": return run(async () => { const e = await api.cloudSignUp(email.trim(), password, confirm); if (e === null) return finish(); setStage("confirm"); setInfo(`Мы отправили код на ${email.trim()}. Введите его ниже.`); setPassword(""); setConfirm(""); });
+      case "signUp": return run(async () => { const e = await api.cloudSignUp(email.trim(), password, confirm, username.trim()); if (e === null) return finish(); setStage("confirm"); setInfo(`Мы отправили код на ${email.trim()}. Введите его ниже.`); setPassword(""); setConfirm(""); });
       case "confirm": return run(async () => { await api.cloudConfirm(email.trim(), code.trim()); await finish(); });
       case "forgot": return run(async () => { await api.cloudRequestReset(email.trim()); setStage("reset"); setInfo(`Код для сброса пароля отправлен на ${email.trim()}.`); });
       case "reset": return run(async () => { await api.cloudFinishReset(email.trim(), code.trim(), password, confirm); await finish(); });
@@ -83,7 +84,7 @@ export function AuthScreen() {
 
   const canSubmit = mode === "local"
     ? user.trim() !== "" && password !== "" && (localMode === "login" || confirm !== "")
-    : { signIn: emailOk && password !== "", signUp: emailOk && password !== "" && confirm !== "", confirm: code.trim().length >= 4, forgot: emailOk, reset: code.trim().length >= 4 && password !== "" && confirm !== "", newPassword: password !== "" && confirm !== "" }[stage];
+    : { signIn: emailOk && password !== "", signUp: emailOk && username.trim() !== "" && password !== "" && confirm !== "", confirm: code.trim().length >= 4, forgot: emailOk, reset: code.trim().length >= 4 && password !== "" && confirm !== "", newPassword: password !== "" && confirm !== "" }[stage];
 
   const submitLabel = mode === "local" ? (localMode === "login" ? "Войти" : "Создать аккаунт")
     : { signIn: "Войти", signUp: "Зарегистрироваться", confirm: "Подтвердить", forgot: "Получить код", reset: "Сменить пароль", newPassword: "Сохранить пароль" }[stage];
@@ -101,7 +102,8 @@ export function AuthScreen() {
 
         {mode === "cloud" ? (
           <>
-            {stage !== "newPassword" && <Field label="Почта"><TextInput value={email} onChange={setEmail} placeholder="name@example.ru" type="email" disabled={stage === "confirm" || stage === "reset"} data-autofocus autoFocus /></Field>}
+            {stage === "signUp" && <Field label="Имя пользователя" hint="Так вас будут видеть в приложении. Изменить имя можно в настройках."><TextInput value={username} onChange={setUsername} maxLength={40} data-autofocus autoFocus /></Field>}
+            {stage !== "newPassword" && <Field label="Почта"><TextInput value={email} onChange={setEmail} placeholder="name@example.ru" type="email" disabled={stage === "confirm" || stage === "reset"} data-autofocus={stage !== "signUp"} autoFocus={stage !== "signUp"} /></Field>}
             {(stage === "confirm" || stage === "reset") && <Field label="Код из письма"><TextInput value={code} onChange={setCode} inputMode="numeric" autoFocus /></Field>}
             {(stage === "signIn" || stage === "signUp" || stage === "reset" || stage === "newPassword") && (
               <Field label={stage === "signIn" ? "Пароль" : "Новый пароль"} hint={stage !== "signIn" ? RULES : undefined}><PasswordInput value={password} onChange={setPassword} /></Field>

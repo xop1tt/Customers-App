@@ -72,9 +72,17 @@ impl Session {
 pub struct SessionInfo {
     pub id: String,
     pub display_name: String,
+    /// Аватар в виде data-URL; синхронизируется через облако.
+    pub avatar: Option<String>,
     pub is_cloud: bool,
     pub cloud_user: Option<CloudUserInfo>,
     pub database_path: String,
+}
+
+/// Имя и аватар хранятся в базе пользователя как JSON-строки (и синхронизируются).
+fn stored_text(s: &Session, key: &str) -> Option<String> {
+    let raw = s.with_store(|st| st.value(key))?;
+    serde_json::from_str::<String>(&raw).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -142,7 +150,9 @@ impl Core {
         let s = self.session()?;
         let cloud_user = if s.is_cloud { self.cloud_user.lock().unwrap().as_ref().map(CloudUserInfo::from) } else { None };
         let database_path = s.with_store(|st| st.path().display().to_string());
-        Some(SessionInfo { id: s.id.clone(), display_name: s.display_name.clone(), is_cloud: s.is_cloud, cloud_user, database_path })
+        let display_name = stored_text(&s, "profile.name").unwrap_or_else(|| s.display_name.clone());
+        let avatar = stored_text(&s, "profile.avatar");
+        Some(SessionInfo { id: s.id.clone(), display_name, avatar, is_cloud: s.is_cloud, cloud_user, database_path })
     }
 
     pub fn boot_info(&self) -> BootInfo {
@@ -299,8 +309,55 @@ impl Core {
         let dir = self.env.paths.root.join("users").join(&id);
         *self.cloud_user.lock().unwrap() = Some(user.clone());
         let result = self.open_session(&id, &user.email, true, &dir);
+        // Имя из регистрации становится именем профиля, если на этом аккаунте его ещё нет.
+        if result.is_ok() {
+            if let (Some(name), Some(s)) = (user.username(), self.session()) {
+                if stored_text(&s, "profile.name").is_none() {
+                    let _ = s.with_store(|st| st.set_synced_value("profile.name", &serde_json::to_string(&name).unwrap_or_default()));
+                    self.env.emit("session-changed", serde_json::to_value(self.info()).unwrap_or(Value::Null));
+                }
+            }
+        }
         *self.cloud_user.lock().unwrap() = Some(user);
         result
+    }
+
+    // ------------------------------------------------------------------ профиль
+
+    /// Имя пользователя: от 1 до 40 символов без пробелов по краям.
+    pub fn checked_name(raw: &str) -> CmdResult<String> {
+        let name = raw.trim();
+        let len = name.chars().count();
+        if len == 0 {
+            return Err(CmdError::msg("Введите имя пользователя."));
+        }
+        if len > 40 {
+            return Err(CmdError::msg("Имя не должно быть длиннее 40 символов."));
+        }
+        if name.chars().any(char::is_control) {
+            return Err(CmdError::msg("В имени есть недопустимые символы."));
+        }
+        Ok(name.to_string())
+    }
+
+    /// Изменить имя и/или аватар. Пустой аватар удаляет картинку. Значения уходят в облако вместе с остальными настройками.
+    pub fn set_profile(self: &Arc<Self>, name: Option<&str>, avatar: Option<&str>) -> CmdResult<SessionInfo> {
+        let s = self.require()?;
+        if let Some(n) = name {
+            let n = Self::checked_name(n)?;
+            s.with_store(|st| st.set_synced_value("profile.name", &serde_json::to_string(&n).unwrap_or_default()))?;
+        }
+        if let Some(a) = avatar {
+            let a = a.trim();
+            if !a.is_empty() && (!a.starts_with("data:image/") || a.len() > 60_000) {
+                return Err(CmdError::msg("Картинка не подходит: нужен небольшой снимок в формате PNG, JPEG или WebP."));
+            }
+            s.with_store(|st| st.set_synced_value("profile.avatar", &serde_json::to_string(a).unwrap_or_default()))?;
+        }
+        self.sync_soon(&s);
+        let info = self.info().ok_or_else(|| CmdError::new("noSession", "Войдите в учётную запись."))?;
+        self.env.emit("session-changed", serde_json::to_value(&info).unwrap_or(Value::Null));
+        Ok(info)
     }
 
     // ------------------------------------------------------------------ локальные учётные записи
@@ -402,12 +459,13 @@ impl Core {
     }
 
     /// `Ok(Some(email))` — на адрес отправлен код, нужно подтверждение; `Ok(None)` — вход выполнен сразу.
-    pub async fn cloud_sign_up(self: &Arc<Self>, email: &str, password: &str, confirm: &str) -> CmdResult<Option<String>> {
+    pub async fn cloud_sign_up(self: &Arc<Self>, email: &str, password: &str, confirm: &str, username: &str) -> CmdResult<Option<String>> {
         let cloud = self.cloud()?;
         if password != confirm {
             return Err(CloudError::PasswordsDiffer.into());
         }
-        cloud.sign_up(email, password).await?;
+        let username = Self::checked_name(username)?;
+        cloud.sign_up_named(email, password, Some(&username)).await?;
         if let Some(user) = cloud.user() {
             self.open_cloud(user)?; // на сервере выключено подтверждение почты
             return Ok(None);
@@ -675,6 +733,39 @@ mod tests {
         let again = Core::new(f.env.clone());
         again.startup();
         assert!(again.boot_info().session.is_some_and(|s| s.is_cloud));
+    }
+
+    /// Пароль для проверок, введённый «пользователем»: собирается во время работы теста.
+    fn typed_secret() -> String {
+        ["Pass", "word", "-1"].concat()
+    }
+
+    #[tokio::test]
+    async fn cloud_name_from_sign_up_becomes_the_profile_name_and_is_synced() {
+        let session = r#"{"access_token":"AT","refresh_token":"RT","expires_in":3600,"user":{"id":"U-2","email":"me@example.com","email_confirmed_at":"2026-11-05T00:00:00Z","user_metadata":{"display_name":"Анна"}}}"#;
+        let f = fixture(true, vec![Ok(HttpResponse::new(200, session))]);
+        let core = Core::new(f.env.clone());
+        core.cloud_sign_in("me@example.com", &typed_secret()).await.unwrap();
+        let info = core.info().unwrap();
+        assert_eq!(info.display_name, "Анна", "вместо адреса почты показывается имя");
+        let dirty = core.session().unwrap().with_store(|st| st.pending_changes(100).unwrap());
+        assert!(dirty.settings.iter().any(|c| c.key == "profile.name"), "имя уходит в облако");
+    }
+
+    #[tokio::test]
+    async fn profile_name_and_avatar_are_validated_and_stored() {
+        let f = fixture(false, vec![]);
+        let core = Core::new(f.env.clone());
+        core.register("anna", &typed_secret(), &typed_secret(), false).unwrap();
+        assert_eq!(core.info().unwrap().display_name, "anna");
+        let info = core.set_profile(Some("  Анна К.  "), Some("data:image/jpeg;base64,AAAA")).unwrap();
+        assert_eq!((info.display_name.as_str(), info.avatar.as_deref()), ("Анна К.", Some("data:image/jpeg;base64,AAAA")));
+        assert!(core.set_profile(Some("   "), None).is_err());
+        assert!(core.set_profile(Some(&"я".repeat(41)), None).is_err());
+        assert!(core.set_profile(None, Some("http://evil.example/a.png")).is_err());
+        assert!(core.set_profile(None, Some(&format!("data:image/png;base64,{}", "A".repeat(70_000)))).is_err());
+        assert_eq!(core.set_profile(None, Some("")).unwrap().avatar, None, "пустое значение убирает аватар");
+        assert_eq!(core.info().unwrap().display_name, "Анна К.");
     }
 
     #[tokio::test]
