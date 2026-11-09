@@ -6,7 +6,7 @@ use crate::search::http::{HttpRequest, HttpResponse, HttpTransport};
 use crate::util::{format_date, parse_date};
 use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -370,8 +370,8 @@ pub mod oauth {
     /// Случайная строка для verifier и state: 43–128 символов из [A-Za-z0-9-._~] (RFC 7636).
     pub fn random_verifier(length: usize) -> String {
         const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-        let mut rng = rand::thread_rng();
-        (0..length.clamp(43, 128)).map(|_| CHARS[rng.gen_range(0..CHARS.len())] as char).collect()
+        let mut rng = rand::rng();
+        (0..length.clamp(43, 128)).map(|_| CHARS[rng.random_range(0..CHARS.len())] as char).collect()
     }
 
     pub fn challenge(verifier: &str) -> String {

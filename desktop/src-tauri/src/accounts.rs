@@ -5,7 +5,7 @@ use crate::error::{AppError, AppResult};
 use crate::util::{format_date, now_string, parse_date};
 use base64::Engine;
 use once_cell::sync::Lazy;
-use rand::RngCore;
+use rand::Rng;
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
@@ -128,7 +128,7 @@ impl LocalAccounts {
             return Err(AuthError::Exists);
         }
         let mut salt = [0u8; 16];
-        rand::thread_rng().fill_bytes(&mut salt);
+        rand::rng().fill_bytes(&mut salt);
         let hash = pbkdf2(password, &salt, self.iterations);
         let now = now_string();
         let b64 = base64::engine::general_purpose::STANDARD;
@@ -196,7 +196,7 @@ impl LocalAccounts {
             return Err(AuthError::WeakPassword);
         }
         let mut salt = [0u8; 16];
-        rand::thread_rng().fill_bytes(&mut salt);
+        rand::rng().fill_bytes(&mut salt);
         let hash = pbkdf2(new, &salt, self.iterations);
         let b64 = base64::engine::general_purpose::STANDARD;
         let _ = self.db.lock().unwrap().execute(
