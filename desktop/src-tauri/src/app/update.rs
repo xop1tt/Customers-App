@@ -387,6 +387,15 @@ mod tests {
     }
 
     #[test]
+    fn background_tasks_start_on_the_main_thread_like_in_the_app() {
+        // Запуск приложения: setup идёт на главном потоке, где нет контекста tokio. Без входа в общий runtime это паника.
+        let f = fixture(false, vec![]);
+        let core = super::super::session::Core::new(f.env.clone());
+        let _runtime = crate::shell::enter_async_runtime();
+        core.start_update_loop();
+    }
+
+    #[test]
     fn whats_new_decision_follows_last_seen_version() {
         let f = fixture(false, vec![]);
         let core = super::super::session::Core::new(f.env.clone());

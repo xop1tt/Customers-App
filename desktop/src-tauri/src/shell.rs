@@ -217,7 +217,16 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Делает общий runtime tokio доступным на главном потоке.
+/// Синхронные команды Tauri и setup идут на главном потоке без контекста tokio, а `tokio::spawn` без него паникует;
+/// в релизной сборке (panic = abort) это молча роняет приложение, как при запуске 1.2.0 на macOS.
+pub fn enter_async_runtime() -> tokio::runtime::EnterGuard<'static> {
+    let handle: &'static tokio::runtime::Handle = Box::leak(Box::new(tauri::async_runtime::handle().inner().clone()));
+    handle.enter()
+}
+
 pub fn run() {
+    let _runtime = enter_async_runtime();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_deep_link::init())
