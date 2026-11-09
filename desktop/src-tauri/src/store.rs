@@ -368,6 +368,11 @@ impl LeadStore {
         Ok(out)
     }
 
+    /// Новые лиды: не просмотрены, не в архиве и не исключены. Показываются в меню значка.
+    pub fn new_lead_count(&self) -> i64 {
+        self.conn.query_row("SELECT COUNT(*) FROM leads WHERE deleted=0 AND archived=0 AND excluded=0 AND seen=0", [], |r| r.get(0)).unwrap_or(0)
+    }
+
     pub fn lead_count(&self) -> i64 {
         self.conn.query_row("SELECT COUNT(*) FROM leads WHERE deleted=0", [], |r| r.get(0)).unwrap_or(0)
     }

@@ -18,6 +18,7 @@ pub mod search;
 pub mod secrets;
 pub mod shell;
 pub mod store;
+pub mod tray_text;
 pub mod updates;
 pub mod util;
 pub mod whatsnew;
@@ -35,6 +36,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::change_cloud_password,
         commands::change_password,
         commands::check_updates,
+        commands::set_ui_language,
         commands::clear_error_log,
         commands::cloud_confirm,
         commands::cloud_finish_reset,

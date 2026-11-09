@@ -19,8 +19,10 @@ pub const SIGNATURE_KEY: &str = "draft.signature";
 pub const ACCOUNT_FIELDS: [&str; 8] = ["notifyNewLeads", "notifyErrors", "notifySync", "confirmCalls", "callApp", "autoBackup", "keepBackups", "welcomeDone"];
 
 /// Поля `DevicePrefs`, которые синхронизируются: оформление и боковая панель.
-pub const INTERFACE_FIELDS: [&str; 12] = [
+pub const INTERFACE_FIELDS: [&str; 14] = [
     "accent",
+    "theme",
+    "language",
     "compactRows",
     "animations",
     "sidebarHidden",

@@ -129,6 +129,8 @@ export interface CallAppInfo {
 
 export interface DevicePrefs {
   accent: string | null;
+  theme: "system" | "dark" | "light";
+  language: "system" | "ru" | "en";
   uiScale: number;
   navWidth: number;
   navOpen: boolean;
