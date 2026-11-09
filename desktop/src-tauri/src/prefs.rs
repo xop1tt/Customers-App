@@ -139,7 +139,11 @@ impl DevicePrefs {
 }
 
 fn normalized_hours(h: u32) -> u32 {
-    if crate::updates::INTERVALS.iter().any(|(x, _)| *x == h) { h } else { DEFAULT_CHECK_HOURS }
+    if crate::updates::INTERVALS.iter().any(|(x, _)| *x == h) {
+        h
+    } else {
+        DEFAULT_CHECK_HOURS
+    }
 }
 
 /// Настройки одной учётной записи, которые не синхронизируются через облако.
@@ -466,13 +470,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         dev.path = dir.path().join("device.json");
         assert!(dev.patch(&legacy_device_patch(&d)));
-        assert_eq!((dev.value.check_updates, dev.value.update_check_hours, dev.value.light_mode_threshold, dev.value.compact_rows, dev.value.ui_scale), (false, 6, 30, true, 1.2));
+        assert_eq!(
+            (dev.value.check_updates, dev.value.update_check_hours, dev.value.light_mode_threshold, dev.value.compact_rows, dev.value.ui_scale),
+            (false, 6, 30, true, 1.2)
+        );
         assert_eq!(dev.value.sidebar_hidden, ["archive", "excluded"]);
         assert!(!dev.value.sidebar_counts);
         assert_eq!(dev.value.last_seen_version.as_deref(), Some("1.0.9"));
         let mut acc = PrefsFile::<AccountPrefs>::load(&dir.path().join("prefs.json"));
         assert!(acc.patch(&legacy_account_patch(&d, "Anna")));
-        assert_eq!((acc.value.auto_search_minutes, acc.value.backup_directory.as_str(), acc.value.keep_backups, acc.value.welcome_done), (30, "/Users/a/Копии", 14, true));
+        assert_eq!(
+            (acc.value.auto_search_minutes, acc.value.backup_directory.as_str(), acc.value.keep_backups, acc.value.welcome_done),
+            (30, "/Users/a/Копии", 14, true)
+        );
         assert_eq!(acc.value.mail_account, r#"{"email":"a@b.c"}"#);
         assert_eq!(legacy_notion_config(&d, "Anna").as_deref(), Some(r#"{"database":"x"}"#));
         assert!(legacy_notion_config(&d, "boris").is_none());

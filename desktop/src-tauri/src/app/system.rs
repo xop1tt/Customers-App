@@ -81,7 +81,12 @@ impl KeepAwake {
     #[cfg(target_os = "macos")]
     pub fn new() -> Self {
         // caffeinate держит утверждение «пользователь работает», пока жив процесс-родитель.
-        let child = std::process::Command::new("/usr/bin/caffeinate").args(["-i", "-w", &std::process::id().to_string()]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().ok();
+        let child = std::process::Command::new("/usr/bin/caffeinate")
+            .args(["-i", "-w", &std::process::id().to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .ok();
         Self { child }
     }
 

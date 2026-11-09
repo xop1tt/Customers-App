@@ -6,8 +6,8 @@ use super::sync::SyncState;
 use super::{CmdError, CmdResult, Env};
 use crate::accounts::UserAccount;
 use crate::cloud::auth::{CallbackResult, CloudUser};
-use crate::cloud::validation;
 use crate::cloud::error::CloudError;
+use crate::cloud::validation;
 use crate::db::DbKey;
 use crate::prefs::{self, AccountPrefs, PrefsFile};
 use crate::search::settings::SearchSettings;
@@ -135,7 +135,15 @@ pub struct Core {
 impl Core {
     pub fn new(env: Arc<Env>) -> Arc<Self> {
         let existing_install = env.accounts.has_users();
-        Arc::new(Self { env, current: Mutex::new(None), cloud_user: Mutex::new(None), existing_install, updates: Mutex::default(), integ: Mutex::default(), startup_error: Mutex::new(None) })
+        Arc::new(Self {
+            env,
+            current: Mutex::new(None),
+            cloud_user: Mutex::new(None),
+            existing_install,
+            updates: Mutex::default(),
+            integ: Mutex::default(),
+            startup_error: Mutex::new(None),
+        })
     }
 
     pub fn session(&self) -> Option<Arc<Session>> {
@@ -158,7 +166,13 @@ impl Core {
     pub fn boot_info(&self) -> BootInfo {
         BootInfo {
             version: self.env.version.to_string(),
-            platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "linux" },
+            platform: if cfg!(windows) {
+                "windows"
+            } else if cfg!(target_os = "macos") {
+                "macos"
+            } else {
+                "linux"
+            },
             cloud_available: self.env.cloud_available(),
             has_users: self.env.accounts.has_users(),
             existing_install: self.existing_install,
@@ -421,7 +435,12 @@ impl Core {
     /// Первая учётная запись получает лиды из базы версии 1.0. Исходный файл остаётся рядом под другим именем.
     fn adopt_legacy_database(&self, username: &str) -> Option<String> {
         let env = &self.env;
-        let custom = env.paths.legacy_defaults.as_deref().and_then(prefs::read_defaults_plist).and_then(|d| d.get("data.path").and_then(|v| v.as_string().map(PathBuf::from)));
+        let custom = env
+            .paths
+            .legacy_defaults
+            .as_deref()
+            .and_then(prefs::read_defaults_plist)
+            .and_then(|d| d.get("data.path").and_then(|v| v.as_string().map(PathBuf::from)));
         let legacy = custom.unwrap_or_else(|| env.paths.legacy_database());
         if !legacy.exists() {
             return None;
@@ -443,7 +462,12 @@ impl Core {
             }
             Ok(())
         })();
-        result.err().map(|e| format!("Лиды из прежней версии не перенесены: {e}. Файл остался на месте: {}. Его можно открыть через «Настройки → Данные → Восстановить из файла…».", legacy.display()))
+        result.err().map(|e| {
+            format!(
+                "Лиды из прежней версии не перенесены: {e}. Файл остался на месте: {}. Его можно открыть через «Настройки → Данные → Восстановить из файла…».",
+                legacy.display()
+            )
+        })
     }
 
     // ------------------------------------------------------------------ облако: вход и регистрация
@@ -531,7 +555,8 @@ impl Core {
                     return Ok(CallbackOutcome::NewPassword);
                 }
                 if let Some(u) = cloud.user() {
-                    let same = self.session().map(|s| s.is_cloud).unwrap_or(false) && self.cloud_user.lock().unwrap().as_ref().map(|c| c.id == u.id).unwrap_or(false);
+                    let same =
+                        self.session().map(|s| s.is_cloud).unwrap_or(false) && self.cloud_user.lock().unwrap().as_ref().map(|c| c.id == u.id).unwrap_or(false);
                     if same {
                         *self.cloud_user.lock().unwrap() = Some(u);
                         let text = if kind == "email_change" { "Адрес почты изменён" } else { "Адрес подтверждён" };
@@ -596,9 +621,8 @@ impl Core {
             return Err(CmdError::msg("Это локальная учётная запись."));
         }
         // Сначала локальная копия: без неё удалять нельзя.
-        let backup = self
-            .backup_now(&s)
-            .map_err(|e| CmdError::msg(format!("Не удалось сохранить резервную копию базы, учётная запись не удалена. {}", e.message)))?;
+        let backup =
+            self.backup_now(&s).map_err(|e| CmdError::msg(format!("Не удалось сохранить резервную копию базы, учётная запись не удалена. {}", e.message)))?;
         cloud.delete_account(password).await?;
         let dir = s.with_store(|st| st.path().parent().map(Path::to_path_buf));
         self.close_current();

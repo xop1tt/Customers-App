@@ -376,7 +376,7 @@ pub fn crash_report_text(core: C<'_>, path: Option<String>) -> String {
     let mut text = format!("Customers {}, {} {}\n", core.env.version, std::env::consts::OS, std::env::consts::ARCH);
     if let Some(p) = path {
         if let Ok(raw) = std::fs::read_to_string(&p) {
-            text.push_str("\n");
+            text.push('\n');
             text.push_str(&reports::summary(&raw, 25, 4000));
             text.push('\n');
         }

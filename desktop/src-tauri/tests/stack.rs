@@ -55,7 +55,12 @@ impl Stack {
         let mut store = LeadStore::open(&self.dir.path().join(format!("{name}.db")), None).unwrap();
         store.enable_sync_tracking().unwrap();
         let store = Arc::new(Mutex::new(store));
-        let auth = Arc::new(CloudAuth::new(self.config.clone(), Arc::new(ReqwestTransport::new()), Arc::new(MemorySessionStore::default()), format!("device-{name}-{}", unique("d"))));
+        let auth = Arc::new(CloudAuth::new(
+            self.config.clone(),
+            Arc::new(ReqwestTransport::new()),
+            Arc::new(MemorySessionStore::default()),
+            format!("device-{name}-{}", unique("d")),
+        ));
         let engine = SyncEngine::new(auth.clone(), store.clone(), name.to_string()).with_sizes(50, 100);
         (auth, store, engine)
     }

@@ -177,10 +177,7 @@ impl LeadData {
         let s = |k: &str| o.get(k).and_then(Value::as_str).map(str::to_string);
         let date = |k: &str| o.get(k).and_then(Value::as_str).and_then(parse_date);
         let strs = |k: &str| -> Vec<String> {
-            o.get(k)
-                .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
-                .unwrap_or_default()
+            o.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default()
         };
         let mut d = LeadData::new(
             s("kind").and_then(|k| LeadKind::parse(&k)).unwrap_or(LeadKind::Order),

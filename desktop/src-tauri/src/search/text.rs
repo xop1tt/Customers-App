@@ -42,21 +42,35 @@ pub fn html_to_text(html: &str, lines: bool) -> String {
     let s = TAG_RX.replace_all(&s, if lines { "" } else { " " });
     let s = decode_entities(&s);
     if lines {
-        return s
-            .split('\n')
-            .map(|l| SPACE_RX.replace_all(l, " ").trim().to_string())
-            .filter(|l| !l.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
+        return s.split('\n').map(|l| SPACE_RX.replace_all(l, " ").trim().to_string()).filter(|l| !l.is_empty()).collect::<Vec<_>>().join("\n");
     }
     SPACE_RX.replace_all(&s, " ").trim().to_string()
 }
 
 static NAMED: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     [
-        ("amp", "&"), ("lt", "<"), ("gt", ">"), ("quot", "\""), ("apos", "'"), ("nbsp", " "), ("laquo", "«"), ("raquo", "»"),
-        ("mdash", "—"), ("ndash", "–"), ("hellip", "…"), ("copy", "©"), ("reg", "®"), ("trade", "™"), ("bull", "•"),
-        ("rsquo", "’"), ("lsquo", "‘"), ("rdquo", "”"), ("ldquo", "“"), ("bdquo", "„"), ("times", "×"), ("deg", "°"),
+        ("amp", "&"),
+        ("lt", "<"),
+        ("gt", ">"),
+        ("quot", "\""),
+        ("apos", "'"),
+        ("nbsp", " "),
+        ("laquo", "«"),
+        ("raquo", "»"),
+        ("mdash", "—"),
+        ("ndash", "–"),
+        ("hellip", "…"),
+        ("copy", "©"),
+        ("reg", "®"),
+        ("trade", "™"),
+        ("bull", "•"),
+        ("rsquo", "’"),
+        ("lsquo", "‘"),
+        ("rdquo", "”"),
+        ("ldquo", "“"),
+        ("bdquo", "„"),
+        ("times", "×"),
+        ("deg", "°"),
     ]
     .into_iter()
     .collect()

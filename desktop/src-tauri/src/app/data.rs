@@ -134,7 +134,11 @@ impl Core {
 
     pub fn list_backups(&self) -> CmdResult<Vec<Value>> {
         let s = self.require()?;
-        Ok(self.backups_in(&self.backup_directory(&s)).into_iter().map(|(path, name, size, at)| json!({"path": path.display().to_string(), "name": name, "size": size, "modifiedAt": at})).collect())
+        Ok(self
+            .backups_in(&self.backup_directory(&s))
+            .into_iter()
+            .map(|(path, name, size, at)| json!({"path": path.display().to_string(), "name": name, "size": size, "modifiedAt": at}))
+            .collect())
     }
 
     fn backups_in(&self, dir: &Path) -> Vec<(PathBuf, String, u64, Option<String>)> {
@@ -281,10 +285,13 @@ mod tests {
         core.log_event(&ids[0], "Звонок").unwrap();
         let snap = core.snapshot().unwrap();
         let by_id = |id: &str| snap.leads.iter().find(|l| l["id"] == id).unwrap().clone();
-        assert_eq!((by_id(&ids[0])["favorite"].clone(), by_id(&ids[0])["seen"].clone(), by_id(&ids[0])["note"].clone()), (json!(true), json!(true), json!("позвонить завтра")));
+        assert_eq!(
+            (by_id(&ids[0])["favorite"].clone(), by_id(&ids[0])["seen"].clone(), by_id(&ids[0])["note"].clone()),
+            (json!(true), json!(true), json!("позвонить завтра"))
+        );
         assert_eq!(by_id(&ids[1])["archived"], true);
         assert!(core.events(&ids[0]).unwrap().as_array().unwrap().iter().any(|e| e["action"].as_str().unwrap_or("").contains("Звонок")));
-        core.delete_leads(&ids[2..], ).unwrap();
+        core.delete_leads(&ids[2..]).unwrap();
         assert_eq!(core.snapshot().unwrap().leads.len(), 2);
         assert!(f.events.count("data-changed") >= 6);
     }
@@ -335,7 +342,7 @@ mod tests {
         assert!(!first.exists());
         assert_eq!(crate::db::file_state(Path::new(list[0]["path"].as_str().unwrap())), crate::db::FileState::Encrypted);
         // удаляем всё и восстанавливаем из копии
-        core.delete_leads(&ids, ).unwrap();
+        core.delete_leads(&ids).unwrap();
         assert_eq!(core.snapshot().unwrap().leads.len(), 0);
         let msg = core.restore(Path::new(list[0]["path"].as_str().unwrap())).unwrap();
         assert!(msg.contains("before-restore.db"));

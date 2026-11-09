@@ -35,17 +35,44 @@ pub enum ExportField {
 
 impl ExportField {
     pub const ALL: [ExportField; 21] = [
-        ExportField::Id, ExportField::Kind, ExportField::Title, ExportField::Source, ExportField::Score,
-        ExportField::Relevance, ExportField::Region, ExportField::Category, ExportField::Address, ExportField::Phone,
-        ExportField::Website, ExportField::Emails, ExportField::Url, ExportField::DiscoveredAt, ExportField::Budget,
-        ExportField::Reasons, ExportField::Facts, ExportField::Assumptions, ExportField::Favorite, ExportField::Note,
+        ExportField::Id,
+        ExportField::Kind,
+        ExportField::Title,
+        ExportField::Source,
+        ExportField::Score,
+        ExportField::Relevance,
+        ExportField::Region,
+        ExportField::Category,
+        ExportField::Address,
+        ExportField::Phone,
+        ExportField::Website,
+        ExportField::Emails,
+        ExportField::Url,
+        ExportField::DiscoveredAt,
+        ExportField::Budget,
+        ExportField::Reasons,
+        ExportField::Facts,
+        ExportField::Assumptions,
+        ExportField::Favorite,
+        ExportField::Note,
         ExportField::Description,
     ];
 
     pub const DEFAULTS: [ExportField; 14] = [
-        ExportField::Title, ExportField::Kind, ExportField::Source, ExportField::Score, ExportField::Relevance,
-        ExportField::Region, ExportField::Category, ExportField::Address, ExportField::Phone, ExportField::Website,
-        ExportField::Emails, ExportField::Url, ExportField::DiscoveredAt, ExportField::Reasons,
+        ExportField::Title,
+        ExportField::Kind,
+        ExportField::Source,
+        ExportField::Score,
+        ExportField::Relevance,
+        ExportField::Region,
+        ExportField::Category,
+        ExportField::Address,
+        ExportField::Phone,
+        ExportField::Website,
+        ExportField::Emails,
+        ExportField::Url,
+        ExportField::DiscoveredAt,
+        ExportField::Reasons,
     ];
 
     /// Ключ поля в JSON и в интерфейсе (совпадает с rawValue прежних версий).
@@ -122,14 +149,17 @@ impl ExportField {
             ExportField::Emails => d.emails().join(", "),
             ExportField::Url => d.url.clone(),
             ExportField::DiscoveredAt => format_date(&l.discovered_at),
-            ExportField::Budget => d
-                .budget
-                .map(|b| format!("{} {}", b as i64, d.currency.clone().unwrap_or_default()).trim().to_string())
-                .unwrap_or_default(),
+            ExportField::Budget => d.budget.map(|b| format!("{} {}", b as i64, d.currency.clone().unwrap_or_default()).trim().to_string()).unwrap_or_default(),
             ExportField::Reasons => d.score_reasons.join("; "),
             ExportField::Facts => d.facts.join("; "),
             ExportField::Assumptions => d.assumptions.join("; "),
-            ExportField::Favorite => if l.favorite { "да".into() } else { String::new() },
+            ExportField::Favorite => {
+                if l.favorite {
+                    "да".into()
+                } else {
+                    String::new()
+                }
+            }
             ExportField::Note => l.note.clone(),
             ExportField::Description => d.description.clone(),
         }
@@ -164,8 +194,7 @@ pub fn csv(leads: &[LeadItem], fields: &[ExportField]) -> Vec<u8> {
 }
 
 pub fn json(leads: &[LeadItem], fields: &[ExportField]) -> Result<Vec<u8>, serde_json::Error> {
-    let rows: Vec<BTreeMap<&str, String>> =
-        leads.iter().map(|l| fields.iter().map(|f| (f.key(), f.value(l))).collect()).collect();
+    let rows: Vec<BTreeMap<&str, String>> = leads.iter().map(|l| fields.iter().map(|f| (f.key(), f.value(l))).collect()).collect();
     serde_json::to_vec_pretty(&rows)
 }
 
@@ -278,10 +307,7 @@ pub fn email_draft(lead: &LeadData, signature: &str) -> EmailDraft {
 /// Для интерфейса: список полей экспорта с названиями.
 pub fn fields_for_ui() -> Value {
     Value::Array(
-        ExportField::ALL
-            .iter()
-            .map(|f| serde_json::json!({"key": f.key(), "title": f.title(), "default": ExportField::DEFAULTS.contains(f)}))
-            .collect(),
+        ExportField::ALL.iter().map(|f| serde_json::json!({"key": f.key(), "title": f.title(), "default": ExportField::DEFAULTS.contains(f)})).collect(),
     )
 }
 

@@ -124,7 +124,7 @@ pub fn find(system_dirs: &[PathBuf], own_dir: Option<&Path>, newer_than: Option<
     if let Some(d) = own_dir {
         scan(d, true);
     }
-    found.sort_by(|a, b| b.date.cmp(&a.date));
+    found.sort_by_key(|c| std::cmp::Reverse(c.date));
     found
 }
 
@@ -188,13 +188,23 @@ pub fn summary(text: &str, frames: usize, fallback_limit: usize) -> String {
             out.push(String::new());
             out.push(format!("Поток {faulting}:"));
             for (i, f) in fs.iter().take(frames).enumerate() {
-                let image = f.get("imageIndex").and_then(Value::as_i64).filter(|i| *i >= 0).and_then(|i| images.get(i as usize)).and_then(|im| s(im, "name")).unwrap_or_else(|| "?".into());
+                let image = f
+                    .get("imageIndex")
+                    .and_then(Value::as_i64)
+                    .filter(|i| *i >= 0)
+                    .and_then(|i| images.get(i as usize))
+                    .and_then(|im| s(im, "name"))
+                    .unwrap_or_else(|| "?".into());
                 let symbol = s(f, "symbol").unwrap_or_else(|| format!("+0x{:x}", f.get("imageOffset").and_then(Value::as_u64).unwrap_or(0)));
                 out.push(format!("{i}  {image}  {symbol}"));
             }
         }
     }
-    if out.is_empty() { fallback() } else { out.join("\n") }
+    if out.is_empty() {
+        fallback()
+    } else {
+        out.join("\n")
+    }
 }
 
 /// Ссылка на новое обращение (Issue) с готовым текстом. GitHub не принимает очень длинные адреса,
@@ -205,7 +215,11 @@ pub fn issue_url(repository: &str, title: &str, body: &str, max_body: usize) -> 
     if text.chars().count() > max_body {
         text = text.chars().take(max_body).collect::<String>() + "\n\n…(текст обрезан: полный отчёт скопирован в буфер обмена, вставьте его ниже)";
     }
-    format!("https://github.com/{repository}/issues/new?title={}&body={}", utf8_percent_encode(title, NON_ALPHANUMERIC), utf8_percent_encode(&text, NON_ALPHANUMERIC))
+    format!(
+        "https://github.com/{repository}/issues/new?title={}&body={}",
+        utf8_percent_encode(title, NON_ALPHANUMERIC),
+        utf8_percent_encode(&text, NON_ALPHANUMERIC)
+    )
 }
 
 pub fn default_issue_url(title: &str, body: &str) -> String {
@@ -221,7 +235,12 @@ pub fn install_panic_hook(logs_dir: PathBuf, app_version: String) {
     std::panic::set_hook(Box::new(move |info| {
         let now = Utc::now();
         let location = info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_else(|| "?".into());
-        let message = info.payload().downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| info.payload().downcast_ref::<String>().cloned()).unwrap_or_else(|| "без сообщения".into());
+        let message = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "без сообщения".into());
         let report = format!(
             "Customers {app_version}, {} {}\n{}\nГде: {location}\n{message}\n\n{}\n",
             std::env::consts::OS,
@@ -245,13 +264,22 @@ mod tests {
     #[test]
     fn only_own_reports_are_found() {
         let dir = tempfile::tempdir().unwrap();
-        for name in ["LeadGenerator-2026-11-06-120000.ips", "LeadGenerator_2026-11-06-120500.hang", "Customers-2026-11-07.ips", "Safari-2026-11-06-120000.ips", "LeadGenerator-notes.txt"] {
+        for name in [
+            "LeadGenerator-2026-11-06-120000.ips",
+            "LeadGenerator_2026-11-06-120500.hang",
+            "Customers-2026-11-07.ips",
+            "Safari-2026-11-06-120000.ips",
+            "LeadGenerator-notes.txt",
+        ] {
             fs::write(dir.path().join(name), "x").unwrap();
         }
         let missing = dir.path().join("missing");
         let found = find(&[dir.path().to_path_buf(), missing], None, None);
         let names: std::collections::HashSet<String> = found.iter().map(|f| f.path.file_name().unwrap().to_string_lossy().into_owned()).collect();
-        assert_eq!(names, ["LeadGenerator-2026-11-06-120000.ips", "LeadGenerator_2026-11-06-120500.hang", "Customers-2026-11-07.ips"].map(String::from).into_iter().collect());
+        assert_eq!(
+            names,
+            ["LeadGenerator-2026-11-06-120000.ips", "LeadGenerator_2026-11-06-120500.hang", "Customers-2026-11-07.ips"].map(String::from).into_iter().collect()
+        );
         assert_eq!(found.iter().find(|f| f.path.extension().unwrap() == "hang").unwrap().kind, "Зависание");
         assert!(find(&[dir.path().to_path_buf()], None, Some(Utc::now() + Duration::seconds(60))).is_empty());
     }

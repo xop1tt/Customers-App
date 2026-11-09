@@ -38,7 +38,9 @@ pub enum AuthError {
 impl std::fmt::Display for AuthError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AuthError::InvalidUsername => f.write_str("Имя пользователя: от 3 до 32 символов — буквы, цифры, точка, дефис или подчёркивание, начинается с буквы или цифры."),
+            AuthError::InvalidUsername => {
+                f.write_str("Имя пользователя: от 3 до 32 символов — буквы, цифры, точка, дефис или подчёркивание, начинается с буквы или цифры.")
+            }
             AuthError::WeakPassword => f.write_str("Пароль должен быть не короче 8 символов."),
             AuthError::PasswordsDiffer => f.write_str("Пароли не совпадают."),
             AuthError::Exists => f.write_str("Такое имя пользователя уже занято."),
@@ -320,10 +322,13 @@ mod tests {
         let b64 = base64::engine::general_purpose::STANDARD;
         {
             let a = LocalAccounts::open_with(dir.path(), 1000).unwrap();
-            a.db.lock().unwrap().execute(
-                "INSERT INTO users VALUES('olga','Olga',?1,?2,?3,'2026-01-01T00:00:00Z',NULL)",
-                params![b64.encode(salt), b64.encode(hash), ITERATIONS],
-            ).unwrap();
+            a.db.lock()
+                .unwrap()
+                .execute(
+                    "INSERT INTO users VALUES('olga','Olga',?1,?2,?3,'2026-01-01T00:00:00Z',NULL)",
+                    params![b64.encode(salt), b64.encode(hash), ITERATIONS],
+                )
+                .unwrap();
         }
         let a = LocalAccounts::open(dir.path()).unwrap();
         assert_eq!(a.login("OLGA", "legacy-pass1").unwrap().username, "Olga");

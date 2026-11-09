@@ -1,26 +1,57 @@
 version: 2
+
+# Только реально используемые менеджеры пакетов: GitHub Actions, npm (интерфейс), Cargo (ядро), pip (Python-тесты и сервер).
+# Docker-файлов, Poetry/uv и других менеджеров в репозитории нет. Функции Supabase на Deno Dependabot не поддерживает
+# (deno.lock обновляется вручную, см. docs/ci.md).
+#
+# Порядок групп важен: зависимость попадает в первую подходящую группу.
+# Группы tauri и «хранилище и криптография» никогда не сливаются автоматически (политика в workflows/dependabot-automerge.yml).
+# Major-обновления вне групп приходят отдельными PR и тоже сливаются только вручную.
+# Security-обновления Dependabot открывает сразу, вне расписания и вне лимита открытых PR; в них действуют те же обязательные проверки.
 updates:
-  - package-ecosystem: github-actions   # обновляет закреплённые SHA действий
+  - package-ecosystem: github-actions   # обновляет закреплённые SHA действий и комментарии с версиями
     directory: /
-    schedule: {interval: weekly}
+    schedule: {interval: weekly, day: monday, time: "06:00", timezone: Europe/Moscow}
+    open-pull-requests-limit: 5
     labels: [dependencies]
+    commit-message: {prefix: "ci", include: scope}
     groups:
-      actions: {patterns: ["*"], update-types: [minor, patch]}
-  - package-ecosystem: pip
-    directory: /
-    schedule: {interval: weekly}
-    labels: [dependencies]
-    groups:
-      python: {patterns: ["*"], update-types: [minor, patch]}
+      actions-security: {applies-to: security-updates, patterns: ["*"]}
+      actions: {applies-to: version-updates, patterns: ["*"], update-types: [minor, patch]}
+
   - package-ecosystem: npm   # интерфейс приложения (desktop/)
     directory: /desktop
-    schedule: {interval: weekly}
+    schedule: {interval: weekly, day: monday, time: "06:00", timezone: Europe/Moscow}
+    open-pull-requests-limit: 5
     labels: [dependencies]
+    commit-message: {prefix: "deps(npm)", prefix-development: "deps(npm-dev)", include: scope}
+    ignore:
+      - dependency-name: "@types/node"   # типы должны совпадать с Node 22 из CI
+        update-types: ["version-update:semver-major"]
     groups:
-      npm: {patterns: ["*"], update-types: [minor, patch]}
+      npm-security: {applies-to: security-updates, patterns: ["*"]}
+      tauri-js: {applies-to: version-updates, patterns: ["@tauri-apps/*"]}
+      npm-dev: {applies-to: version-updates, dependency-type: development, update-types: [minor, patch]}
+      npm-prod: {applies-to: version-updates, dependency-type: production, update-types: [minor, patch]}
+
   - package-ecosystem: cargo   # ядро приложения (desktop/src-tauri)
     directory: /desktop/src-tauri
-    schedule: {interval: weekly}
+    schedule: {interval: weekly, day: monday, time: "06:00", timezone: Europe/Moscow}
+    open-pull-requests-limit: 5
     labels: [dependencies]
+    commit-message: {prefix: "deps(cargo)", include: scope}
     groups:
-      cargo: {patterns: ["*"], update-types: [minor, patch]}
+      cargo-security: {applies-to: security-updates, patterns: ["*"]}
+      tauri-rust: {applies-to: version-updates, patterns: ["tauri", "tauri-*", "wry", "tao"]}
+      storage-crypto: {applies-to: version-updates, patterns: ["rusqlite", "libsqlite3-sys", "sha2", "hmac", "pbkdf2", "rand", "rand_core"]}
+      cargo: {applies-to: version-updates, update-types: [minor, patch]}
+
+  - package-ecosystem: pip   # Python-часть: requirements*.txt в корне и тесты сервера
+    directories: [/, /supabase/tests]
+    schedule: {interval: weekly, day: monday, time: "06:00", timezone: Europe/Moscow}
+    open-pull-requests-limit: 3
+    labels: [dependencies]
+    commit-message: {prefix: "deps(pip)", include: scope}
+    groups:
+      python-security: {applies-to: security-updates, patterns: ["*"]}
+      python: {applies-to: version-updates, update-types: [minor, patch]}

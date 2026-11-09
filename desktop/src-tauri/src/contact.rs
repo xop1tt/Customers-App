@@ -47,7 +47,13 @@ pub const CALL_APPS: &[CallApp] = &[
     CallApp { id: "telegram", title: "Telegram", scheme: "tg", mac_names: &["Telegram", "Telegram Desktop"], opens_chat: true },
     CallApp { id: "viber", title: "Viber", scheme: "viber", mac_names: &["Viber"], opens_chat: true },
     CallApp { id: "skype", title: "Skype", scheme: "skype", mac_names: &["Skype"], opens_chat: false },
-    CallApp { id: "teams", title: "Microsoft Teams", scheme: "msteams", mac_names: &["Microsoft Teams", "Microsoft Teams (work or school)"], opens_chat: false },
+    CallApp {
+        id: "teams",
+        title: "Microsoft Teams",
+        scheme: "msteams",
+        mac_names: &["Microsoft Teams", "Microsoft Teams (work or school)"],
+        opens_chat: false,
+    },
     CallApp { id: "facetime", title: "FaceTime", scheme: "facetime-audio", mac_names: &["FaceTime"], opens_chat: false },
 ];
 
