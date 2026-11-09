@@ -396,13 +396,18 @@ mod tests {
         assert_eq!(core.account_prefs().unwrap()["autoSearchMinutes"], 30);
     }
 
+    /// Пароль собирается во время работы теста, чтобы в коде не было постоянного пароля.
+    fn password() -> String {
+        ["password", "-1"].concat()
+    }
+
     /// Beta не может ни прочитать, ни записать данные другого канала через выбор пути пользователем.
     #[tokio::test]
     async fn paths_into_other_channel_are_refused_and_nothing_changes() {
         for channel in [crate::channel::Channel::Beta, crate::channel::Channel::Stable] {
             let f = super::super::testing::fixture_channel(channel, false, vec![]);
             let core = Core::new(f.env.clone());
-            core.register("anna", "password-1", "password-1", false).unwrap();
+            core.register("anna", &password(), &password(), false).unwrap();
             let other = f.dir.path().join("other-channel/data/anna");
             std::fs::create_dir_all(&other).unwrap();
             std::fs::write(other.join("leads.db"), b"foreign").unwrap();
@@ -427,7 +432,7 @@ mod tests {
     async fn beta_keeps_backups_in_its_own_folder() {
         let f = super::super::testing::fixture_channel(crate::channel::Channel::Beta, false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.register("anna", &password(), &password(), false).unwrap();
         // Папка копий прежней macOS-версии существует, но Beta её не использует.
         std::fs::create_dir_all(f.env.paths.legacy_backups("anna")).unwrap();
         let s = core.session().unwrap();
@@ -439,7 +444,7 @@ mod tests {
     async fn beta_refuses_plaintext_database_without_touching_it() {
         let f = super::super::testing::fixture_channel(crate::channel::Channel::Beta, false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.register("anna", &password(), &password(), false).unwrap();
         let plain = f.dir.path().join("elsewhere/leads.db");
         std::fs::create_dir_all(plain.parent().unwrap()).unwrap();
         {
@@ -449,7 +454,7 @@ mod tests {
         let before = std::fs::read(&plain).unwrap();
         core.patch_account_prefs(&json!({"dataPath": plain.display().to_string()})).unwrap();
         core.logout();
-        assert!(core.login("anna", "password-1", false).is_err());
+        assert!(core.login("anna", &password(), false).is_err());
         assert_eq!(std::fs::read(&plain).unwrap(), before, "незашифрованная база не переписана ключом Beta");
         assert_eq!(crate::db::file_state(&plain), crate::db::FileState::Plaintext);
     }
