@@ -4,10 +4,13 @@ import { integer } from "../lib/format";
 import { CONFIGURABLE, MAIN_GROUP, WORK_GROUP, move, ordered, toggled } from "../lib/sidebarPrefs";
 import { SOURCES } from "../lib/sources";
 import { Avatar, Button, IconButton } from "../ui/kit";
+import { api } from "../api";
 import { Icon } from "../ui/icons";
 import { type MenuItem, Popover, showMenu } from "../ui/overlay";
-import { leaveSession, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
+import { attempt, leaveSession, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
 import { openLink } from "../state/actions";
+
+const SCORE_STEPS = [90, 70, 50, 30];
 
 function NavItem({ id, active, badge, onClick }: { id: SectionId; active: boolean; badge?: number; onClick: () => void }) {
   const meta = SECTIONS[id];
@@ -29,6 +32,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const update = useStore((s) => s.update);
   const customize = useStore((s) => s.customizeNav);
   const sourceFilter = useStore((s) => s.filter.source);
+  const minScore = useStore((s) => s.filter.minScore);
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
@@ -42,10 +46,13 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   for (const l of leads) if (!l.archived && !l.excluded) perSource.set(l.data.source, (perSource.get(l.data.source) ?? 0) + 1);
   const sourceKeys = ordered(SOURCES.map((s) => s.key), device.sidebarSourceOrder).filter((k) => customize || !device.sidebarHiddenSources.includes(k));
 
+  const perScore = new Map<number, number>();
+  for (const n of SCORE_STEPS) perScore.set(n, leads.filter((l) => !l.archived && !l.excluded && l.data.score >= n).length);
+
   const helpItems = (): MenuItem[] => [
     { label: "Что нового", icon: "sparkles", onSelect: () => setState({ whatsNewOpen: true }) },
     { label: "Страница релизов", icon: "external", onSelect: () => void openLink(update?.releasesPage ?? "https://github.com/xop1tt/CLIENTS/releases") },
-    { label: "Сообщить о проблеме", icon: "report", onSelect: () => openSettings("reports") },
+    { label: "Сообщить о проблеме", icon: "report", onSelect: () => setState({ reportOpen: true }) },
   ];
 
   const updateReady = update && ["available", "downloading", "ready", "installing"].includes(update.phase);
@@ -88,33 +95,15 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
     items.map((id, i) =>
       customize
         ? row(id, i, list, "sidebarOrder", <><Icon name={SECTIONS[id].icon} size={16} /><span className="ellipsis">{SECTIONS[id].title}</span></>, "sidebarHidden", !(CONFIGURABLE as readonly string[]).includes(id))
-        : <NavItem key={id} id={id} active={section === id && !(id === "all" && sourceFilter)} badge={countOf(id)} onClick={() => setSection(id)} />,
+        : <NavItem key={id} id={id} active={section === id && !(id === "all" && (sourceFilter || minScore > 0))} badge={countOf(id)} onClick={() => setSection(id)} />,
     );
 
   return (
-    <aside className={`sidebar${overlay ? " overlay" : ""}`} style={{ width: device.navWidth }} aria-label="Навигация">
+    <aside className={`sidebar${overlay ? " overlay" : ""}`} style={{ width: "var(--nav-w)" }} aria-label="Навигация">
       <div className="side-head">
-        <button ref={accountBtn} type="button" className="account-btn" onClick={() => setAccountRect(accountBtn.current?.getBoundingClientRect() ?? null)} aria-haspopup="menu">
-          <Avatar name={session?.displayName ?? "?"} size={26} />
-          <span className="col grow side-account">
-            <span className="ellipsis side-name">{session?.displayName}</span>
-            <span className="ellipsis faint side-sub">{session?.isCloud ? "Облачный аккаунт" : "Локальный аккаунт"}</span>
-          </span>
-          {syncIcon && <Icon name={syncIcon} size={14} className={sync?.kind === "syncing" ? "pulse" : "faint"} />}
-          <Icon name="chevronDown" size={13} className="faint" />
-        </button>
+        <span className="side-brand grow"><Icon name="search" size={15} stroke={2.2} />Customers</span>
         <IconButton icon="sidebar" tip="Свернуть панель" onClick={() => (overlay ? setState({ navPeek: false }) : void patchDevice({ navOpen: false }))} />
       </div>
-      {accountRect && (
-        <Popover anchor={accountRect} onClose={() => setAccountRect(null)} ignore={accountBtn.current} minWidth={accountRect.width} className="popover-menu">
-          <ul className="menu">
-            <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("account"); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Аккаунт и синхронизация</button></li>
-            <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("data"); }}><span className="menu-icon"><Icon name="database" size={14} /></span>Данные и копии</button></li>
-            <li className="menu-sep" />
-            <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>
-          </ul>
-        </Popover>
-      )}
 
       <nav className="side-scroll">
         <div className="nav-group">{groupFor(main, MAIN_GROUP)}</div>
@@ -138,6 +127,19 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </div>
         )}
 
+        {!customize && (
+          <div className="nav-group">
+            <div className="nav-title">По оценке</div>
+            {SCORE_STEPS.map((n) => (
+              <button key={n} type="button" className={`nav-item${section === "all" && !sourceFilter && minScore === n ? " active" : ""}`} onClick={() => openScore(n)}>
+                <Icon name="star" size={16} />
+                <span className="ellipsis grow">Оценка {n}+</span>
+                {device.sidebarCounts && <span className="nav-count num">{integer(perScore.get(n) ?? 0)}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="nav-group">
           <div className="nav-title">Работа</div>
           {groupFor(work, WORK_GROUP)}
@@ -153,25 +155,37 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
       </nav>
 
       <div className="side-foot">
-        {updateReady && !customize && (
-          <button type="button" className="update-btn" onClick={() => openSettings("updates")}>
-            <Icon name="download" size={15} />
-            <span className="col grow">
-              <span className="ellipsis">{update.phase === "ready" ? "Обновление готово" : update.phase === "downloading" ? "Загрузка обновления…" : "Доступно обновление"}</span>
-              {update.available && <span className="faint side-sub">Версия {update.available.version}</span>}
-            </span>
-          </button>
-        )}
         {customize ? (
           <Button variant="primary" icon="check" onClick={() => setState({ customizeNav: false })}>Готово</Button>
         ) : (
           <div className="row side-tools">
-            <button type="button" className="nav-item grow" onClick={() => openSettings("appearance")}><Icon name="settings" size={16} /><span>Настройки</span></button>
-            <IconButton icon="edit" tip="Настроить панель" onClick={() => setState({ customizeNav: true })} />
+            <button type="button" className="nav-item grow" onClick={() => setState({ customizeNav: true })}><Icon name="edit" size={16} /><span>Настроить панель</span></button>
             <IconButton icon="help" tip="Справка" onClick={(e) => showMenu(helpItems(), e.currentTarget.getBoundingClientRect(), "top-start")} />
           </div>
         )}
+        <div className="row side-account-row">
+          <button ref={accountBtn} type="button" className="account-btn" onClick={() => setAccountRect(accountBtn.current?.getBoundingClientRect() ?? null)} aria-haspopup="menu" aria-label="Учётная запись">
+            <Avatar name={session?.displayName ?? "?"} src={session?.avatar} size={28} />
+            <span className="col grow side-account">
+              <span className="ellipsis side-name">{session?.displayName}</span>
+              <span className="ellipsis faint side-sub">{session?.isCloud ? "Облачный аккаунт" : "Локальный аккаунт"}</span>
+            </span>
+            {syncIcon && <Icon name={syncIcon} size={14} className={sync?.kind === "syncing" ? "pulse" : "faint"} />}
+          </button>
+          {updateReady && !customize && <UpdateButton />}
+        </div>
       </div>
+      {accountRect && (
+        <Popover anchor={accountRect} onClose={() => setAccountRect(null)} ignore={accountBtn.current} minWidth={Math.max(accountRect.width, 220)} className="popover-menu" placement="top-start">
+          <ul className="menu">
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("appearance"); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Настройки</button></li>
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("account"); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Аккаунт и синхронизация</button></li>
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("data"); }}><span className="menu-icon"><Icon name="database" size={14} /></span>Данные и копии</button></li>
+            <li className="menu-sep" />
+            <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>
+          </ul>
+        </Popover>
+      )}
     </aside>
   );
 }
@@ -180,6 +194,25 @@ function SwitchMini({ on, onChange }: { on: boolean; onChange: (v: boolean) => v
   return (
     <button type="button" role="switch" aria-checked={on} className={`switch${on ? " on" : ""}`} onClick={() => onChange(!on)}>
       <span className="switch-knob" />
+    </button>
+  );
+}
+
+/** Единственное, что показывается о новой версии: кнопка рядом с учётной записью. Без всплывающих сообщений. */
+function UpdateButton() {
+  const update = useStore((s) => s.update);
+  if (!update) return null;
+  const busy = update.phase === "downloading" || update.phase === "installing";
+  const click = () => {
+    if (!update.canUpdate) return void openLink(update.releasesPage);
+    if (update.phase === "ready") void attempt(() => api.installUpdate());
+    else if (update.phase === "available") void attempt(() => api.prepareUpdate());
+  };
+  const tip = update.available ? `Версия ${update.available.version}` : "Обновить приложение";
+  return (
+    <button type="button" className="update-btn" disabled={busy} onClick={click} data-tip={tip} aria-label={`Обновить. ${tip}`}>
+      <Icon name={busy ? "refresh" : "download"} size={14} className={busy ? "pulse" : undefined} />
+      <span>{busy ? "Загрузка…" : "Обновить"}</span>
     </button>
   );
 }

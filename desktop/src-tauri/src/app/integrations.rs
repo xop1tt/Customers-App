@@ -359,8 +359,9 @@ impl Core {
 
     /// Звонок: открывает tel: в программе по умолчанию и записывает событие в «Историю».
     pub fn call(self: &Arc<Self>, phone: &str, lead_id: Option<&str>) -> CmdResult<()> {
-        let url = contact::tel_url(phone).ok_or("Не похоже на номер телефона")?;
-        self.env.opener.open_url(&url).map_err(CmdError::msg)?;
+        let app = self.session().map(|s| s.account_prefs().call_app).unwrap_or_default();
+        let url = contact::call_url(&app, phone).ok_or("Не похоже на номер телефона")?;
+        self.env.opener.open_url(&url).map_err(|e| CmdError::msg(format!("{e}. Если программа не установлена, выберите другую в настройках: Способы связи → Звонки.")))?;
         if let Some(id) = lead_id {
             let _ = self.log_event(id, &format!("Звонок {phone}"));
         }

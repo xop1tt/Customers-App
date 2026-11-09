@@ -163,6 +163,8 @@ pub struct AccountPrefs {
     /// Спрашивать подтверждение перед звонком из карточки лида.
     pub confirm_calls: bool,
     pub confirm_calls_version: u32,
+    /// Программа для звонков: system, whatsapp, telegram, viber, skype, teams, facetime.
+    pub call_app: String,
     /// Мастер первого запуска пройден или пропущен для этой учётной записи.
     pub welcome_done: bool,
     pub export_last_tab: String,
@@ -184,6 +186,7 @@ impl Default for AccountPrefs {
             mail_delivery: "mailApp".into(),
             confirm_calls: true,
             confirm_calls_version: 0,
+            call_app: "system".into(),
             welcome_done: false,
             export_last_tab: String::new(),
         }
@@ -200,6 +203,9 @@ impl AccountPrefs {
             self.confirm_calls = true;
         }
         self.confirm_calls_version = 2;
+        if !crate::contact::CALL_APPS.iter().any(|a| a.id == self.call_app) {
+            self.call_app = "system".into();
+        }
         // Windows записывал имя варианта с заглавной буквы (MailApp, Smtp).
         self.mail_delivery = match self.mail_delivery.to_lowercase().as_str() {
             "smtp" => "smtp".into(),

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api";
 import type { CrashReport, PathsInfo, ReleaseSummary } from "../../api/types";
-import { dateOnly, bytes, shortRelative } from "../../lib/format";
+import { dateOnly, bytes, fullRu } from "../../lib/format";
 import { Button, EmptyState, Field, Group, Notice, Select, SettingRow, Spinner, Switch, Tag, TextArea, TextInput } from "../../ui/kit";
 import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, patchDevice, useStore } from "../../state/store";
@@ -77,7 +77,7 @@ export function ReportDialog({ onClose, initial = "", crash = false }: { onClose
     if (url) { await openLink(url); onClose(); }
   };
   return (
-    <Dialog title={crash ? "Приложение завершилось с ошибкой" : "Сообщить о проблеме"} onClose={onClose} width={560}
+    <Dialog title={crash ? "Приложение завершилось с ошибкой" : "Сообщить о проблеме"} onClose={onClose} width={500}
       footer={<><Button onClick={onClose}>{crash ? "Не сообщать" : "Отмена"}</Button><Button variant="primary" busy={busy} disabled={!title.trim()} onClick={() => void send()}>Открыть обращение</Button></>}>
       <div className="col" style={{ gap: 12 }}>
         <p className="muted">Откроется страница обращения в браузере. Текст ниже будет подставлен заранее, его можно изменить перед отправкой.</p>
@@ -108,12 +108,13 @@ export function UpdatesSection() {
     u.phase === "ready" ? `Обновление ${u.stagedVersion ?? u.available?.version ?? ""} загружено и готово к установке` :
     u.phase === "available" ? `Доступна версия ${u.available?.version}` :
     u.phase === "failed" ? "Не удалось обновить" :
-    u.phase === "upToDate" ? "Установлена последняя версия" : "Обновления не проверялись";
+    u.phase === "upToDate" ? "Установлена последняя версия" :
+    u.lastCheck ? null : "Обновления не проверялись";
 
   return (
     <>
       <Group title="Версия">
-        <SettingRow title={`Customers ${u.current}`} hint={<>{status}{u.lastCheck ? ` · проверено ${shortRelative(u.lastCheck)}` : ""}</>}>
+        <SettingRow title={`Customers ${u.current}`} hint={<>{status}{status && u.lastCheck ? " · " : ""}{u.lastCheck ? `Проверено: ${fullRu(u.lastCheck)}` : ""}</>}>
           {busy && <Spinner />}
           <Button icon="refresh" disabled={busy} onClick={() => void attempt(() => api.checkUpdates())}>Проверить</Button>
         </SettingRow>

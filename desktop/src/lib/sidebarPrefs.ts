@@ -1,6 +1,6 @@
 // Порядок и видимость разделов боковой панели (порт SidebarPrefs).
 
-export const MAIN_GROUP = ["home", "all", "new", "favorites"] as const;
+export const MAIN_GROUP = ["home", "new", "all", "favorites"] as const;
 export const WORK_GROUP = ["sources", "runs", "archive", "excluded"] as const;
 /** Разделы, которые можно скрыть. «Все лиды» и другие всегда на месте. */
 export const CONFIGURABLE = ["home", "new", "favorites", "sources", "runs", "archive", "excluded"] as const;

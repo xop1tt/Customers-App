@@ -1,6 +1,6 @@
 //! Команды, которые вызывает интерфейс. Здесь нет логики: каждая команда вызывает метод `Core`.
 
-use crate::app::session::Core;
+use crate::app::session::{Core, SessionInfo};
 use crate::app::{system, CmdError, CmdResult};
 use crate::mail::{MailAccount, OutgoingMail};
 use crate::{reports, updates};
@@ -44,8 +44,12 @@ pub async fn cloud_sign_in(core: C<'_>, email: String, password: String) -> CmdR
     core.inner().cloud_sign_in(&email, &password).await
 }
 #[tauri::command]
-pub async fn cloud_sign_up(core: C<'_>, email: String, password: String, confirm: String) -> CmdResult<Option<String>> {
-    core.inner().cloud_sign_up(&email, &password, &confirm).await
+pub async fn cloud_sign_up(core: C<'_>, email: String, password: String, confirm: String, username: String) -> CmdResult<Option<String>> {
+    core.inner().cloud_sign_up(&email, &password, &confirm, &username).await
+}
+#[tauri::command]
+pub fn set_profile(core: C<'_>, name: Option<String>, avatar: Option<String>) -> CmdResult<SessionInfo> {
+    core.inner().set_profile(name.as_deref(), avatar.as_deref())
 }
 #[tauri::command]
 pub async fn cloud_confirm(core: C<'_>, email: String, code: String) -> CmdResult<()> {
@@ -232,6 +236,14 @@ pub fn open_in_mail_app(core: C<'_>, to: String, subject: String, body: String, 
 #[tauri::command]
 pub fn call_phone(core: C<'_>, phone: String, lead_id: Option<String>) -> CmdResult<()> {
     core.inner().call(&phone, lead_id.as_deref())
+}
+
+#[tauri::command]
+pub fn call_apps() -> Vec<Value> {
+    crate::contact::CALL_APPS
+        .iter()
+        .map(|a| json!({"id": a.id, "title": a.title, "installed": crate::contact::call_app_installed(a), "opensChat": a.opens_chat}))
+        .collect()
 }
 
 #[tauri::command]

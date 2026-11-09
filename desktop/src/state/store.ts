@@ -10,7 +10,7 @@ import { type LeadFilter, type SectionId, emptyFilter, isLeadList } from "../lib
 import { type LightModeReason, evaluate } from "../lib/powerPolicy";
 
 export type Phase = "loading" | "error" | "auth" | "welcome" | "ready";
-export type SettingsSection = "appearance" | "search" | "account" | "data" | "exclusions" | "outreach" | "reports" | "updates";
+export type SettingsSection = "appearance" | "system" | "notifications" | "search" | "account" | "data" | "exclusions" | "outreach" | "reports" | "updates";
 export type ToastKind = "info" | "error" | "success";
 export interface Toast { id: number; kind: ToastKind; text: string }
 
@@ -37,6 +37,7 @@ export interface AppState {
   settings: SettingsSection | null;
   exportOpen: boolean;
   whatsNewOpen: boolean;
+  reportOpen: boolean;
   customizeNav: boolean;
   navPeek: boolean;
   sourceKey: string;
@@ -55,7 +56,7 @@ const EMPTY_SNAP: Snapshot = { leads: [], sources: [], pipelineErrors: [], exclu
 const initial: AppState = {
   phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
-  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, exportOpen: false, whatsNewOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru",
+  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, exportOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru",
 };
 
 let state = initial;
@@ -208,6 +209,10 @@ export function setSection(section: SectionId) {
 /** Открыть список лидов с готовым фильтром, например по источнику. */
 export function openSource(source: string) {
   setState({ section: "all", selection: [], anchor: null, navPeek: false, filter: { ...emptyFilter(), source } });
+}
+/** Список лидов с оценкой не ниже заданной. */
+export function openScore(minScore: number) {
+  setState({ section: "all", selection: [], anchor: null, navPeek: false, filter: { ...emptyFilter(), minScore } });
 }
 export const setFilter = (f: Partial<LeadFilter>) => setState((s) => ({ filter: { ...s.filter, ...f } }));
 export const openSettings = (settings: SettingsSection | null) => setState({ settings });
