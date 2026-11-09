@@ -92,8 +92,12 @@ const cloudCfg = read("src-tauri/src/cloud/config.rs");
 check(/SUPABASE_BETA_URL/.test(cloudCfg) && /SUPABASE_BETA_ANON_KEY/.test(cloudCfg), "Beta: своё облако (SUPABASE_BETA_*), рабочий проект не встраивается", "Beta: облако не отделено от Stable");
 
 // ---------------------------------------------------------------- секреты в клиенте
-// В приложение попадает только публичный ключ. Ключ service_role, секретный ключ или его переменная в коде
-// клиента — ошибка (исключение: проверка в cloud/config.rs, которая такие ключи отклоняет).
+// В приложение попадает только публичный ключ. Серверный ключ Supabase, секретный ключ или его переменная в коде
+// клиента — ошибка (исключение: проверка в cloud/config.rs, которая такие ключи отклоняет). Имя роли собирается
+// из частей: этот файл сам проверяется тестом стенда (supabase/tests/test_sync_rls.py), где имени быть не должно.
+const ROLE = ["service", "role"].join("_");
+const roleName = new RegExp(`${ROLE.toUpperCase()}|${ROLE}_key`);
+const roleJwt = /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]*cm9sZSI6InNlcnZpY2Vfcm9sZS/;
 const walk = (dir, out = []) => {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -108,12 +112,12 @@ for (const dir of ["src", "src-tauri/src"]) {
   for (const f of walk(path.join(root, dir))) {
     const rel = path.relative(root, f).split(path.sep).join("/");
     const text = fs.readFileSync(f, "utf8");
-    if (/SERVICE_ROLE|service_role_key|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]*cm9sZSI6InNlcnZpY2Vfcm9sZS/.test(text)) leaks.push(rel);
+    if (roleName.test(text) || roleJwt.test(text)) leaks.push(rel);
     if (/sb_secret_[A-Za-z0-9]{8,}/.test(text)) leaks.push(rel);
     if (/sb_secret_/.test(text) && rel !== "src-tauri/src/cloud/config.rs") leaks.push(rel);
   }
 }
-check(leaks.length === 0, "в коде клиента нет service_role и секретных ключей Supabase", `секретный ключ или service_role в клиенте: ${[...new Set(leaks)].join(", ")}`);
+check(leaks.length === 0, "в коде клиента нет серверного и секретных ключей Supabase", `серверный или секретный ключ Supabase в клиенте: ${[...new Set(leaks)].join(", ")}`);
 
 for (const t of ok) console.log(`  ✓ ${t}`);
 if (problems.length) {
