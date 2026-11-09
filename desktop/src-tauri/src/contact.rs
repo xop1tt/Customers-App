@@ -30,6 +30,80 @@ pub fn tel_url(phone: &str) -> Option<String> {
     normalized_phone(phone).map(|p| format!("tel:{p}"))
 }
 
+/// Программа для звонков. `scheme` — протокол, по которому система находит установленную программу.
+pub struct CallApp {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub scheme: &'static str,
+    /// Названия программы в папке «Программы» на macOS.
+    pub mac_names: &'static [&'static str],
+    /// Мессенджеры открывают чат с номером, а звонок начинается кнопкой в самой программе.
+    pub opens_chat: bool,
+}
+
+pub const CALL_APPS: &[CallApp] = &[
+    CallApp { id: "system", title: "Стандартное приложение системы", scheme: "tel", mac_names: &[], opens_chat: false },
+    CallApp { id: "whatsapp", title: "WhatsApp", scheme: "whatsapp", mac_names: &["WhatsApp"], opens_chat: true },
+    CallApp { id: "telegram", title: "Telegram", scheme: "tg", mac_names: &["Telegram", "Telegram Desktop"], opens_chat: true },
+    CallApp { id: "viber", title: "Viber", scheme: "viber", mac_names: &["Viber"], opens_chat: true },
+    CallApp { id: "skype", title: "Skype", scheme: "skype", mac_names: &["Skype"], opens_chat: false },
+    CallApp { id: "teams", title: "Microsoft Teams", scheme: "msteams", mac_names: &["Microsoft Teams", "Microsoft Teams (work or school)"], opens_chat: false },
+    CallApp { id: "facetime", title: "FaceTime", scheme: "facetime-audio", mac_names: &["FaceTime"], opens_chat: false },
+];
+
+pub fn call_app(id: &str) -> &'static CallApp {
+    CALL_APPS.iter().find(|a| a.id == id).unwrap_or(&CALL_APPS[0])
+}
+
+/// Ссылка для звонка через выбранную программу. Неизвестная программа заменяется стандартной.
+pub fn call_url(app: &str, phone: &str) -> Option<String> {
+    let p = normalized_phone(phone)?;
+    let digits: String = p.chars().filter(char::is_ascii_digit).collect();
+    Some(match call_app(app).id {
+        "whatsapp" => format!("whatsapp://send?phone={digits}"),
+        "telegram" => format!("tg://resolve?phone={digits}"),
+        "viber" => format!("viber://chat?number=%2B{digits}"),
+        "skype" => format!("skype:+{digits}?call"),
+        "teams" => format!("msteams://teams.microsoft.com/l/call/0/0?users=4:%2B{digits}"),
+        "facetime" => format!("facetime-audio://+{digits}"),
+        _ => format!("tel:{p}"),
+    })
+}
+
+/// Установлена ли программа. Стандартное приложение системы считается установленным всегда.
+pub fn call_app_installed(app: &CallApp) -> bool {
+    if app.id == "system" {
+        return true;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let dirs = ["/Applications".to_string(), "/System/Applications".to_string(), format!("{home}/Applications")];
+        app.mac_names.iter().any(|n| dirs.iter().any(|d| std::path::Path::new(&format!("{d}/{n}.app")).exists()))
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        // Программа, которая умеет открывать ссылки такого вида, регистрирует протокол в реестре.
+        app.id != "facetime"
+            && std::process::Command::new("reg")
+                .args(["query", &format!("HKEY_CLASSES_ROOT\\{}", app.scheme)])
+                .creation_flags(0x0800_0000)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        app.id != "facetime"
+            && std::process::Command::new("xdg-mime")
+                .args(["query", "default", &format!("x-scheme-handler/{}", app.scheme)])
+                .output()
+                .map(|o| o.status.success() && !o.stdout.iter().all(u8::is_ascii_whitespace))
+                .unwrap_or(false)
+    }
+}
+
 /// Простая проверка адреса: одна «@», непустые части, точка в домене, без пробелов и управляющих
 /// символов (перевод строки в адресе открыл бы подстановку заголовков письма).
 pub fn is_email(raw: &str) -> bool {
@@ -88,6 +162,20 @@ mod tests {
         assert_eq!(normalized_phone("+1234567890123456"), None);
         assert_eq!(normalized_phone("тел."), None);
         assert_eq!(tel_url("8 843 212-48-90").as_deref(), Some("tel:+78432124890"));
+    }
+
+    #[test]
+    fn call_links_per_app() {
+        let n = "8 843 212-48-90";
+        assert_eq!(call_url("system", n).as_deref(), Some("tel:+78432124890"));
+        assert_eq!(call_url("unknown", n).as_deref(), Some("tel:+78432124890"));
+        assert_eq!(call_url("whatsapp", n).as_deref(), Some("whatsapp://send?phone=78432124890"));
+        assert_eq!(call_url("telegram", n).as_deref(), Some("tg://resolve?phone=78432124890"));
+        assert_eq!(call_url("viber", n).as_deref(), Some("viber://chat?number=%2B78432124890"));
+        assert_eq!(call_url("skype", n).as_deref(), Some("skype:+78432124890?call"));
+        assert_eq!(call_url("facetime", n).as_deref(), Some("facetime-audio://+78432124890"));
+        assert_eq!(call_url("whatsapp", "тел."), None);
+        assert!(call_app_installed(call_app("system")));
     }
 
     #[test]

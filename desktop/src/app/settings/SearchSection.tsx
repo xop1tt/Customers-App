@@ -20,12 +20,21 @@ export function SearchSection() {
           <Button onClick={() => { setState({ settings: null }); setSection("sources"); }}>Настроить источники</Button>
         </SettingRow>
       </Group>
-      <Group title="Уведомления" note="Уведомления показываются, когда окно приложения не в фокусе.">
+      {enabled === 0 && <Notice tone="warn">Все источники выключены, поиск ничего не найдёт.</Notice>}
+    </>
+  );
+}
+
+export function NotificationsSection() {
+  const a = useStore((s) => s.account);
+  if (!a) return null;
+  return (
+    <>
+      <Group title="Системные уведомления" note="Уведомления показываются, когда окно приложения не в фокусе.">
         <SettingRow title="О новых лидах"><Switch checked={a.notifyNewLeads} onChange={(v) => void patchAccount({ notifyNewLeads: v })} /></SettingRow>
         <SettingRow title="Об ошибках поиска"><Switch checked={a.notifyErrors} onChange={(v) => void patchAccount({ notifyErrors: v })} /></SettingRow>
         <SettingRow title="О синхронизации"><Switch checked={a.notifySync} onChange={(v) => void patchAccount({ notifySync: v })} /></SettingRow>
       </Group>
-      {enabled === 0 && <Notice tone="warn">Все источники выключены, поиск ничего не найдёт.</Notice>}
     </>
   );
 }

@@ -245,11 +245,11 @@ export function ProgressBar({ value, tone }: { value: number; tone?: "good" | "m
   );
 }
 
-export function Avatar({ name, size = 28 }: { name: string; size?: number }) {
+export function Avatar({ name, size = 28, src }: { name: string; size?: number; src?: string | null }) {
   const letter = (name.trim()[0] ?? "?").toUpperCase();
   return (
     <span className="avatar" style={{ width: size, height: size, fontSize: Math.round(size * 0.46) }} aria-hidden="true">
-      {letter}
+      {src ? <img src={src} alt="" draggable={false} /> : letter}
     </span>
   );
 }

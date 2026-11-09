@@ -7,6 +7,8 @@ import { Icon } from "../ui/icons";
 import { patchAccount, patchDevice, setState, updateSettings, useStore } from "../state/store";
 import { DrivesPanel } from "./panels/DrivesPanel";
 import { MailPanel } from "./panels/MailPanel";
+import { CrmPanel } from "./panels/CrmPanel";
+import { CallApps } from "./settings/OutreachSection";
 import { Brand } from "./Auth";
 
 const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2].map((v) => ({ value: v, label: `${Math.round(v * 100)}%` }));
@@ -32,7 +34,14 @@ export function Welcome() {
         <div className="welcome-body">
           {step.id === "intro" && <Intro />}
           {step.id === "sources" && <SourcesStep />}
-          {step.id === "integrations" && <><p className="muted" style={{ marginBottom: 12 }}>Письма можно отправлять из почтовой программы или напрямую со своего сервера. Выгрузка в Битрикс24, Notion и вебхуки настраивается при первом экспорте лидов.</p><Group><MailPanel /></Group></>}
+          {step.id === "integrations" && (
+            <>
+              <p className="muted" style={{ marginBottom: 12 }}>Здесь всё, с чем приложение умеет работать. Подключайте только нужное: остальное можно пропустить и настроить позже в настройках.</p>
+              <Group title="Почта"><MailPanel /></Group>
+              <Group title="Выгрузка лидов" note="Битрикс24, Notion и вебхук: после подключения лиды можно отправлять кнопкой «Экспорт»."><CrmPanel /></Group>
+              <Group title="Звонки"><CallApps /></Group>
+            </>
+          )}
           {step.id === "drives" && <><p className="muted" style={{ marginBottom: 12 }}>Копии базы можно хранить на вашем облачном диске. Этот шаг можно пропустить и вернуться к нему позже в настройках.</p><Group><DrivesPanel /></Group></>}
           {step.id === "appearance" && <AppearanceStep />}
         </div>

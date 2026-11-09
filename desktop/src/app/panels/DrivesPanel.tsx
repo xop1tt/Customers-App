@@ -13,6 +13,7 @@ export function DrivesPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [keyFor, setKeyFor] = useState<ProviderInfo | null>(null);
   const [dav, setDav] = useState<DriveInfo | null>(null);
+  const [bind, setBind] = useState<DriveInfo | null>(null);
 
   const load = useCallback(() => { void api.drivesState().then(setState).catch(() => {}); }, []);
   useEffect(load, [load]);
@@ -21,8 +22,11 @@ export function DrivesPanel() {
 
   const connect = async (d: DriveInfo) => {
     if (d.kind === "webdav") return setDav(d);
-    const p = state.providers.find((x) => x.provider === d.provider);
-    if (p && !p.hasKey && !p.builtIn) return setKeyFor(p);
+    setBind(d);
+  };
+  /** Вход через браузер: приложение открывает страницу сервиса и ждёт ответа. */
+  const bindNow = async (d: DriveInfo) => {
+    setBind(null);
     setBusy(d.service);
     const r = await attempt(() => api.connectOauth(d.service));
     setBusy(null);
@@ -59,9 +63,27 @@ export function DrivesPanel() {
         </SettingRow>
       ))}
       {busy && <Notice tone="info">Завершите вход в открывшемся окне браузера. Приложение ждёт ответа.</Notice>}
+      {bind && <BindDialog drive={bind} provider={state.providers.find((x) => x.provider === bind.provider) ?? null} onClose={() => setBind(null)} onConfirm={() => void bindNow(bind)} onKey={(p) => { setBind(null); setKeyFor(p); }} />}
       {keyFor && <OAuthKeyDialog provider={keyFor} redirect={state.redirect} onClose={() => { setKeyFor(null); load(); }} />}
       {dav && <WebdavDialog drive={dav} onClose={(ok) => { setDav(null); if (ok) load(); }} />}
     </>
+  );
+}
+
+/** «Привязать ваш аккаунт в …?»: подтверждение перед открытием браузера. */
+function BindDialog({ drive, provider, onClose, onConfirm, onKey }: { drive: DriveInfo; provider: ProviderInfo | null; onClose: () => void; onConfirm: () => void; onKey: (p: ProviderInfo) => void }) {
+  const ready = !provider || provider.hasKey || provider.builtIn;
+  return (
+    <Dialog title={`Привязать ваш аккаунт в ${drive.title}?`} onClose={onClose} width={460}
+      footer={<><Button onClick={onClose}>Отмена</Button>{ready ? <Button variant="primary" icon="external" onClick={onConfirm}>Открыть браузер</Button> : provider && <Button variant="primary" onClick={() => onKey(provider)}>Указать ключ приложения…</Button>}</>}>
+      <div className="col" style={{ gap: 12 }}>
+        {ready ? (
+          <p className="muted">Откроется страница входа {drive.title} в браузере. Войдите в свой аккаунт и разрешите доступ: приложение сможет загружать только резервные копии базы. Пароль приложению не передаётся.</p>
+        ) : (
+          <Notice tone="warn">В этой сборке приложения нет ключа для входа через {drive.title}, поэтому одной кнопкой подключить не получится. Укажите свой ключ приложения (один раз) или используйте другой диск.</Notice>
+        )}
+      </div>
+    </Dialog>
   );
 }
 
@@ -101,10 +123,15 @@ function WebdavDialog({ drive, onClose }: { drive: DriveInfo; onClose: (ok: bool
     if (r) { toast(r, "success"); onClose(true); }
   };
   return (
-    <Dialog title={`Подключить ${drive.title}`} onClose={() => onClose(false)} width={480}
+    <Dialog title={`Привязать ваш аккаунт в ${drive.title}?`} onClose={() => onClose(false)} width={480}
       footer={<><Button onClick={() => onClose(false)}>Отмена</Button><Button variant="primary" busy={busy} disabled={!url.trim() || !login.trim() || (!drive.passwordOptional && !password)} onClick={() => void connect()}>Подключить</Button></>}>
       <div className="col" style={{ gap: 12 }}>
-        {drive.passwordPage && <p className="muted">Нужен пароль приложения, а не пароль от аккаунта. <a onClick={() => void openLink(drive.passwordPage as string)}>Создать пароль приложения</a></p>}
+        {drive.passwordPage && (
+          <div className="col" style={{ gap: 8 }}>
+            <p className="muted">Сначала создайте пароль приложения в браузере: нужен он, а не пароль от аккаунта.</p>
+            <div><Button icon="external" onClick={() => void openLink(drive.passwordPage as string)}>Открыть страницу в браузере</Button></div>
+          </div>
+        )}
         <Field label="Адрес WebDAV"><TextInput value={url} onChange={setUrl} disabled={urlFixed} placeholder="https://example.com/remote.php/dav/files/user/" /></Field>
         <Field label="Логин"><TextInput value={login} onChange={setLogin} data-autofocus /></Field>
         <Field label={drive.passwordOptional ? "Пароль (необязательно)" : "Пароль приложения"}><PasswordInput value={password} onChange={setPassword} /></Field>

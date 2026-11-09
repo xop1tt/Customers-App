@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { bytes, fullRu, intervalTitle, plural, shortRelative } from "./format";
 import { HIDE_DELAY, HoverReveal, SHOW_DELAY } from "./hoverReveal";
 import { evaluate, explanation } from "./powerPolicy";
-import { CONFIGURABLE, move, ordered, toggled } from "./sidebarPrefs";
+import { squareCrop } from "./avatar";
+import { CONFIGURABLE, MAIN_GROUP, move, ordered, toggled } from "./sidebarPrefs";
 import { addAll, feedUrl, isPublicHttpUrl, keyword, split, telegramChannel, vkCommunity } from "./sourceInput";
 import { applyRegion, back, canSkip, finish, isLast, newFlow, next, regionName, skip, stateOf, stepOf } from "./welcomeFlow";
 
@@ -147,5 +148,17 @@ describe("форматы", () => {
     expect(intervalTitle(24)).toBe("Раз в сутки");
     expect(intervalTitle(120)).toBe("Раз в 5 дн.");
     expect([1, 2, 5, 11, 21, 24].map((n) => plural(n, "лид", "лида", "лидов"))).toEqual(["лид", "лида", "лидов", "лидов", "лид", "лида"]);
+  });
+});
+
+describe("аватар и боковая панель", () => {
+  it("обрезает картинку до квадрата по центру", () => {
+    expect(squareCrop(400, 200)).toEqual({ x: 100, y: 0, side: 200 });
+    expect(squareCrop(100, 300)).toEqual({ x: 0, y: 100, side: 100 });
+    expect(squareCrop(64, 64)).toEqual({ x: 0, y: 0, side: 64 });
+  });
+  it("«Новые» по умолчанию выше «Все лиды»", () => {
+    const order = ordered(MAIN_GROUP, []);
+    expect(order.indexOf("new")).toBeLessThan(order.indexOf("all"));
   });
 });
