@@ -124,6 +124,7 @@ jobs:
 
       # Lock-файл должен соответствовать Cargo.toml, иначе сборка в релизе пойдёт с другими версиями.
       - name: Lock file is up to date
+        shell: bash
         run: cargo metadata --manifest-path src-tauri/Cargo.toml --locked --format-version 1 > /dev/null
 
       - name: Formatting (rustfmt)
