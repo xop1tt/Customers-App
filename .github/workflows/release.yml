@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Тег релиза, например v1.0.0"
+        description: "Тег релиза строго из трёх или четырёх чисел: v1.2.0 или v1.2.0.1 (v1.2 не подходит)"
         required: true
-        default: "v1.0.0"
+        default: "v1.2.0"
 
 permissions:
   contents: read
@@ -45,7 +45,7 @@ jobs:
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG" >&2; exit 1; fi
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG. Нужен вид vX.Y.Z или vX.Y.Z.W, например v1.2.0" >&2; exit 1; fi
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -244,14 +244,19 @@ jobs:
 
       - name: Publish release
         run: |
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG" >&2; exit 1; fi
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG. Нужен вид vX.Y.Z или vX.Y.Z.W, например v1.2.0" >&2; exit 1; fi
           files=(files/*)
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             # Релиз уже создан (например, через интерфейс GitHub): только прикладываем файлы.
             gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
             exit 0
           fi
+          # Тег создаём отдельным вызовом: если его не дадут создать, в логе будет настоящая причина,
+          # а не общий отказ при создании релиза.
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" >/dev/null
+          fi
           notes=".github/release-notes/${TAG}.md"
-          args=(--title "Customers ${TAG#v}" --target "$GITHUB_SHA")
+          args=(--title "Customers ${TAG#v}" --verify-tag)
           if [ -f "$notes" ]; then args+=(--notes-file "$notes"); else args+=(--generate-notes); fi
           gh release create "$TAG" "${files[@]}" "${args[@]}" --repo "$GITHUB_REPOSITORY"
