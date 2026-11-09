@@ -153,7 +153,8 @@ pub mod dpapi {
             let input = blob(data);
             let entropy = blob(ENTROPY);
             let mut out = CRYPT_INTEGER_BLOB::default();
-            CryptProtectData(&input, None, Some(&entropy), None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out).map_err(|e| AppError::msg(format!("DPAPI: {e}")))?;
+            CryptProtectData(&input, None, Some(&entropy), None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
+                .map_err(|e| AppError::msg(format!("DPAPI: {e}")))?;
             let v = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
             let _ = LocalFree(Some(HLOCAL(out.pbData as *mut _)));
             Ok(v)

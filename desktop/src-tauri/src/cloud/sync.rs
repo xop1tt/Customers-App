@@ -28,7 +28,8 @@ fn rest_error(status: u16, data: &[u8]) -> CloudError {
     if status == 401 || status == 403 {
         return CloudError::SessionExpired;
     }
-    let msg = serde_json::from_slice::<Value>(data).ok().and_then(|v| v.get("message").and_then(Value::as_str).map(|s| s.chars().take(200).collect::<String>()));
+    let msg =
+        serde_json::from_slice::<Value>(data).ok().and_then(|v| v.get("message").and_then(Value::as_str).map(|s| s.chars().take(200).collect::<String>()));
     CloudError::Server(msg.unwrap_or_else(|| format!("HTTP {status}")))
 }
 

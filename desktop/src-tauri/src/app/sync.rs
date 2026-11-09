@@ -60,7 +60,13 @@ pub struct SyncStatus {
 impl Session {
     pub fn sync_status(&self) -> SyncStatus {
         let st = self.sync.lock().unwrap();
-        SyncStatus { enabled: self.is_cloud, kind: st.kind, message: st.message.clone(), last_sync: st.last_sync.as_ref().map(format_date), pending: st.pending }
+        SyncStatus {
+            enabled: self.is_cloud,
+            kind: st.kind,
+            message: st.message.clone(),
+            last_sync: st.last_sync.as_ref().map(format_date),
+            pending: st.pending,
+        }
     }
 }
 
@@ -246,7 +252,15 @@ mod tests {
 
     #[tokio::test]
     async fn revoked_session_ends_the_cloud_session() {
-        let f = fixture(true, vec![Ok(HttpResponse::new(200, SESSION)), Ok(HttpResponse::new(401, r#"{"message":"JWT expired"}"#)), Ok(HttpResponse::new(401, "{}")), Ok(HttpResponse::new(400, r#"{"error":"invalid_grant"}"#))]);
+        let f = fixture(
+            true,
+            vec![
+                Ok(HttpResponse::new(200, SESSION)),
+                Ok(HttpResponse::new(401, r#"{"message":"JWT expired"}"#)),
+                Ok(HttpResponse::new(401, "{}")),
+                Ok(HttpResponse::new(400, r#"{"error":"invalid_grant"}"#)),
+            ],
+        );
         let core = Core::new(f.env.clone());
         core.cloud_sign_in("me@example.com", "Password-1").await.unwrap();
         for _ in 0..100 {

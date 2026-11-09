@@ -128,7 +128,13 @@ fn shorten(b: &Bullet) -> String {
         // Короткий заголовок вроде «Название» без описания беден: добавляем первое предложение описания.
         Some(lead) => {
             let sentence = first_sentence(&b.rest);
-            if sentence.is_empty() { lead.clone() } else if lead.chars().count() <= 14 { sentence.to_string() } else { lead.clone() }
+            if sentence.is_empty() {
+                lead.clone()
+            } else if lead.chars().count() <= 14 {
+                sentence.to_string()
+            } else {
+                lead.clone()
+            }
         }
         None => first_sentence(&b.rest).to_string(),
     };
@@ -147,14 +153,55 @@ fn shorten(b: &Bullet) -> String {
 }
 
 fn is_service_section(head: &str) -> bool {
-    ["установк", "install", "контрольн", "checksum", "sha", "full changelog", "new contributors", "новые участники", "скачать", "файлы", "assets"].iter().any(|k| head.contains(k))
+    ["установк", "install", "контрольн", "checksum", "sha", "full changelog", "new contributors", "новые участники", "скачать", "файлы", "assets"]
+        .iter()
+        .any(|k| head.contains(k))
 }
 
 /// Пункты для разработчиков: документация, CI, тесты, зависимости, внутренняя перестройка.
 const TECHNICAL: &[&str] = &[
-    "readme", "wiki", "вики", "рефактор", "refactor", "workflow", "github actions", "ci:", " ci ", "dependabot", "bump", "зависимост", "автотест", "тесты", "тестов", "тестир", "unit", "test", "lint", "codeql",
-    "swiftpm", "dotnet", ".yml", "pull request", "коммит", "commit", "опечатк", "typo", "full changelog", "changelog", "sha-256", "sha256", "контрольн", "sqlite", "миграци базы", "ci/cd", "документаци", "покрыти",
-    "сборк", "xcode", "winui", "inno setup",
+    "readme",
+    "wiki",
+    "вики",
+    "рефактор",
+    "refactor",
+    "workflow",
+    "github actions",
+    "ci:",
+    " ci ",
+    "dependabot",
+    "bump",
+    "зависимост",
+    "автотест",
+    "тесты",
+    "тестов",
+    "тестир",
+    "unit",
+    "test",
+    "lint",
+    "codeql",
+    "swiftpm",
+    "dotnet",
+    ".yml",
+    "pull request",
+    "коммит",
+    "commit",
+    "опечатк",
+    "typo",
+    "full changelog",
+    "changelog",
+    "sha-256",
+    "sha256",
+    "контрольн",
+    "sqlite",
+    "миграци базы",
+    "ci/cd",
+    "документаци",
+    "покрыти",
+    "сборк",
+    "xcode",
+    "winui",
+    "inno setup",
 ];
 
 fn is_technical(low: &str) -> bool {
@@ -177,13 +224,34 @@ fn topic_of(low: &str) -> Topic {
     let has = |words: &[&str]| words.iter().any(|w| low.contains(w));
     if has(&["энергосбереж", "заряд", "батаре", "облегчен"]) {
         Topic::Power
-    } else if has(&["что нового", "мастер", "первый запуск", "первоначальн", "автообновлен", "обновление приложени"]) {
+    } else if has(&["что нового", "мастер", "первый запуск", "первоначальн", "автообновлен", "обновление приложени"])
+    {
         Topic::Updates
-    } else if has(&["поиск", "источник", "лид", "категори", "openstreetmap", "osm", "telegram", "телеграм", "регион", "ключев", "исключен"]) {
+    } else if has(&["поиск", "источник", "лид", "категори", "openstreetmap", "osm", "telegram", "телеграм", "регион", "ключев", "исключен"])
+    {
         Topic::Search
-    } else if has(&["облак", "синхрон", "резервн", "диск", "экспорт", "импорт", "crm", "интеграц", "почт", "звонк"]) {
+    } else if has(&["облак", "синхрон", "резервн", "диск", "экспорт", "импорт", "crm", "интеграц", "почт", "звонк"])
+    {
         Topic::Data
-    } else if has(&["интерфейс", "окн", "панел", "дизайн", "оформлен", "темн", "светл", "тема", "темы", "тему", "цвет", "адаптив", "масштаб", "анимац", "кнопк", "меню", "настройк"]) {
+    } else if has(&[
+        "интерфейс",
+        "окн",
+        "панел",
+        "дизайн",
+        "оформлен",
+        "темн",
+        "светл",
+        "тема",
+        "темы",
+        "тему",
+        "цвет",
+        "адаптив",
+        "масштаб",
+        "анимац",
+        "кнопк",
+        "меню",
+        "настройк",
+    ]) {
         Topic::Interface
     } else {
         Topic::Other
@@ -240,7 +308,7 @@ pub fn build(markdown: &str, platform: Platform) -> Vec<Feature> {
             continue;
         }
         if trimmed.starts_with('#') {
-            let head = clean(trimmed.trim_start_matches(|c| c == '#' || c == ' ')).to_lowercase();
+            let head = clean(trimmed.trim_start_matches(['#', ' '])).to_lowercase();
             section_ok = !is_service_section(&head);
             section_platform = only(&head);
             section_title = head;
@@ -340,7 +408,11 @@ pub mod space {
 
     pub fn message(available: u64, installer_size: Option<u64>) -> String {
         let mb = |v: u64| v.div_ceil(1_048_576);
-        format!("Недостаточно места на диске: для обновления нужно около {} МБ, свободно {} МБ. Освободите место и повторите.", mb(required(installer_size)), mb(available))
+        format!(
+            "Недостаточно места на диске: для обновления нужно около {} МБ, свободно {} МБ. Освободите место и повторите.",
+            mb(required(installer_size)),
+            mb(available)
+        )
     }
 }
 
@@ -371,8 +443,16 @@ mod tests {
         let md = "- Windows: значок в области уведомлений\n- macOS: боковая панель выезжает при наведении\n- Общий поиск стал быстрее\n- Мастер на Windows и macOS спрашивает регион";
         let (m, w) = (texts(&mac(md)), texts(&win(md)));
         assert!(!m.iter().any(|i| i.to_lowercase().contains("значок в области")));
-        assert!(m.iter().any(|i| i.contains("боковая панель")) && m.iter().any(|i| i.contains("Общий поиск")) && m.iter().any(|i| i.contains("Мастер на Windows и macOS")));
-        assert!(w.iter().any(|i| i.contains("значок в области")) && !w.iter().any(|i| i.contains("боковая панель")) && w.iter().any(|i| i.contains("Мастер на Windows и macOS")));
+        assert!(
+            m.iter().any(|i| i.contains("боковая панель"))
+                && m.iter().any(|i| i.contains("Общий поиск"))
+                && m.iter().any(|i| i.contains("Мастер на Windows и macOS"))
+        );
+        assert!(
+            w.iter().any(|i| i.contains("значок в области"))
+                && !w.iter().any(|i| i.contains("боковая панель"))
+                && w.iter().any(|i| i.contains("Мастер на Windows и macOS"))
+        );
     }
 
     #[test]

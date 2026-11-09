@@ -195,7 +195,8 @@ impl Core {
         };
         #[cfg(not(target_os = "macos"))]
         let path = file;
-        let record = StagedRecord { version: update.version.to_string(), path: path.display().to_string(), title: update.title.clone(), notes: update.notes.clone() };
+        let record =
+            StagedRecord { version: update.version.to_string(), path: path.display().to_string(), title: update.title.clone(), notes: update.notes.clone() };
         let _ = std::fs::write(self.staged_file(), serde_json::to_string(&record).unwrap_or_default());
         self.updates.lock().unwrap().staged = Some(record);
         self.set_phase(Phase::Ready);
@@ -280,7 +281,9 @@ impl Core {
             let st = self.updates.lock().unwrap();
             match (&st.releases, st.releases_failed_at) {
                 (Some((at, list)), _) if now - *at < Duration::seconds(RELEASES_TTL_OK) => Some(list.clone()),
-                (_, Some(failed)) if now - failed < Duration::seconds(RELEASES_TTL_FAIL) => return Err(CmdError::msg("Не удалось загрузить список версий. Повторите позже.")),
+                (_, Some(failed)) if now - failed < Duration::seconds(RELEASES_TTL_FAIL) => {
+                    return Err(CmdError::msg("Не удалось загрузить список версий. Повторите позже."))
+                }
                 _ => None,
             }
         };
@@ -328,7 +331,9 @@ impl Core {
                     },
                 };
                 let features = whatsnew::build(&notes, platform());
-                Ok(json!({"show": true, "version": self.env.version.to_string(), "title": title, "page": page, "features": features, "notes": updates::plain_notes(&notes, Some(1200))}))
+                Ok(
+                    json!({"show": true, "version": self.env.version.to_string(), "title": title, "page": page, "features": features, "notes": updates::plain_notes(&notes, Some(1200))}),
+                )
             }
         }
     }
@@ -364,7 +369,13 @@ mod tests {
 
     #[tokio::test]
     async fn check_finds_a_newer_release_and_stays_quiet_when_up_to_date() {
-        let f = fixture(false, vec![Ok(HttpResponse::new(200, release("v1.1.0", installer_name(), &"0".repeat(64)))), Ok(HttpResponse::new(200, release("v9.9.9", installer_name(), &"0".repeat(64))))]);
+        let f = fixture(
+            false,
+            vec![
+                Ok(HttpResponse::new(200, release("v1.1.0", installer_name(), &"0".repeat(64)))),
+                Ok(HttpResponse::new(200, release("v9.9.9", installer_name(), &"0".repeat(64)))),
+            ],
+        );
         let core = super::super::session::Core::new(f.env.clone());
         let info = core.check_updates(true).await.unwrap();
         assert_eq!(info.phase, Phase::UpToDate);

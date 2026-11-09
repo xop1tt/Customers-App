@@ -8,8 +8,7 @@ on:
   push:
     branches: [main]
     paths: ["desktop/**", "supabase/migrations/**", ".github/workflows/desktop.yml"]
-  pull_request:
-    paths: ["desktop/**", "supabase/migrations/**", ".github/workflows/desktop.yml"]
+  pull_request:   # без фильтра путей: нужные файлы определяет задача changes
   workflow_dispatch:
 
 permissions:
@@ -25,8 +24,35 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
+  # Проверка пути не на уровне workflow, а здесь: пропущенные по условию задачи считаются пройденными,
+  # поэтому обязательная проверка «Desktop gate» не зависает, когда PR не затрагивает эти файлы (например, обновление pip).
+  changes:
+    name: Changed files
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only "$BASE" HEAD | grep -Eq '^(desktop/|supabase/migrations/|\.github/workflows/desktop\.yml$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
   frontend:
     name: Interface (types, tests, build)
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
@@ -51,6 +77,8 @@ jobs:
 
   rust:
     name: Core and app layer tests (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -94,12 +122,26 @@ jobs:
           restore-keys: |
             cargo-test-${{ runner.os }}-
 
+      # Lock-файл должен соответствовать Cargo.toml, иначе сборка в релизе пойдёт с другими версиями.
+      - name: Lock file is up to date
+        shell: bash
+        run: cargo metadata --manifest-path src-tauri/Cargo.toml --locked --format-version 1 > /dev/null
+
+      - name: Formatting (rustfmt)
+        if: runner.os == 'Linux'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Static analysis (clippy)
+        if: runner.os == 'Linux'
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --lib --bins --locked -- -D warnings
+
       - name: Tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
 
   build:
     name: Production build (${{ matrix.name }})
-    needs: [frontend, rust]
+    needs: [changes, frontend, rust]
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -163,3 +205,22 @@ jobs:
           $exe = 'src-tauri/target/release/customers.exe'
           if (-not (Test-Path $exe)) { throw "Не найден $exe" }
           "{0:N1} МБ" -f ((Get-Item $exe).Length / 1MB)
+
+  # Единственная проверка, которую делают обязательной в настройках ветки: успех или «пропущено» у всех задач выше.
+  gate:
+    name: Desktop gate
+    if: always()
+    needs: [changes, frontend, rust, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All jobs passed or were skipped by the path filter
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::Задача завершилась со статусом: $r"; exit 1 ;;
+            esac
+          done

@@ -40,10 +40,18 @@ impl MailProvider {
         }
     }
     pub fn port(self) -> u16 {
-        if self == MailProvider::Icloud { 587 } else { 465 }
+        if self == MailProvider::Icloud {
+            587
+        } else {
+            465
+        }
     }
     pub fn security(self) -> MailSecurity {
-        if self == MailProvider::Icloud { MailSecurity::StartTls } else { MailSecurity::Tls }
+        if self == MailProvider::Icloud {
+            MailSecurity::StartTls
+        } else {
+            MailSecurity::Tls
+        }
     }
     /// Страница, где создаётся пароль приложения (обычный пароль сервисы по SMTP не принимают).
     pub fn app_password_page(self) -> Option<&'static str> {
@@ -115,7 +123,16 @@ pub struct MailAccount {
 
 impl Default for MailAccount {
     fn default() -> Self {
-        Self { provider: MailProvider::Custom, host: String::new(), port: 465, security: MailSecurity::Tls, username: String::new(), from_address: String::new(), from_name: String::new(), copy_to_self: true }
+        Self {
+            provider: MailProvider::Custom,
+            host: String::new(),
+            port: 465,
+            security: MailSecurity::Tls,
+            username: String::new(),
+            from_address: String::new(),
+            from_name: String::new(),
+            copy_to_self: true,
+        }
     }
 }
 
@@ -183,7 +200,11 @@ pub enum MailError {
     TlsUnavailable,
     AuthUnsupported,
     /// Ответ сервера с кодом ошибки на шаге `stage`.
-    Server { code: u16, message: String, stage: String },
+    Server {
+        code: u16,
+        message: String,
+        stage: String,
+    },
     BadReply(String),
     Connection(String),
 }
@@ -481,7 +502,9 @@ mod net {
         }
 
         async fn upgrade(&mut self) -> Result<(), MailError> {
-            let Stream::Plain(tcp) = std::mem::replace(&mut self.stream, Stream::Closed) else { return Err(err("соединение уже зашифровано")) };
+            let Stream::Plain(tcp) = std::mem::replace(&mut self.stream, Stream::Closed) else {
+                return Err(err("соединение уже зашифровано"));
+            };
             let name = rustls_pki_types::ServerName::try_from(self.host.clone()).map_err(err)?;
             let tls = tokio::time::timeout(self.timeout, connector().connect(name, tcp)).await.map_err(|_| err("время ожидания вышло"))?.map_err(err)?;
             self.stream = Stream::Tls(Box::new(tls));
@@ -592,7 +615,9 @@ mod tests {
     }
 
     fn mail() -> OutgoingMail {
-        OutgoingMail { to: "client@example.com".into(), subject: "Сайт для кафе".into(), body: "Здравствуйте!\n.\nТочка в начале строки.".into() }
+        OutgoingMail {
+            to: "client@example.com".into(), subject: "Сайт для кафе".into(), body: "Здравствуйте!\n.\nТочка в начале строки.".into()
+        }
     }
 
     const OK_SCRIPT: [&str; 9] = [
@@ -712,7 +737,8 @@ mod tests {
         let enc = encoded_word(&long);
         let words: Vec<&str> = enc.split("\r\n ").collect();
         assert!(words.len() > 1 && words.iter().all(|w| w.len() <= 75));
-        let back: String = words.iter().map(|w| String::from_utf8(B64.decode(w.trim_start_matches("=?UTF-8?B?").trim_end_matches("?=")).unwrap()).unwrap()).collect();
+        let back: String =
+            words.iter().map(|w| String::from_utf8(B64.decode(w.trim_start_matches("=?UTF-8?B?").trim_end_matches("?=")).unwrap()).unwrap()).collect();
         assert_eq!(back, long, "символ не разрывается между словами");
     }
 

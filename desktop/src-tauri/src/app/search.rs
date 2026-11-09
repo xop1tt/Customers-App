@@ -66,8 +66,11 @@ impl Core {
     pub fn search_overview(&self) -> CmdResult<Value> {
         let s = self.require()?;
         let settings = s.settings.lock().unwrap().clone();
-        let problems: serde_json::Map<String, Value> = crate::search::settings::ALL_SOURCES.iter().map(|k| (k.to_string(), self.source_problem(&s, k).map(Value::from).unwrap_or(Value::Null))).collect();
-        Ok(json!({"settings": settings, "hasVkToken": !self.vk_token(&s).is_empty(), "problems": problems, "autoSearchMinutes": s.account_prefs().auto_search_minutes}))
+        let problems: serde_json::Map<String, Value> =
+            crate::search::settings::ALL_SOURCES.iter().map(|k| (k.to_string(), self.source_problem(&s, k).map(Value::from).unwrap_or(Value::Null))).collect();
+        Ok(
+            json!({"settings": settings, "hasVkToken": !self.vk_token(&s).is_empty(), "problems": problems, "autoSearchMinutes": s.account_prefs().auto_search_minutes}),
+        )
     }
 
     /// Почему источник не может работать, или None.
@@ -100,7 +103,8 @@ impl Core {
 
     /// Настройки, пришедшие из облака (или сохранённые в базе), — в модель, без повторной выгрузки.
     pub fn reload_synced_settings(&self, s: &Session) {
-        let (settings, auto) = s.with_store(|st| (SearchSettings::stored(st.value("search.settings").as_deref()), st.value("search.auto").and_then(|v| v.parse::<u32>().ok())));
+        let (settings, auto) =
+            s.with_store(|st| (SearchSettings::stored(st.value("search.settings").as_deref()), st.value("search.auto").and_then(|v| v.parse::<u32>().ok())));
         let mut changed = false;
         {
             let mut cur = s.settings.lock().unwrap();
@@ -152,7 +156,13 @@ impl Core {
         tokio::spawn(async move {
             let vk = core.vk_token(&session);
             let settings = session.settings.lock().unwrap().clone();
-            let mut engine = SearchEngine::new(settings, SearchSecrets { vk_token: Some(vk).filter(|v| !v.is_empty()) }, core.env.transport.clone(), Arc::new(StoreRepo(session.store.clone())), cancel);
+            let mut engine = SearchEngine::new(
+                settings,
+                SearchSecrets { vk_token: Some(vk).filter(|v| !v.is_empty()) },
+                core.env.transport.clone(),
+                Arc::new(StoreRepo(session.store.clone())),
+                cancel,
+            );
             engine.sleeper = core.env.sleeper.clone();
             let guard = KeepAwake::new();
             let progress = {

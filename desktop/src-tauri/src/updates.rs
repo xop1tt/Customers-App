@@ -28,7 +28,11 @@ pub enum Platform {
 
 impl Platform {
     pub fn current() -> Self {
-        if cfg!(windows) { Platform::Windows } else { Platform::MacOs }
+        if cfg!(windows) {
+            Platform::Windows
+        } else {
+            Platform::MacOs
+        }
     }
     pub fn label(self) -> &'static str {
         match self {
@@ -80,7 +84,10 @@ pub fn friendly_network(raw: &str) -> String {
     let l = raw.to_lowercase();
     if ["dns", "resolve", "not connected", "offline", "network is unreachable", "no route"].iter().any(|k| l.contains(k)) {
         "Нет подключения к интернету. Приложение работает как прежде, попробуйте позже.".into()
-    } else if ["timed out", "timeout", "connection reset", "connection refused", "connection closed", "broken pipe", "error sending request", "connect"].iter().any(|k| l.contains(k)) {
+    } else if ["timed out", "timeout", "connection reset", "connection refused", "connection closed", "broken pipe", "error sending request", "connect"]
+        .iter()
+        .any(|k| l.contains(k))
+    {
         "Соединение прервалось, обновление не скачано. Приложение работает как прежде, попробуйте позже.".into()
     } else {
         raw.to_string()
@@ -291,7 +298,15 @@ pub async fn download(update: &AvailableUpdate, dir: &Path, t: &dyn HttpTranspor
     let mut expected = update.expected_digest();
     if expected.is_none() {
         if let Some(sum) = &update.checksum_file {
-            let r = t.send(HttpRequest { method: "GET".into(), url: sum.download_url.clone(), headers: vec![("User-Agent".into(), user_agent("updater"))], body: None, timeout: 30.0 }).await?;
+            let r = t
+                .send(HttpRequest {
+                    method: "GET".into(),
+                    url: sum.download_url.clone(),
+                    headers: vec![("User-Agent".into(), user_agent("updater"))],
+                    body: None,
+                    timeout: 30.0,
+                })
+                .await?;
             if r.status < 400 {
                 expected = parse_checksum_file(&r.text());
             }
@@ -301,7 +316,13 @@ pub async fn download(update: &AvailableUpdate, dir: &Path, t: &dyn HttpTranspor
 
     let mut data = None;
     for attempt in 1..=3u32 {
-        let req = HttpRequest { method: "GET".into(), url: update.installer.download_url.clone(), headers: vec![("User-Agent".into(), user_agent("updater"))], body: None, timeout: 900.0 };
+        let req = HttpRequest {
+            method: "GET".into(),
+            url: update.installer.download_url.clone(),
+            headers: vec![("User-Agent".into(), user_agent("updater"))],
+            body: None,
+            timeout: 900.0,
+        };
         match t.send(req).await {
             Ok(r) if r.status == 200 => {
                 data = Some(r.data);
@@ -422,7 +443,10 @@ pub fn relaunch_macos(staged: &Path, current_bundle: &Path, installer_dmg: &Path
     let probe = parent.join(".customers-write-test");
     if std::fs::write(&probe, b"").is_err() {
         let _ = std::process::Command::new("/usr/bin/open").arg(installer_dmg).status();
-        return Err(UpdateError::CannotInstall(format!("нет прав на запись в {}. Установщик открыт: перетащите приложение в «Программы» вручную", parent.display())));
+        return Err(UpdateError::CannotInstall(format!(
+            "нет прав на запись в {}. Установщик открыт: перетащите приложение в «Программы» вручную",
+            parent.display()
+        )));
     }
     let _ = std::fs::remove_file(&probe);
     let script = staged.parent().unwrap_or(parent).join("install.sh");
@@ -447,7 +471,8 @@ pub fn launch_windows_installer(path: &Path) -> Result<(), UpdateError> {
 // ------------------------------------------------------------------ расписание проверок
 
 /// Варианты частоты автоматической проверки: часы и подпись.
-pub const INTERVALS: [(u32, &str); 6] = [(1, "Каждый час"), (3, "Каждые 3 часа"), (6, "Каждые 6 часов"), (12, "Каждые 12 часов"), (24, "Раз в сутки"), (168, "Раз в неделю")];
+pub const INTERVALS: [(u32, &str); 6] =
+    [(1, "Каждый час"), (3, "Каждые 3 часа"), (6, "Каждые 6 часов"), (12, "Каждые 12 часов"), (24, "Раз в сутки"), (168, "Раз в неделю")];
 
 pub fn normalized_interval(hours: Option<i64>) -> u32 {
     hours.and_then(|h| INTERVALS.iter().find(|(x, _)| i64::from(*x) == h)).map(|(h, _)| *h).unwrap_or(24)
@@ -560,7 +585,13 @@ pub fn plain_notes(markdown: &str, limit: Option<usize>) -> String {
             indent.clear();
         } else if let Some(m) = RE_LIST.captures(&line) {
             let boxed = m.get(1).map(|b| b.as_str().trim().to_string()).unwrap_or_default();
-            let mark = if boxed.is_empty() { "•" } else if boxed == "[ ]" { "☐" } else { "☑" };
+            let mark = if boxed.is_empty() {
+                "•"
+            } else if boxed == "[ ]" {
+                "☐"
+            } else {
+                "☑"
+            };
             line = format!("{indent}{mark} {}", &m[2]);
             indent.clear();
         } else if RE_ORDERED.is_match(&line) {
@@ -611,7 +642,9 @@ mod tests {
     }
 
     fn release_json(tag: &str, assets: &str) -> String {
-        format!(r#"{{"tag_name":"{tag}","name":"Customers {tag}","body":"Что нового","html_url":"https://github.com/xop1tt/CLIENTS/releases/tag/{tag}","draft":false,"prerelease":false,"published_at":"2026-11-05T09:42:00Z","assets":[{assets}]}}"#)
+        format!(
+            r#"{{"tag_name":"{tag}","name":"Customers {tag}","body":"Что нового","html_url":"https://github.com/xop1tt/CLIENTS/releases/tag/{tag}","draft":false,"prerelease":false,"published_at":"2026-11-05T09:42:00Z","assets":[{assets}]}}"#
+        )
     }
 
     fn asset(name: &str, digest: Option<&str>) -> String {
@@ -620,7 +653,13 @@ mod tests {
     }
 
     fn full_release(tag: &str) -> ReleaseInfo {
-        let assets = [asset(&format!("Customers-{tag}-macOS.dmg"), None), asset(&format!("Customers-{tag}-macOS.dmg.sha256"), None), asset(&format!("Customers-{tag}-Windows-x64-Setup.exe"), None), asset(&format!("Customers-{tag}-Windows-x64-Setup.exe.sha256"), None)].join(",");
+        let assets = [
+            asset(&format!("Customers-{tag}-macOS.dmg"), None),
+            asset(&format!("Customers-{tag}-macOS.dmg.sha256"), None),
+            asset(&format!("Customers-{tag}-Windows-x64-Setup.exe"), None),
+            asset(&format!("Customers-{tag}-Windows-x64-Setup.exe.sha256"), None),
+        ]
+        .join(",");
         ReleaseInfo::parse(release_json(tag, &assets).as_bytes()).unwrap()
     }
 
@@ -655,7 +694,8 @@ mod tests {
     #[test]
     fn digest_and_checksum_file_parsing() {
         let hex = "ab".repeat(32);
-        let rel = ReleaseInfo::parse(release_json("v1.2.0", &asset("Customers-v1.2.0-macOS.dmg", Some(&format!("sha256:{}", hex.to_uppercase())))).as_bytes()).unwrap();
+        let rel = ReleaseInfo::parse(release_json("v1.2.0", &asset("Customers-v1.2.0-macOS.dmg", Some(&format!("sha256:{}", hex.to_uppercase())))).as_bytes())
+            .unwrap();
         assert_eq!(update_from(&rel, &v("1.0"), Platform::MacOs).unwrap().expected_digest(), Some(hex.clone()));
         let bad = ReleaseInfo::parse(release_json("v1.2.0", &asset("Customers-v1.2.0-macOS.dmg", Some("sha256:123"))).as_bytes()).unwrap();
         assert_eq!(update_from(&bad, &v("1.0"), Platform::MacOs).unwrap().expected_digest(), None);
