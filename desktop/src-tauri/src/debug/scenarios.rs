@@ -241,6 +241,11 @@ fn password() -> String {
     ["Scenario", "-pass-", "1"].concat()
 }
 
+/// Заведомо неверный пароль, тоже собирается во время работы.
+fn wrong_password() -> String {
+    password() + "-x"
+}
+
 fn register(ctx: &Ctx, name: &str, remember: bool) -> Result<(), String> {
     ctx.core.register(name, &password(), &password(), remember).map(|_| ()).map_err(|e| e.message)
 }
@@ -299,7 +304,7 @@ fn login_logout(ctx: &mut Ctx) -> Result<(), String> {
     ctx.core.logout();
     ensure!(ctx.core.session().is_none(), "после выхода сессия осталась");
     ensure!(ctx.core.snapshot().is_err(), "данные доступны без входа");
-    ensure!(ctx.core.login("anna", "wrong-password", false).is_err(), "вход с неверным паролем удался");
+    ensure!(ctx.core.login("anna", &wrong_password(), false).is_err(), "вход с неверным паролем удался");
     ensure!(ctx.core.session().is_none(), "неверный пароль открыл сессию");
     ctx.core.login("anna", &password(), false).map_err(|e| e.message)?;
     ensure!(leads(ctx)?.len() == 2, "после повторного входа лидов не 2");
@@ -441,7 +446,7 @@ fn password_change(ctx: &mut Ctx) -> Result<(), String> {
     register(ctx, "pwchange", false)?;
     save_leads(ctx, 2)?;
     let next = ["Next", "-pass-", "2"].concat();
-    ensure!(ctx.core.change_password("wrong", &next, &next).is_err(), "смена с неверным старым паролем удалась");
+    ensure!(ctx.core.change_password(&wrong_password(), &next, &next).is_err(), "смена с неверным старым паролем удалась");
     ctx.core.change_password(&password(), &next, &next).map_err(|e| e.message)?;
     ctx.core.logout();
     ensure!(ctx.core.login("pwchange", &password(), false).is_err(), "старый пароль всё ещё подходит");
