@@ -63,7 +63,6 @@ pub fn now_precise() -> String {
 
 pub mod normalize {
 
-
     pub fn domain(raw: &str) -> String {
         let mut s = raw.trim().to_lowercase();
         for p in ["https://", "http://"] {
@@ -119,11 +118,36 @@ pub struct SourceInfo {
 }
 
 pub const KNOWN_SOURCES: &[SourceInfo] = &[
-    SourceInfo { key: "fl_ru", title: "RSS-ленты", access: "Бесплатно", note: "Любые публичные RSS- и Atom-ленты заказов, например FL.ru. Ленты хранят только последние записи." },
-    SourceInfo { key: "telegram_channels", title: "Telegram-каналы", access: "Бесплатно", note: "Только публичные каналы с веб-превью t.me/s. Bot API чужие каналы не читает." },
-    SourceInfo { key: "vk_communities", title: "VK-сообщества", access: "Бесплатный ключ", note: "Нужен бесплатный сервисный ключ VK (dev.vk.com). Читаются стены выбранных сообществ." },
-    SourceInfo { key: "osm_organizations", title: "OpenStreetMap", access: "Бесплатно", note: "Overpass API, данные ODbL (© участники OpenStreetMap). Полнота в РФ ниже, чем у Яндекса и 2ГИС." },
-    SourceInfo { key: "site_checker", title: "Проверка сайтов", access: "Бесплатно", note: "Один запрос к главной странице: доступность, HTTPS, мобильная вёрстка, год, онлайн-запись." },
+    SourceInfo {
+        key: "fl_ru",
+        title: "RSS-ленты",
+        access: "Бесплатно",
+        note: "Любые публичные RSS- и Atom-ленты заказов, например FL.ru. Ленты хранят только последние записи.",
+    },
+    SourceInfo {
+        key: "telegram_channels",
+        title: "Telegram-каналы",
+        access: "Бесплатно",
+        note: "Только публичные каналы с веб-превью t.me/s. Bot API чужие каналы не читает.",
+    },
+    SourceInfo {
+        key: "vk_communities",
+        title: "VK-сообщества",
+        access: "Бесплатный ключ",
+        note: "Нужен бесплатный сервисный ключ VK (dev.vk.com). Читаются стены выбранных сообществ.",
+    },
+    SourceInfo {
+        key: "osm_organizations",
+        title: "OpenStreetMap",
+        access: "Бесплатно",
+        note: "Overpass API, данные ODbL (© участники OpenStreetMap). Полнота в РФ ниже, чем у Яндекса и 2ГИС.",
+    },
+    SourceInfo {
+        key: "site_checker",
+        title: "Проверка сайтов",
+        access: "Бесплатно",
+        note: "Один запрос к главной странице: доступность, HTTPS, мобильная вёрстка, год, онлайн-запись.",
+    },
 ];
 
 /// Источники, которые сознательно не подключены, с причиной.
@@ -217,7 +241,11 @@ pub trait NilIfEmpty {
 impl NilIfEmpty for str {
     fn nil_if_empty(&self) -> Option<String> {
         let t = self.trim();
-        if t.is_empty() { None } else { Some(t.to_string()) }
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
     }
 }
 

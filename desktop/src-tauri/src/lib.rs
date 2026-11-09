@@ -1,8 +1,7 @@
 pub mod accounts;
 pub mod app;
-pub mod commands;
-pub mod shell;
 pub mod cloud;
+pub mod commands;
 pub mod contact;
 pub mod crm;
 pub mod csvfmt;
@@ -17,11 +16,11 @@ pub mod prefs;
 pub mod reports;
 pub mod search;
 pub mod secrets;
+pub mod shell;
 pub mod store;
 pub mod updates;
 pub mod util;
 pub mod whatsnew;
-
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![

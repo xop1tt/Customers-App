@@ -66,10 +66,16 @@ impl CloudError {
             "email_address_invalid" | "validation_failed" => return CloudError::InvalidEmail,
             "otp_expired" | "otp_disabled" | "bad_code_verifier" => return CloudError::InvalidCode,
             "same_password" => return CloudError::SamePassword,
-            "over_email_send_rate_limit" | "over_request_rate_limit" => return CloudError::RateLimited("Слишком много попыток. Подождите немного и повторите.".into()),
-            "refresh_token_not_found" | "refresh_token_already_used" | "session_not_found" | "session_expired" | "user_not_found" | "bad_jwt" | "no_authorization" => {
-                return CloudError::SessionExpired
+            "over_email_send_rate_limit" | "over_request_rate_limit" => {
+                return CloudError::RateLimited("Слишком много попыток. Подождите немного и повторите.".into())
             }
+            "refresh_token_not_found"
+            | "refresh_token_already_used"
+            | "session_not_found"
+            | "session_expired"
+            | "user_not_found"
+            | "bad_jwt"
+            | "no_authorization" => return CloudError::SessionExpired,
             "reauthentication_needed" | "reauthentication_not_valid" => return CloudError::ReauthRequired,
             _ => {}
         }

@@ -34,7 +34,13 @@ pub enum DriveAuth {
 
 impl DriveService {
     pub const ALL: [DriveService; 7] = [
-        DriveService::GoogleDrive, DriveService::Dropbox, DriveService::OneDrive, DriveService::YandexDisk, DriveService::Mega, DriveService::PCloud, DriveService::Webdav,
+        DriveService::GoogleDrive,
+        DriveService::Dropbox,
+        DriveService::OneDrive,
+        DriveService::YandexDisk,
+        DriveService::Mega,
+        DriveService::PCloud,
+        DriveService::Webdav,
     ];
 
     pub fn raw(self) -> &'static str {
@@ -78,7 +84,9 @@ impl DriveService {
             DriveService::GoogleDrive => DriveAuth::OAuth(OAuthProvider::Google),
             DriveService::Dropbox => DriveAuth::OAuth(OAuthProvider::Dropbox),
             DriveService::OneDrive => DriveAuth::OAuth(OAuthProvider::Microsoft),
-            DriveService::YandexDisk => DriveAuth::Webdav { default_url: "https://webdav.yandex.ru", password_page: Some("https://id.yandex.ru/security/app-passwords") },
+            DriveService::YandexDisk => {
+                DriveAuth::Webdav { default_url: "https://webdav.yandex.ru", password_page: Some("https://id.yandex.ru/security/app-passwords") }
+            }
             DriveService::Mega => DriveAuth::Webdav { default_url: "http://127.0.0.1:4443/", password_page: Some("https://mega.io/cmd") },
             DriveService::PCloud => DriveAuth::Webdav { default_url: "https://ewebdav.pcloud.com", password_page: None },
             DriveService::Webdav => DriveAuth::Webdav { default_url: "", password_page: None },
@@ -392,7 +400,13 @@ pub mod oauth {
     /// Обмен кода на токены.
     pub fn token_request(client: &OAuthClient, code: &str, verifier: &str) -> HttpRequest {
         let uri = redirect::uri();
-        let mut params = vec![("grant_type", "authorization_code"), ("code", code), ("redirect_uri", uri.as_str()), ("client_id", client.client_id.as_str()), ("code_verifier", verifier)];
+        let mut params = vec![
+            ("grant_type", "authorization_code"),
+            ("code", code),
+            ("redirect_uri", uri.as_str()),
+            ("client_id", client.client_id.as_str()),
+            ("code_verifier", verifier),
+        ];
         if let Some(s) = &client.client_secret {
             params.push(("client_secret", s));
         }
@@ -414,14 +428,21 @@ pub mod oauth {
 
     /// Ответ сервера токенов. refresh_token при обновлении может не прийти — тогда остаётся прежний.
     pub fn parse_token(data: &[u8], previous_refresh: Option<&str>, now: DateTime<Utc>) -> Result<OAuthToken, IntegrationError> {
-        let obj: Value = serde_json::from_slice(data).ok().filter(Value::is_object).ok_or_else(|| IntegrationError::BadResponse(String::from_utf8_lossy(&data[..data.len().min(200)]).into_owned()))?;
+        let obj: Value = serde_json::from_slice(data)
+            .ok()
+            .filter(Value::is_object)
+            .ok_or_else(|| IntegrationError::BadResponse(String::from_utf8_lossy(&data[..data.len().min(200)]).into_owned()))?;
         if let Some(err) = obj.get("error").and_then(Value::as_str) {
             if err == "invalid_grant" {
                 return Err(IntegrationError::Reauthorize);
             }
             return Err(IntegrationError::Denied(obj.get("error_description").and_then(Value::as_str).unwrap_or(err).to_string()));
         }
-        let access = obj.get("access_token").and_then(Value::as_str).filter(|a| !a.is_empty()).ok_or_else(|| IntegrationError::BadResponse("нет access_token".into()))?;
+        let access = obj
+            .get("access_token")
+            .and_then(Value::as_str)
+            .filter(|a| !a.is_empty())
+            .ok_or_else(|| IntegrationError::BadResponse("нет access_token".into()))?;
         let expires = obj.get("expires_in").and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok())));
         Ok(OAuthToken {
             access_token: access.into(),
@@ -544,7 +565,13 @@ pub fn ascii_json(object: &Value) -> String {
 /// Запросы по порядку: для WebDAV сначала MKCOL папки (405 — папка уже есть), потом PUT файла.
 pub fn upload_requests(c: &DriveConnection, file_name: &str, data: &[u8]) -> Result<Vec<HttpRequest>, IntegrationError> {
     let name = file_name.replace('/', "_");
-    let req = |method: &str, url: String, headers: Vec<(String, String)>, body: Option<Vec<u8>>| HttpRequest { method: method.into(), url, headers, body, timeout: 120.0 };
+    let req = |method: &str, url: String, headers: Vec<(String, String)>, body: Option<Vec<u8>>| HttpRequest {
+        method: method.into(),
+        url,
+        headers,
+        body,
+        timeout: 120.0,
+    };
     match c.service.auth() {
         DriveAuth::Webdav { .. } => {
             let base = webdav_base(c.webdav_url.as_deref().unwrap_or(""))?;
@@ -569,7 +596,12 @@ pub fn upload_requests(c: &DriveConnection, file_name: &str, data: &[u8]) -> Res
                     body.extend_from_slice(format!("--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{meta}\r\n--{boundary}\r\nContent-Type: application/octet-stream\r\n\r\n").as_bytes());
                     body.extend_from_slice(data);
                     body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
-                    req("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart".into(), vec![("Content-Type".into(), format!("multipart/related; boundary={boundary}")), bearer], Some(body))
+                    req(
+                        "POST",
+                        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart".into(),
+                        vec![("Content-Type".into(), format!("multipart/related; boundary={boundary}")), bearer],
+                        Some(body),
+                    )
                 }
                 OAuthProvider::Dropbox => req(
                     "POST",
@@ -611,7 +643,13 @@ fn body_snippet(r: &HttpResponse) -> String {
 
 /// Загрузить файл на диск. Просроченный токен OAuth обновляется (обновлённое подключение возвращается,
 /// чтобы вызывающий сохранил его в хранилище). Возвращает подключение (возможно с новым токеном).
-pub async fn upload_file(c: &DriveConnection, client: Option<&OAuthClient>, file_name: &str, data: &[u8], t: &dyn HttpTransport) -> Result<DriveConnection, IntegrationError> {
+pub async fn upload_file(
+    c: &DriveConnection,
+    client: Option<&OAuthClient>,
+    file_name: &str,
+    data: &[u8],
+    t: &dyn HttpTransport,
+) -> Result<DriveConnection, IntegrationError> {
     let mut conn = c.clone();
     if let (DriveAuth::OAuth(provider), Some(token)) = (conn.service.auth(), conn.token.clone()) {
         if token.is_expired(Utc::now()) {
@@ -655,15 +693,24 @@ main{max-width:420px;padding:24px;text-align:center}h1{font-size:18px;font-weigh
 <body><main><h1>%TITLE%</h1><p>%TEXT%</p></main></body></html>";
 
 fn callback_page(ok: bool) -> String {
-    let (title, text) = if ok { ("Вход выполнен", "Можно закрыть эту вкладку и вернуться в Customers.") } else { ("Вход не выполнен", "Вернитесь в Customers и попробуйте ещё раз.") };
+    let (title, text) = if ok {
+        ("Вход выполнен", "Можно закрыть эту вкладку и вернуться в Customers.")
+    } else {
+        ("Вход не выполнен", "Вернитесь в Customers и попробуйте ещё раз.")
+    };
     let body = CALLBACK_PAGE.replace("%TITLE%", title).replace("%TEXT%", text);
-    format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n{body}", body.len())
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n{body}",
+        body.len()
+    )
 }
 
 /// Ждёт возврат из браузера на localhost:47811. Слушает только локальный интерфейс.
 pub async fn wait_for_callback(state: &str, timeout_secs: u64, cancel: &tokio_util::sync::CancellationToken) -> Result<String, IntegrationError> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", redirect::PORT)).await.map_err(|e| IntegrationError::Network(format!("порт {} занят: {e}", redirect::PORT)))?;
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", redirect::PORT))
+        .await
+        .map_err(|e| IntegrationError::Network(format!("порт {} занят: {e}", redirect::PORT)))?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
     loop {
         let accepted = tokio::select! {
@@ -770,7 +817,10 @@ mod tests {
         let kept = oauth::parse_token(br#"{"access_token":"b","expires_in":"60"}"#, Some("old"), now).unwrap();
         assert_eq!(kept.refresh_token.as_deref(), Some("old"));
         assert_eq!(oauth::parse_token(br#"{"error":"invalid_grant"}"#, None, now).unwrap_err(), IntegrationError::Reauthorize);
-        assert_eq!(oauth::parse_token(r#"{"error":"access_denied","error_description":"нет"}"#.as_bytes(), None, now).unwrap_err(), IntegrationError::Denied("нет".into()));
+        assert_eq!(
+            oauth::parse_token(r#"{"error":"access_denied","error_description":"нет"}"#.as_bytes(), None, now).unwrap_err(),
+            IntegrationError::Denied("нет".into())
+        );
         assert!(matches!(oauth::parse_token(b"<html>", None, now), Err(IntegrationError::BadResponse(_))));
         assert!(matches!(oauth::parse_token(b"{}", None, now), Err(IntegrationError::BadResponse(_))));
     }
@@ -779,7 +829,12 @@ mod tests {
     fn token_requests_are_form_encoded() {
         let r = oauth::token_request(&client(OAuthProvider::Google), "co de", "ver");
         let body = String::from_utf8(r.body.unwrap()).unwrap();
-        assert!(body.contains("grant_type=authorization_code") && body.contains("code=co+de") && body.contains("client_secret=secret") && body.contains("code_verifier=ver"));
+        assert!(
+            body.contains("grant_type=authorization_code")
+                && body.contains("code=co+de")
+                && body.contains("client_secret=secret")
+                && body.contains("code_verifier=ver")
+        );
         let m = String::from_utf8(oauth::refresh_request(&client(OAuthProvider::Microsoft), "rt").body.unwrap()).unwrap();
         assert!(m.contains("scope=Files.ReadWrite.AppFolder") && m.contains("refresh_token=rt"));
     }
@@ -843,7 +898,10 @@ mod tests {
         assert!(body.contains(r#"{"name":"Customers a.db"}"#) && body.contains("BIN"));
         let mut m = DriveConnection::new(DriveService::OneDrive);
         m.token = c.token.clone();
-        assert_eq!(upload_requests(&m, "a b.db", b"").unwrap()[0].url, "https://graph.microsoft.com/v1.0/me/drive/special/approot:/Customers/a%20b.db:/content");
+        assert_eq!(
+            upload_requests(&m, "a b.db", b"").unwrap()[0].url,
+            "https://graph.microsoft.com/v1.0/me/drive/special/approot:/Customers/a%20b.db:/content"
+        );
     }
 
     #[tokio::test]

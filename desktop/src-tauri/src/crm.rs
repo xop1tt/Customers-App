@@ -158,6 +158,7 @@ pub trait CrmDestination: Send + Sync {
     async fn send(&self, item: &LeadItem, t: &dyn HttpTransport) -> Result<String, CrmError>;
 }
 
+#[allow(clippy::too_many_arguments)] // порядок и набор параметров нужны тестам
 pub async fn run_export(
     items: &[LeadItem],
     dest: &dyn CrmDestination,
@@ -342,7 +343,13 @@ impl Bitrix24 {
     pub fn parse(data: &[u8], status: u16) -> Result<Value, CrmError> {
         let obj = parse_object(data);
         if let Some(err) = obj.as_ref().and_then(|o| o.get("error")).and_then(Value::as_str) {
-            let text = obj.as_ref().and_then(|o| o.get("error_description")).and_then(Value::as_str).map(str::to_string).nil_if_empty().unwrap_or_else(|| err.to_string());
+            let text = obj
+                .as_ref()
+                .and_then(|o| o.get("error_description"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .nil_if_empty()
+                .unwrap_or_else(|| err.to_string());
             return Err(match err.to_uppercase().as_str() {
                 "QUERY_LIMIT_EXCEEDED" => CrmError::RateLimited,
                 "INVALID_CREDENTIALS" | "WRONG_AUTH_TYPE" | "NO_AUTH_FOUND" | "EXPIRED_TOKEN" | "INVALID_TOKEN" => {
@@ -463,7 +470,9 @@ impl NotionDestination {
                 end = Some(i);
             }
         }
-        let end = end.ok_or_else(|| CrmError::InvalidAddress("Вставьте ссылку на базу данных Notion (Поделиться → Скопировать ссылку) или её ID из 32 символов.".into()))?;
+        let end = end.ok_or_else(|| {
+            CrmError::InvalidAddress("Вставьте ссылку на базу данных Notion (Поделиться → Скопировать ссылку) или её ID из 32 символов.".into())
+        })?;
         let id: String = compact[end - 31..=end].iter().collect::<String>().to_lowercase();
         Ok(format!("{}-{}-{}-{}-{}", &id[0..8], &id[8..12], &id[12..16], &id[16..20], &id[20..32]))
     }
@@ -477,7 +486,13 @@ impl NotionDestination {
         if body.is_some() {
             h.push(("Content-Type".into(), "application/json".into()));
         }
-        HttpRequest { method: method.into(), url: format!("{NOTION_API}{path}"), headers: h, body: body.map(|b| crate::cloud::types::canonical_json(b).into_bytes()), timeout: 30.0 }
+        HttpRequest {
+            method: method.into(),
+            url: format!("{NOTION_API}{path}"),
+            headers: h,
+            body: body.map(|b| crate::cloud::types::canonical_json(b).into_bytes()),
+            timeout: 30.0,
+        }
     }
 
     /// Ошибки Notion: `{"object":"error","status":401,"code":"unauthorized","message":"..."}`.
@@ -511,7 +526,11 @@ impl NotionDestination {
 
     pub fn parse_database(obj: &Map<String, Value>, id: &str) -> Result<NotionDatabase, CrmError> {
         let props = obj.get("properties").and_then(Value::as_object).ok_or_else(|| CrmError::BadResponse("в базе нет свойств".into()))?;
-        let title: String = obj.get("title").and_then(Value::as_array).map(|a| a.iter().filter_map(|t| t.get("plain_text").and_then(Value::as_str)).collect()).unwrap_or_default();
+        let title: String = obj
+            .get("title")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(|t| t.get("plain_text").and_then(Value::as_str)).collect())
+            .unwrap_or_default();
         let mut list: Vec<NotionProperty> = props
             .iter()
             .filter_map(|(name, v)| v.get("type").and_then(Value::as_str).map(|t| NotionProperty { name: name.clone(), kind: t.to_string() }))
@@ -555,9 +574,10 @@ impl NotionDestination {
                 continue;
             }
             let n = p.name.to_lowercase().trim().to_string();
-            let found = ExportField::ALL.iter().copied().find(|f| {
-                !used.contains(f) && (synonyms.iter().any(|(sf, names)| sf == f && names.contains(&n.as_str())) || f.title().to_lowercase() == n)
-            });
+            let found = ExportField::ALL
+                .iter()
+                .copied()
+                .find(|f| !used.contains(f) && (synonyms.iter().any(|(sf, names)| sf == f && names.contains(&n.as_str())) || f.title().to_lowercase() == n));
             if let Some(f) = found {
                 out.insert(p.name.clone(), f);
                 used.push(f);
@@ -747,7 +767,9 @@ mod tests {
         d.score_reasons = vec!["нет сайта".into()];
         d.contacts.insert("email".into(), "info@lavanda.ru".into());
         d.customer_name = Some(title.into());
-        LeadItem { id: id.into(), data: d, discovered_at: Utc::now(), favorite: true, archived: false, excluded: false, seen: false, note: "позвонить".into() }
+        LeadItem {
+            id: id.into(), data: d, discovered_at: Utc::now(), favorite: true, archived: false, excluded: false, seen: false, note: "позвонить".into()
+        }
     }
 
     fn ok(body: &str) -> Result<HttpResponse, SearchError> {
@@ -759,7 +781,8 @@ mod tests {
         let ok = |s: &str| Bitrix24::normalize(s).unwrap();
         assert_eq!(ok("https://p.bitrix24.ru/rest/1/abc123/"), "https://p.bitrix24.ru/rest/1/abc123/");
         assert_eq!(ok(" https://p.bitrix24.ru/rest/12/abc123/crm.lead.add.json?x=1 "), "https://p.bitrix24.ru/rest/12/abc123/");
-        for bad in ["http://p.bitrix24.ru/rest/1/abc/", "https://p.bitrix24.ru/", "https://p.bitrix24.ru/rest/x/abc/", "https://p.bitrix24.ru/rest/1", "мусор"] {
+        for bad in ["http://p.bitrix24.ru/rest/1/abc/", "https://p.bitrix24.ru/", "https://p.bitrix24.ru/rest/x/abc/", "https://p.bitrix24.ru/rest/1", "мусор"]
+        {
             assert!(matches!(Bitrix24::normalize(bad), Err(CrmError::InvalidAddress(_))), "{bad}");
         }
     }
@@ -840,10 +863,19 @@ mod tests {
     }
 
     fn props() -> Vec<NotionProperty> {
-        [("Название", "title"), ("Телефон", "phone_number"), ("Сайт", "url"), ("Оценка", "number"), ("Теги", "multi_select"), ("Избранное", "checkbox"), ("Дата", "date"), ("Формула", "formula")]
-            .iter()
-            .map(|(n, t)| NotionProperty { name: n.to_string(), kind: t.to_string() })
-            .collect()
+        [
+            ("Название", "title"),
+            ("Телефон", "phone_number"),
+            ("Сайт", "url"),
+            ("Оценка", "number"),
+            ("Теги", "multi_select"),
+            ("Избранное", "checkbox"),
+            ("Дата", "date"),
+            ("Формула", "formula"),
+        ]
+        .iter()
+        .map(|(n, t)| NotionProperty { name: n.to_string(), kind: t.to_string() })
+        .collect()
     }
 
     #[test]
@@ -885,8 +917,13 @@ mod tests {
         assert!(matches!(NotionDestination::check(br#"{"object":"error","code":"unauthorized"}"#, 401), Err(CrmError::Unauthorized(_))));
         assert!(matches!(NotionDestination::check(br#"{"object":"error","code":"object_not_found"}"#, 404), Err(CrmError::NotFound(_))));
         assert_eq!(NotionDestination::check(b"{}", 429).unwrap_err(), CrmError::RateLimited);
-        assert_eq!(NotionDestination::check(br#"{"object":"error","code":"validation_error","message":"bad"}"#, 400).unwrap_err().to_string(), "Ошибка 400: Notion отклонил данные: bad. Проверьте сопоставление полей.");
-        let obj = parse_object(r#"{"title":[{"plain_text":"Лиды"}],"properties":{"b":{"type":"number"},"Имя":{"type":"title"},"a":{"type":"url"}}}"#.as_bytes()).unwrap();
+        assert_eq!(
+            NotionDestination::check(br#"{"object":"error","code":"validation_error","message":"bad"}"#, 400).unwrap_err().to_string(),
+            "Ошибка 400: Notion отклонил данные: bad. Проверьте сопоставление полей."
+        );
+        let obj =
+            parse_object(r#"{"title":[{"plain_text":"Лиды"}],"properties":{"b":{"type":"number"},"Имя":{"type":"title"},"a":{"type":"url"}}}"#.as_bytes())
+                .unwrap();
         let db = NotionDestination::parse_database(&obj, "id").unwrap();
         assert_eq!(db.title, "Лиды");
         assert_eq!(db.properties.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Имя", "a", "b"]);
@@ -914,7 +951,17 @@ mod tests {
     async fn network_failure_stops_export() {
         let dest = WebhookDestination::new("https://hook.example/a").unwrap();
         let t = FakeTransport::new(vec![]);
-        let (rep, _) = run_export(&[item("a", "A"), item("b", "B")], &dest, ExportLedger::default(), false, t.as_ref(), &no_sleep(), &CancellationToken::new(), &|_, _| {}).await;
+        let (rep, _) = run_export(
+            &[item("a", "A"), item("b", "B")],
+            &dest,
+            ExportLedger::default(),
+            false,
+            t.as_ref(),
+            &no_sleep(),
+            &CancellationToken::new(),
+            &|_, _| {},
+        )
+        .await;
         assert!(rep.stopped_early);
         assert_eq!(rep.failures.len(), 1);
     }

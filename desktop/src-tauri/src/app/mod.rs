@@ -3,12 +3,14 @@
 
 pub mod data;
 pub mod integrations;
+pub mod prefs_sync;
 pub mod search;
 pub mod session;
 pub mod sync;
 pub mod system;
 pub mod update;
 
+use crate::accounts::LocalAccounts;
 use crate::cloud::auth::{CloudAuth, CloudSession, SessionStore};
 use crate::cloud::error::CloudError;
 use crate::error::AppError;
@@ -17,7 +19,6 @@ use crate::prefs::{DevicePrefs, PrefsFile};
 use crate::reports::ErrorLog;
 use crate::search::http::HttpTransport;
 use crate::secrets::{DatabaseKeys, SecretStore};
-use crate::accounts::LocalAccounts;
 use crate::util::AppVersion;
 use serde::Serialize;
 use serde_json::Value;

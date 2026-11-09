@@ -3,6 +3,7 @@
 //! Два вида ключей, потому что так хранят прежние версии:
 //! * macOS: 32 случайных байта в виде 64 hex-символов, передаются как «сырой» ключ `x'…'`;
 //! * Windows: случайная строка (base64), SQLCipher выводит из неё ключ сам (PBKDF2).
+//!
 //! Оба открываются одним и тем же кодом, формат файла одинаковый.
 
 use crate::error::{AppError, AppResult};
@@ -97,7 +98,11 @@ pub fn file_state(path: &Path) -> FileState {
     if n == 0 {
         return FileState::Empty;
     }
-    if n == 16 && &head == PLAIN_HEADER { FileState::Plaintext } else { FileState::Encrypted }
+    if n == 16 && &head == PLAIN_HEADER {
+        FileState::Plaintext
+    } else {
+        FileState::Encrypted
+    }
 }
 
 fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
@@ -116,11 +121,8 @@ pub fn remove_database_files(path: &Path) {
 /// Открывает файл базы. С ключом: библиотека обязана быть SQLCipher, а файл — зашифрован этим ключом
 /// (или ещё не существовать), иначе ошибка, и файл не меняется.
 pub fn open_connection(path: &Path, read_only: bool, key: Option<&DbKey>) -> AppResult<Connection> {
-    let flags = if read_only {
-        OpenFlags::SQLITE_OPEN_READ_ONLY
-    } else {
-        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE
-    } | OpenFlags::SQLITE_OPEN_FULL_MUTEX;
+    let flags = if read_only { OpenFlags::SQLITE_OPEN_READ_ONLY } else { OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE }
+        | OpenFlags::SQLITE_OPEN_FULL_MUTEX;
     let conn = Connection::open_with_flags(path, flags)?;
     conn.busy_timeout(std::time::Duration::from_millis(3000))?;
     if let Some(key) = key {
@@ -211,10 +213,7 @@ pub fn migrate_plaintext(path: &Path, key: &DbKey) -> AppResult<()> {
         Err(e) => {
             drop(source);
             remove_database_files(&staging);
-            return Err(AppError::msg(format!(
-                "Не удалось зашифровать базу {}: {e}. Исходный файл не изменён.",
-                path.display()
-            )));
+            return Err(AppError::msg(format!("Не удалось зашифровать базу {}: {e}. Исходный файл не изменён.", path.display())));
         }
     };
     drop(source);
@@ -474,7 +473,12 @@ mod tests {
         fs::copy(&p, with_suffix(&p, ".unencrypted")).unwrap();
         let key = DbKey::random();
         recover_interrupted_migration(&p, &key).unwrap();
-        let leftovers: Vec<_> = fs::read_dir(d.path()).unwrap().filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.contains("unencrypted-")).collect();
+        let leftovers: Vec<_> = fs::read_dir(d.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.contains("unencrypted-"))
+            .collect();
         assert_eq!(leftovers.len(), 1);
         assert_eq!(file_state(&p), FileState::Plaintext);
     }

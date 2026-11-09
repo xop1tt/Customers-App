@@ -6,8 +6,8 @@ use super::sync::SyncState;
 use super::{CmdError, CmdResult, Env};
 use crate::accounts::UserAccount;
 use crate::cloud::auth::{CallbackResult, CloudUser};
-use crate::cloud::validation;
 use crate::cloud::error::CloudError;
+use crate::cloud::validation;
 use crate::db::DbKey;
 use crate::prefs::{self, AccountPrefs, PrefsFile};
 use crate::search::settings::SearchSettings;
@@ -135,7 +135,15 @@ pub struct Core {
 impl Core {
     pub fn new(env: Arc<Env>) -> Arc<Self> {
         let existing_install = env.accounts.has_users();
-        Arc::new(Self { env, current: Mutex::new(None), cloud_user: Mutex::new(None), existing_install, updates: Mutex::default(), integ: Mutex::default(), startup_error: Mutex::new(None) })
+        Arc::new(Self {
+            env,
+            current: Mutex::new(None),
+            cloud_user: Mutex::new(None),
+            existing_install,
+            updates: Mutex::default(),
+            integ: Mutex::default(),
+            startup_error: Mutex::new(None),
+        })
     }
 
     pub fn session(&self) -> Option<Arc<Session>> {
@@ -150,7 +158,9 @@ impl Core {
         let s = self.session()?;
         let cloud_user = if s.is_cloud { self.cloud_user.lock().unwrap().as_ref().map(CloudUserInfo::from) } else { None };
         let database_path = s.with_store(|st| st.path().display().to_string());
-        let display_name = stored_text(&s, "profile.name").unwrap_or_else(|| s.display_name.clone());
+        // Имя профиля из облака главнее; пока оно не пришло, берётся имя из регистрации, затем адрес почты.
+        let signup_name = if s.is_cloud { self.cloud_user.lock().unwrap().as_ref().and_then(CloudUser::username) } else { None };
+        let display_name = stored_text(&s, "profile.name").or(signup_name).unwrap_or_else(|| s.display_name.clone());
         let avatar = stored_text(&s, "profile.avatar");
         Some(SessionInfo { id: s.id.clone(), display_name, avatar, is_cloud: s.is_cloud, cloud_user, database_path })
     }
@@ -158,7 +168,13 @@ impl Core {
     pub fn boot_info(&self) -> BootInfo {
         BootInfo {
             version: self.env.version.to_string(),
-            platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "linux" },
+            platform: if cfg!(windows) {
+                "windows"
+            } else if cfg!(target_os = "macos") {
+                "macos"
+            } else {
+                "linux"
+            },
             cloud_available: self.env.cloud_available(),
             has_users: self.env.accounts.has_users(),
             existing_install: self.existing_install,
@@ -294,6 +310,7 @@ impl Core {
             tasks: Mutex::new(vec![]),
         });
         *self.current.lock().unwrap() = Some(session.clone());
+        self.apply_synced_prefs(&session);
         self.start_background(&session);
         self.env.emit("session-changed", serde_json::to_value(self.info()).unwrap_or(Value::Null));
         Ok(())
@@ -309,15 +326,6 @@ impl Core {
         let dir = self.env.paths.root.join("users").join(&id);
         *self.cloud_user.lock().unwrap() = Some(user.clone());
         let result = self.open_session(&id, &user.email, true, &dir);
-        // Имя из регистрации становится именем профиля, если на этом аккаунте его ещё нет.
-        if result.is_ok() {
-            if let (Some(name), Some(s)) = (user.username(), self.session()) {
-                if stored_text(&s, "profile.name").is_none() {
-                    let _ = s.with_store(|st| st.set_synced_value("profile.name", &serde_json::to_string(&name).unwrap_or_default()));
-                    self.env.emit("session-changed", serde_json::to_value(self.info()).unwrap_or(Value::Null));
-                }
-            }
-        }
         *self.cloud_user.lock().unwrap() = Some(user);
         result
     }
@@ -421,7 +429,12 @@ impl Core {
     /// Первая учётная запись получает лиды из базы версии 1.0. Исходный файл остаётся рядом под другим именем.
     fn adopt_legacy_database(&self, username: &str) -> Option<String> {
         let env = &self.env;
-        let custom = env.paths.legacy_defaults.as_deref().and_then(prefs::read_defaults_plist).and_then(|d| d.get("data.path").and_then(|v| v.as_string().map(PathBuf::from)));
+        let custom = env
+            .paths
+            .legacy_defaults
+            .as_deref()
+            .and_then(prefs::read_defaults_plist)
+            .and_then(|d| d.get("data.path").and_then(|v| v.as_string().map(PathBuf::from)));
         let legacy = custom.unwrap_or_else(|| env.paths.legacy_database());
         if !legacy.exists() {
             return None;
@@ -443,7 +456,12 @@ impl Core {
             }
             Ok(())
         })();
-        result.err().map(|e| format!("Лиды из прежней версии не перенесены: {e}. Файл остался на месте: {}. Его можно открыть через «Настройки → Данные → Восстановить из файла…».", legacy.display()))
+        result.err().map(|e| {
+            format!(
+                "Лиды из прежней версии не перенесены: {e}. Файл остался на месте: {}. Его можно открыть через «Настройки → Данные → Восстановить из файла…».",
+                legacy.display()
+            )
+        })
     }
 
     // ------------------------------------------------------------------ облако: вход и регистрация
@@ -531,7 +549,8 @@ impl Core {
                     return Ok(CallbackOutcome::NewPassword);
                 }
                 if let Some(u) = cloud.user() {
-                    let same = self.session().map(|s| s.is_cloud).unwrap_or(false) && self.cloud_user.lock().unwrap().as_ref().map(|c| c.id == u.id).unwrap_or(false);
+                    let same =
+                        self.session().map(|s| s.is_cloud).unwrap_or(false) && self.cloud_user.lock().unwrap().as_ref().map(|c| c.id == u.id).unwrap_or(false);
                     if same {
                         *self.cloud_user.lock().unwrap() = Some(u);
                         let text = if kind == "email_change" { "Адрес почты изменён" } else { "Адрес подтверждён" };
@@ -596,9 +615,8 @@ impl Core {
             return Err(CmdError::msg("Это локальная учётная запись."));
         }
         // Сначала локальная копия: без неё удалять нельзя.
-        let backup = self
-            .backup_now(&s)
-            .map_err(|e| CmdError::msg(format!("Не удалось сохранить резервную копию базы, учётная запись не удалена. {}", e.message)))?;
+        let backup =
+            self.backup_now(&s).map_err(|e| CmdError::msg(format!("Не удалось сохранить резервную копию базы, учётная запись не удалена. {}", e.message)))?;
         cloud.delete_account(password).await?;
         let dir = s.with_store(|st| st.path().parent().map(Path::to_path_buf));
         self.close_current();
@@ -748,8 +766,12 @@ mod tests {
         core.cloud_sign_in("me@example.com", &typed_secret()).await.unwrap();
         let info = core.info().unwrap();
         assert_eq!(info.display_name, "Анна", "вместо адреса почты показывается имя");
+        // Имя из регистрации не пишется в журнал: иначе вход на новом компьютере затёр бы в облаке более новое имя.
         let dirty = core.session().unwrap().with_store(|st| st.pending_changes(100).unwrap());
-        assert!(dirty.settings.iter().any(|c| c.key == "profile.name"), "имя уходит в облако");
+        assert!(!dirty.settings.iter().any(|c| c.key == "profile.name"));
+        // Имя, пришедшее из облака, главнее имени из регистрации.
+        core.session().unwrap().with_store(|st| st.set_value("profile.name", "\"Анна Новая\"")).unwrap();
+        assert_eq!(core.info().unwrap().display_name, "Анна Новая");
     }
 
     #[tokio::test]

@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS sync_dirty (
 ";
 
 /// Ключи kv, которые уходят в облако. Значения — JSON-текст.
-pub const SYNCED_KEYS: [&str; 5] = ["search.settings", "draft.signature", "search.auto", "profile.name", "profile.avatar"];
+pub const SYNCED_KEYS: [&str; 7] = ["search.settings", "draft.signature", "search.auto", "profile.name", "profile.avatar", "account.prefs", "interface.prefs"];
 const LEAD_FIELDS: [&str; 6] = ["data", "favorite", "archived", "deleted", "seen", "note"];
 
 /// Время изменения для перенесённых данных: раньше любых изменений в облаке (2000-01-01).
@@ -218,10 +218,8 @@ impl LeadStore {
     pub fn save(&self, lead: &LeadData, id: &str, fingerprint: &str) -> AppResult<SaveOutcome> {
         let mut data = lead.clone();
         let now = util::now_string();
-        let existing: Option<(Option<String>, String)> = self
-            .conn
-            .query_row("SELECT discovered_at, data_json FROM leads WHERE lead_id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?)))
-            .optional()?;
+        let existing: Option<(Option<String>, String)> =
+            self.conn.query_row("SELECT discovered_at, data_json FROM leads WHERE lead_id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
         if let Some((discovered, old_json)) = existing {
             // Дата обнаружения — первая, а не последняя.
             if let Some(d) = discovered.as_deref().and_then(parse_date) {
@@ -356,7 +354,16 @@ impl LeadStore {
             let (id, json, disc, fav, arch, excl, seen, note) = row?;
             let Some(data) = LeadData::parse_json(&json) else { continue };
             let discovered = disc.as_deref().and_then(parse_date).or(data.discovered_at).unwrap_or_else(Utc::now);
-            out.push(LeadItem { id, data, discovered_at: discovered, favorite: fav != 0, archived: arch != 0, excluded: excl != 0, seen: seen != 0, note: note.unwrap_or_default() });
+            out.push(LeadItem {
+                id,
+                data,
+                discovered_at: discovered,
+                favorite: fav != 0,
+                archived: arch != 0,
+                excluded: excl != 0,
+                seen: seen != 0,
+                note: note.unwrap_or_default(),
+            });
         }
         Ok(out)
     }
@@ -366,7 +373,8 @@ impl LeadStore {
     }
 
     pub fn source_states(&self) -> AppResult<Vec<SourceState>> {
-        let mut st = self.conn.prepare("SELECT source, last_success_at, last_attempt_at, consecutive_failures, status, last_error FROM source_state ORDER BY source")?;
+        let mut st =
+            self.conn.prepare("SELECT source, last_success_at, last_attempt_at, consecutive_failures, status, last_error FROM source_state ORDER BY source")?;
         let rows = st.query_map([], |r| {
             Ok(SourceState {
                 source: r.get(0)?,
@@ -451,11 +459,23 @@ impl LeadStore {
     }
 
     pub fn set_favorite(&self, ids: &[String], on: bool) -> AppResult<()> {
-        self.update_many(ids, "UPDATE leads SET favorite=?1 WHERE lead_id=?2", Some(b(on)), Some(if on { "Добавлен в избранное" } else { "Убран из избранного" }), "favorite")
+        self.update_many(
+            ids,
+            "UPDATE leads SET favorite=?1 WHERE lead_id=?2",
+            Some(b(on)),
+            Some(if on { "Добавлен в избранное" } else { "Убран из избранного" }),
+            "favorite",
+        )
     }
 
     pub fn set_archived(&self, ids: &[String], on: bool) -> AppResult<()> {
-        self.update_many(ids, "UPDATE leads SET archived=?1 WHERE lead_id=?2", Some(b(on)), Some(if on { "Перенесён в архив" } else { "Возвращён из архива" }), "archived")
+        self.update_many(
+            ids,
+            "UPDATE leads SET archived=?1 WHERE lead_id=?2",
+            Some(b(on)),
+            Some(if on { "Перенесён в архив" } else { "Возвращён из архива" }),
+            "archived",
+        )
     }
 
     /// Удалённые лиды остаются в базе скрытыми, чтобы следующий поиск не вернул их.
@@ -491,7 +511,10 @@ impl LeadStore {
     }
 
     pub fn add_sync_log(&self, ok: bool, added: i64, updated: i64, message: &str) -> AppResult<()> {
-        self.conn.execute("INSERT INTO sync_log(at, ok, added, updated, message) VALUES(?1,?2,?3,?4,?5)", params![util::now_string(), b(ok), added, updated, message])?;
+        self.conn.execute(
+            "INSERT INTO sync_log(at, ok, added, updated, message) VALUES(?1,?2,?3,?4,?5)",
+            params![util::now_string(), b(ok), added, updated, message],
+        )?;
         Ok(())
     }
 
@@ -502,7 +525,9 @@ impl LeadStore {
         if value.is_empty() {
             return Ok(());
         }
-        let added = self.conn.execute("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)", params![kind.as_str(), value, util::now_string()])?;
+        let added = self
+            .conn
+            .execute("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)", params![kind.as_str(), value, util::now_string()])?;
         if added > 0 {
             self.mark_dirty("exclusion", &format!("{}|{}", kind.as_str(), value), &["deleted"], None)?;
         }
@@ -510,7 +535,8 @@ impl LeadStore {
     }
 
     pub fn remove_exclusion(&self, id: i64) -> AppResult<()> {
-        let row: Option<(String, String)> = self.conn.query_row("SELECT kind, value FROM exclusions WHERE id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+        let row: Option<(String, String)> =
+            self.conn.query_row("SELECT kind, value FROM exclusions WHERE id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
         if let Some((k, v)) = row {
             self.mark_dirty("exclusion", &format!("{k}|{v}"), &["deleted"], None)?;
         }
@@ -581,7 +607,10 @@ impl LeadStore {
                 }
                 if let Some(kind) = ExclusionKind::detect(v) {
                     let norm = normalize::value(v, kind);
-                    let added = self.conn.execute("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)", params![kind.as_str(), norm, util::now_string()])?;
+                    let added = self.conn.execute(
+                        "INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)",
+                        params![kind.as_str(), norm, util::now_string()],
+                    )?;
                     if added > 0 {
                         self.mark_dirty("exclusion", &format!("{}|{}", kind.as_str(), norm), &["deleted"], None)?;
                     }
@@ -927,7 +956,25 @@ impl LeadStore {
     pub fn import_from(&self, src: &LeadStore) -> AppResult<usize> {
         let ts = Self::stamp(import_stamp());
         let mut added = 0;
-        let cols = ["lead_id", "fingerprint", "kind", "source", "title", "score", "relevance", "discovered_at", "updated_at", "data_json", "imported_at", "favorite", "archived", "deleted", "excluded", "seen", "note"];
+        let cols = [
+            "lead_id",
+            "fingerprint",
+            "kind",
+            "source",
+            "title",
+            "score",
+            "relevance",
+            "discovered_at",
+            "updated_at",
+            "data_json",
+            "imported_at",
+            "favorite",
+            "archived",
+            "deleted",
+            "excluded",
+            "seen",
+            "note",
+        ];
         let select = format!("SELECT {} FROM leads", cols.join(", "));
         let exclusions = src.exclusions()?;
         self.transaction(|| {
@@ -946,7 +993,10 @@ impl LeadStore {
                 added += 1;
             }
             for e in &exclusions {
-                self.conn.execute("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)", params![e.kind.as_str(), e.value, util::now_string()])?;
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)",
+                    params![e.kind.as_str(), e.value, util::now_string()],
+                )?;
                 self.mark_dirty("exclusion", &format!("{}|{}", e.kind.as_str(), e.value), &["deleted"], Some(&ts))?;
             }
             for k in SYNCED_KEYS {

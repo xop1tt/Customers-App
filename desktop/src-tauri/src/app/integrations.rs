@@ -139,7 +139,8 @@ impl Core {
     /// Сохраняет ключ приложения, введённый пользователем.
     pub fn save_oauth_key(&self, provider: &str, client_id: &str, client_secret: Option<&str>) -> CmdResult<()> {
         let p = OAuthProvider::parse(provider).ok_or("Неизвестный сервис")?;
-        let key = OAuthKey { client_id: client_id.trim().into(), client_secret: client_secret.map(|s| s.trim().to_string()).filter(|_| p.needs_client_secret()) };
+        let key =
+            OAuthKey { client_id: client_id.trim().into(), client_secret: client_secret.map(|s| s.trim().to_string()).filter(|_| p.needs_client_secret()) };
         if let Some(problem) = key.problem(p) {
             return Err(CmdError::msg(problem));
         }
@@ -202,7 +203,9 @@ impl Core {
     pub async fn connect_oauth(self: &Arc<Self>, service: &str) -> CmdResult<String> {
         let s = self.require()?;
         let d = DriveService::parse(service).ok_or("Неизвестный сервис")?;
-        let DriveAuth::OAuth(provider) = d.auth() else { return Err(CmdError::msg("Для этого сервиса вход через браузер не нужен.")) };
+        let DriveAuth::OAuth(provider) = d.auth() else {
+            return Err(CmdError::msg("Для этого сервиса вход через браузер не нужен."));
+        };
         let client = self.oauth_client(provider).ok_or_else(|| CmdError::msg(drives::IntegrationError::NotConfigured(provider).to_string()))?;
         let cancel = self.begin_drive(d)?;
         let opener = self.env.opener.clone();
@@ -228,7 +231,12 @@ impl Core {
             if !login.is_empty() {
                 headers.push(("Authorization".into(), drives::basic_auth(login, password)));
             }
-            let r = self.env.transport.send(HttpRequest { method: "PROPFIND".into(), url: base.clone(), headers, body: None, timeout: 20.0 }).await.map_err(|e| e.message())?;
+            let r = self
+                .env
+                .transport
+                .send(HttpRequest { method: "PROPFIND".into(), url: base.clone(), headers, body: None, timeout: 20.0 })
+                .await
+                .map_err(|e| e.message())?;
             match r.status {
                 401 | 403 => Err("неверный логин или пароль приложения".to_string()),
                 200..=299 => Ok(base),
@@ -343,7 +351,15 @@ impl Core {
         let s = self.require()?;
         let account = Self::mail_account_of(&s.account_prefs()).ok_or("Почта не настроена")?;
         let to = account.from_address.clone();
-        self.mail_send(OutgoingMail { to: to.clone(), subject: "Проверка почты Customers".into(), body: "Это проверочное письмо: отправка из Customers настроена.".into() }, None).await?;
+        self.mail_send(
+            OutgoingMail {
+                to: to.clone(),
+                subject: "Проверка почты Customers".into(),
+                body: "Это проверочное письмо: отправка из Customers настроена.".into(),
+            },
+            None,
+        )
+        .await?;
         Ok(format!("Проверочное письмо отправлено на {to}"))
     }
 
@@ -361,7 +377,10 @@ impl Core {
     pub fn call(self: &Arc<Self>, phone: &str, lead_id: Option<&str>) -> CmdResult<()> {
         let app = self.session().map(|s| s.account_prefs().call_app).unwrap_or_default();
         let url = contact::call_url(&app, phone).ok_or("Не похоже на номер телефона")?;
-        self.env.opener.open_url(&url).map_err(|e| CmdError::msg(format!("{e}. Если программа не установлена, выберите другую в настройках: Способы связи → Звонки.")))?;
+        self.env
+            .opener
+            .open_url(&url)
+            .map_err(|e| CmdError::msg(format!("{e}. Если программа не установлена, выберите другую в настройках: Способы связи → Звонки.")))?;
         if let Some(id) = lead_id {
             let _ = self.log_event(id, &format!("Звонок {phone}"));
         }
@@ -389,7 +408,8 @@ impl Core {
         let notion_connected = self.crm_secret(&s, CrmKind::Notion).is_some();
         let notion = match (notion_connected, self.notion_link(&s)) {
             (true, Some(l)) => {
-                let props: Vec<Value> = l.properties.iter().map(|p| json!({"name": p.name, "type": p.kind, "typeTitle": p.type_title(), "writable": p.is_writable()})).collect();
+                let props: Vec<Value> =
+                    l.properties.iter().map(|p| json!({"name": p.name, "type": p.kind, "typeTitle": p.type_title(), "writable": p.is_writable()})).collect();
                 let mapping: BTreeMap<&String, &'static str> = l.mapping.iter().map(|(k, f)| (k, f.key())).collect();
                 let has_title = l.properties.iter().any(|p| p.kind == "title" && l.mapping.contains_key(&p.name));
                 json!({"connected": true, "title": l.title, "database": l.database, "properties": props, "mapping": mapping, "hasTitle": has_title})
@@ -578,8 +598,14 @@ impl NotionLink {
             return None;
         }
         // Поля: ключ экспорта (title) или имя варианта Windows-версии (Title, CustomerName).
-        let field = |name: &str| ExportField::from_key(name).or_else(|| ExportField::ALL.iter().copied().find(|f| f.key().to_lowercase() == name.to_lowercase()));
-        Some(Self { database: r.database, title: r.title, properties: r.properties, mapping: r.mapping.into_iter().filter_map(|(k, v)| field(&v).map(|f| (k, f))).collect() })
+        let field =
+            |name: &str| ExportField::from_key(name).or_else(|| ExportField::ALL.iter().copied().find(|f| f.key().to_lowercase() == name.to_lowercase()));
+        Some(Self {
+            database: r.database,
+            title: r.title,
+            properties: r.properties,
+            mapping: r.mapping.into_iter().filter_map(|(k, v)| field(&v).map(|f| (k, f))).collect(),
+        })
     }
 }
 
@@ -719,7 +745,12 @@ mod tests {
         assert_eq!(win.mapping.get("Name"), Some(&ExportField::Title));
         assert_eq!(win.mapping.get("Телефон"), Some(&ExportField::Phone));
         assert!(!win.mapping.contains_key("X"));
-        let own = NotionLink { database: "db".into(), title: "Лиды".into(), properties: vec![NotionProperty { name: "Name".into(), kind: "title".into() }], mapping: [("Name".to_string(), ExportField::Title)].into() };
+        let own = NotionLink {
+            database: "db".into(),
+            title: "Лиды".into(),
+            properties: vec![NotionProperty { name: "Name".into(), kind: "title".into() }],
+            mapping: [("Name".to_string(), ExportField::Title)].into(),
+        };
         assert_eq!(NotionLink::decode(&own.encoded()), Some(own));
         assert!(NotionLink::decode("{}").is_none() && NotionLink::decode("не json").is_none());
     }

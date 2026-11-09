@@ -124,7 +124,9 @@ pub fn parse_feed(data: &[u8]) -> Option<Vec<FeedEntry>> {
                 if name == "item" || name == "entry" {
                     current = Some(HashMap::new());
                 } else if let Some(cur) = current.as_mut() {
-                    let attr = |k: &str| e.attributes().flatten().find(|a| a.key.as_ref() == k.as_bytes()).and_then(|a| a.unescape_value().ok().map(|v| v.into_owned()));
+                    let attr = |k: &str| {
+                        e.attributes().flatten().find(|a| a.key.as_ref() == k.as_bytes()).and_then(|a| a.unescape_value().ok().map(|v| v.into_owned()))
+                    };
                     if name == "link" {
                         if let Some(href) = attr("href") {
                             let rel = attr("rel").unwrap_or_else(|| "alternate".into());
@@ -165,10 +167,11 @@ pub fn parse_feed(data: &[u8]) -> Option<Vec<FeedEntry>> {
                             text.clear();
                             continue;
                         }
-                        "title" | "guid" | "id" | "description" | "summary" | "encoded" | "content" | "pubdate" | "published" | "updated" | "date" | "link" | "category" => {
-                            if !value.is_empty() {
-                                cur.entry(name).or_insert(value);
-                            }
+                        "title" | "guid" | "id" | "description" | "summary" | "encoded" | "content" | "pubdate" | "published" | "updated" | "date" | "link"
+                        | "category"
+                            if !value.is_empty() =>
+                        {
+                            cur.entry(name).or_insert(value);
                         }
                         _ => {}
                     }
@@ -294,9 +297,11 @@ impl TelegramPost {
 }
 
 static POST_RX: Lazy<Regex> = Lazy::new(|| Regex::new(r#"data-post="([^"/]+)/(\d+)""#).unwrap());
-static MAIN_TEXT_RX: Lazy<Regex> =
-    Lazy::new(|| RegexBuilder::new(r#"<div class="tgme_widget_message_text js-message_text[^"]*"[^>]*>(.*?)</div>"#).dot_matches_new_line(true).build().unwrap());
-static TEXT_RX: Lazy<Regex> = Lazy::new(|| RegexBuilder::new(r#"<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>"#).dot_matches_new_line(true).build().unwrap());
+static MAIN_TEXT_RX: Lazy<Regex> = Lazy::new(|| {
+    RegexBuilder::new(r#"<div class="tgme_widget_message_text js-message_text[^"]*"[^>]*>(.*?)</div>"#).dot_matches_new_line(true).build().unwrap()
+});
+static TEXT_RX: Lazy<Regex> =
+    Lazy::new(|| RegexBuilder::new(r#"<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>"#).dot_matches_new_line(true).build().unwrap());
 static TIME_RX: Lazy<Regex> = Lazy::new(|| Regex::new(r#"<time[^>]*datetime="([^"]+)""#).unwrap());
 
 /// Разбор страницы https://t.me/s/<канал>.
@@ -308,11 +313,7 @@ pub fn parse_telegram(html: &str) -> Vec<TelegramPost> {
         let end = marks.get(i + 1).map(|n| n.get(0).unwrap().start()).unwrap_or(html.len());
         let chunk = &html[start..end];
         let Ok(id) = m[2].parse::<i64>() else { continue };
-        let text = MAIN_TEXT_RX
-            .captures(chunk)
-            .or_else(|| TEXT_RX.captures(chunk))
-            .map(|c| html_to_text(&c[1], true))
-            .unwrap_or_default();
+        let text = MAIN_TEXT_RX.captures(chunk).or_else(|| TEXT_RX.captures(chunk)).map(|c| html_to_text(&c[1], true)).unwrap_or_default();
         let published = TIME_RX.captures(chunk).and_then(|c| parse_date(&c[1]));
         posts.push(TelegramPost { channel: m[1].to_string(), id, text, published });
     }
@@ -481,11 +482,8 @@ const NEEDS_BOOKING: [&str; 6] = ["beauty", "dance", "fitness", "medical", "educ
 pub fn build_overpass_query(region: &str, filters: &[String], timeout: u32) -> String {
     let name = region.replace('"', "");
     let body: String = filters.iter().map(|f| format!("nwr{f}(area.a);")).collect();
-    let alt: String = ["name", "name:ru", "name:en"]
-        .iter()
-        .enumerate()
-        .map(|(i, k)| format!("area[\"{k}\"=\"{name}\"][\"boundary\"=\"administrative\"]->.a{i};"))
-        .collect();
+    let alt: String =
+        ["name", "name:ru", "name:en"].iter().enumerate().map(|(i, k)| format!("area[\"{k}\"=\"{name}\"][\"boundary\"=\"administrative\"]->.a{i};")).collect();
     format!("[out:json][timeout:{timeout}];{alt}(.a0;.a1;.a2;)->.a;({body});out center tags;")
 }
 
@@ -597,7 +595,12 @@ async fn osm_candidate(
     let website = pick(&["website", "contact:website", "url"]);
     let phone = pick(&["phone", "contact:phone"]);
     let mut contacts_map = BTreeMap::new();
-    for (k, v) in [("phone", phone.clone()), ("email", pick(&["email", "contact:email"])), ("vk", tags.get("contact:vk").cloned()), ("telegram", tags.get("contact:telegram").cloned())] {
+    for (k, v) in [
+        ("phone", phone.clone()),
+        ("email", pick(&["email", "contact:email"])),
+        ("vk", tags.get("contact:vk").cloned()),
+        ("telegram", tags.get("contact:telegram").cloned()),
+    ] {
         if let Some(v) = v.filter(|v| !v.is_empty()) {
             contacts_map.insert(k.to_string(), v);
         }
@@ -647,7 +650,8 @@ async fn osm_candidate(
         Some(_) => {}
     }
     memory.mark_object_checked(cfg::OSM, &oid);
-    let address = ["addr:city", "addr:street", "addr:housenumber"].iter().filter_map(|k| tags.get(*k)).filter(|s| !s.is_empty()).cloned().collect::<Vec<_>>().join(", ");
+    let address =
+        ["addr:city", "addr:street", "addr:housenumber"].iter().filter_map(|k| tags.get(*k)).filter(|s| !s.is_empty()).cloned().collect::<Vec<_>>().join(", ");
     let mut d = LeadData::new(LeadKind::Organization, cfg::OSM, &oid, &name);
     d.url = format!("https://www.openstreetmap.org/{oid}");
     d.description = format!("{} · {region}", cat.label);
@@ -678,9 +682,21 @@ pub struct SiteCheck {
 }
 
 const BOOKING_MARKERS: [&str; 12] = [
-    "онлайн-запис", "онлайн запис", "записаться", "запись онлайн", "yclients", "dikidi", "sonline", "booking", "забронировать", "бронирование", "arnica", "altegio",
+    "онлайн-запис",
+    "онлайн запис",
+    "записаться",
+    "запись онлайн",
+    "yclients",
+    "dikidi",
+    "sonline",
+    "booking",
+    "забронировать",
+    "бронирование",
+    "arnica",
+    "altegio",
 ];
-static YEAR_RX: Lazy<Regex> = Lazy::new(|| RegexBuilder::new(r"(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–—]\s*)?(20\d{2}|19\d{2})").case_insensitive(true).build().unwrap());
+static YEAR_RX: Lazy<Regex> =
+    Lazy::new(|| RegexBuilder::new(r"(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–—]\s*)?(20\d{2}|19\d{2})").case_insensitive(true).build().unwrap());
 static VIEWPORT_RX: Lazy<Regex> = Lazy::new(|| RegexBuilder::new(r#"<meta\b[^>]*\bname\s*=\s*["']?viewport\b"#).case_insensitive(true).build().unwrap());
 static PRIVATE_RX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(127|10|192\.168|169\.254|0)\.").unwrap());
 static PRIVATE172_RX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^172\.(1[6-9]|2\d|3[01])\.").unwrap());
@@ -713,12 +729,20 @@ pub async fn check_site(raw: &str, http: &SourceHttp, now: DateTime<Utc>) -> Res
     let url = normalize_site_url(raw);
     let day = now.with_timezone(&Local).format("%d.%m.%Y").to_string();
     if !is_public_http_url(&url) {
-        return Ok(SiteCheck { url, reachable: false, facts: vec!["В источнике указан некорректный адрес сайта".into()], ..Default::default() });
+        return Ok(SiteCheck {
+            url, reachable: false, facts: vec!["В источнике указан некорректный адрес сайта".into()], ..Default::default()
+        });
     }
     let resp: HttpResponse = match http.get(&url, &[]).await {
         Ok(r) => r,
         Err(SearchError::Http { message, status, .. }) => {
-            return Ok(SiteCheck { url, reachable: false, status, facts: vec![format!("Сайт не открылся при проверке {day}: {message}")], ..Default::default() })
+            return Ok(SiteCheck {
+                url,
+                reachable: false,
+                status,
+                facts: vec![format!("Сайт не открылся при проверке {day}: {message}")],
+                ..Default::default()
+            })
         }
         Err(e) => return Err(e),
     };
@@ -792,10 +816,7 @@ mod tests {
 
     #[tokio::test]
     async fn rss_fetch_filters_remembers_seen_and_uses_etag() {
-        let t = FakeTransport::new(vec![
-            Ok(HttpResponse::new(200, RSS_XML).with_headers(&[("ETag", "v1")])),
-            Ok(HttpResponse::new(304, "")),
-        ]);
+        let t = FakeTransport::new(vec![Ok(HttpResponse::new(200, RSS_XML).with_headers(&[("ETag", "v1")])), Ok(HttpResponse::new(304, ""))]);
         let http = http_for(t.clone());
         let r = fetch_rss(&feed_cfg(&["сайт"]), None, &http).await.unwrap();
         assert_eq!(r.candidates.len(), 1);
@@ -861,7 +882,10 @@ mod tests {
     #[tokio::test]
     async fn telegram_walks_back_until_last_post_or_warns() {
         let page = |ids: &[i64]| {
-            let body: String = ids.iter().map(|i| format!(r#"<div data-post="chan/{i}"><div class="tgme_widget_message_text js-message_text">пост {i} сайт</div></div>"#)).collect();
+            let body: String = ids
+                .iter()
+                .map(|i| format!(r#"<div data-post="chan/{i}"><div class="tgme_widget_message_text js-message_text">пост {i} сайт</div></div>"#))
+                .collect();
             Ok(HttpResponse::new(200, body))
         };
         let cfg = TelegramSourceSettings { channels: vec!["chan".into()], keywords: vec![], max_pages: 3, ..Default::default() };
@@ -1015,7 +1039,18 @@ mod tests {
     #[test]
     fn public_url_rules() {
         assert!(is_public_http_url("https://example.com/a"));
-        for bad in ["ftp://example.com", "http://localhost/x", "http://127.0.0.1/", "http://10.0.0.5/", "http://192.168.0.1/", "http://172.16.0.1/", "http://169.254.1.1/", "http://printer.local/", "http://intranet/", "javascript:alert(1)"] {
+        for bad in [
+            "ftp://example.com",
+            "http://localhost/x",
+            "http://127.0.0.1/",
+            "http://10.0.0.5/",
+            "http://192.168.0.1/",
+            "http://172.16.0.1/",
+            "http://169.254.1.1/",
+            "http://printer.local/",
+            "http://intranet/",
+            "javascript:alert(1)",
+        ] {
             assert!(!is_public_http_url(bad), "{bad}");
         }
         assert!(is_public_http_url("http://172.32.0.1/"));

@@ -640,7 +640,12 @@ pub mod tests {
     async fn revoked_refresh_token_clears_session() {
         let server = Server::new(vec![(400, r#"{"error_code":"refresh_token_not_found"}"#)]);
         let store = Arc::new(MemorySessionStore::default());
-        store.save(Some(&CloudSession { access_token: "a".into(), refresh_token: "r".into(), expires_at: Utc::now() - Duration::seconds(5), user: CloudUser::default() }));
+        store.save(Some(&CloudSession {
+            access_token: "a".into(),
+            refresh_token: "r".into(),
+            expires_at: Utc::now() - Duration::seconds(5),
+            user: CloudUser::default(),
+        }));
         let auth = CloudAuth::new(config(), server, store.clone(), "d".into());
         assert_eq!(auth.valid_session().await.unwrap_err(), CloudError::SessionExpired);
         assert!(store.load().is_none());
@@ -653,7 +658,12 @@ pub mod tests {
         let (auth, _) = auth_with(Server::new(vec![(200, &token_json("a1", "r1", 3600))]));
         let _ = auth;
         let store = Arc::new(MemorySessionStore::default());
-        store.save(Some(&CloudSession { access_token: "a1".into(), refresh_token: "r1".into(), expires_at: Utc::now() + Duration::hours(1), user: CloudUser::default() }));
+        store.save(Some(&CloudSession {
+            access_token: "a1".into(),
+            refresh_token: "r1".into(),
+            expires_at: Utc::now() + Duration::hours(1),
+            user: CloudUser::default(),
+        }));
         let auth = CloudAuth::new(config(), server.clone(), store, "d".into());
         let (status, body) = auth.authorized("GET", "/rest/v1/leads", None, &[]).await.unwrap();
         assert_eq!((status, body.as_slice()), (200, b"[]".as_slice()));
@@ -661,7 +671,12 @@ pub mod tests {
         // повторный 401 после обновления завершает сессию
         let server = Server::new(vec![(401, "{}"), (200, &token_json("a3", "r3", 3600)), (401, "{}")]);
         let store = Arc::new(MemorySessionStore::default());
-        store.save(Some(&CloudSession { access_token: "a1".into(), refresh_token: "r1".into(), expires_at: Utc::now() + Duration::hours(1), user: CloudUser::default() }));
+        store.save(Some(&CloudSession {
+            access_token: "a1".into(),
+            refresh_token: "r1".into(),
+            expires_at: Utc::now() + Duration::hours(1),
+            user: CloudUser::default(),
+        }));
         let auth = CloudAuth::new(config(), server, store.clone(), "d".into());
         assert_eq!(auth.authorized("GET", "/x", None, &[]).await.unwrap_err(), CloudError::SessionExpired);
         assert!(store.load().is_none());
@@ -700,8 +715,14 @@ pub mod tests {
         assert_eq!(r, CallbackResult::SignedIn { kind: "signup".into() });
         assert_eq!(store.load().unwrap().user.email, "me@example.com");
         assert!(store.load().unwrap().user.is_confirmed());
-        assert_eq!(auth.handle_callback("leadgenerator://auth/callback#error=access_denied&error_code=otp_expired&error_description=x").await.unwrap_err(), CloudError::InvalidCode);
-        assert_eq!(auth.handle_callback("leadgenerator://auth/callback#message=Confirm+link+in+second+email").await.unwrap(), CallbackResult::Message("Confirm link in second email".into()));
+        assert_eq!(
+            auth.handle_callback("leadgenerator://auth/callback#error=access_denied&error_code=otp_expired&error_description=x").await.unwrap_err(),
+            CloudError::InvalidCode
+        );
+        assert_eq!(
+            auth.handle_callback("leadgenerator://auth/callback#message=Confirm+link+in+second+email").await.unwrap(),
+            CallbackResult::Message("Confirm link in second email".into())
+        );
         assert!(auth.handle_callback("leadgenerator://auth/callback").await.is_err());
     }
 

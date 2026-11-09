@@ -133,7 +133,12 @@ impl SearchReport {
         }
         let ran: Vec<_> = self.sources.iter().filter(|s| s.skipped.is_none()).collect();
         if ran.is_empty() {
-            return self.sources.first().and_then(|s| s.skipped.as_ref()).map(|m| format!("Поиск не выполнен: {m}")).unwrap_or_else(|| "Нет включённых источников".into());
+            return self
+                .sources
+                .first()
+                .and_then(|s| s.skipped.as_ref())
+                .map(|m| format!("Поиск не выполнен: {m}"))
+                .unwrap_or_else(|| "Нет включённых источников".into());
         }
         let mut s = format!("Поиск завершён: новых {}, обновлено {}", self.added(), self.updated());
         let failed = self.failed();
@@ -156,7 +161,13 @@ pub struct SearchEngine {
 }
 
 impl SearchEngine {
-    pub fn new(settings: SearchSettings, secrets: SearchSecrets, transport: Arc<dyn HttpTransport>, repo: Arc<dyn SearchRepository>, cancel: CancellationToken) -> Self {
+    pub fn new(
+        settings: SearchSettings,
+        secrets: SearchSecrets,
+        transport: Arc<dyn HttpTransport>,
+        repo: Arc<dyn SearchRepository>,
+        cancel: CancellationToken,
+    ) -> Self {
         Self { settings, secrets, transport, repo, scorer: Scorer::default(), sleeper: real_sleeper(), now: Arc::new(Utc::now), cancel }
     }
 
@@ -224,7 +235,13 @@ impl SearchEngine {
                     for w in &fetched.warnings {
                         self.repo.log_error(key, &format!("Предупреждение: {w}"));
                     }
-                    self.repo.finish_source(key, !all_failed, !fetched.partial_errors.is_empty(), fetched.partial_errors.first().map(String::as_str), fetched.cursor.as_deref());
+                    self.repo.finish_source(
+                        key,
+                        !all_failed,
+                        !fetched.partial_errors.is_empty(),
+                        fetched.partial_errors.first().map(String::as_str),
+                        fetched.cursor.as_deref(),
+                    );
                 }
                 Err(SearchError::Cancelled) => {
                     report.cancelled = true;

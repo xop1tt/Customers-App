@@ -144,6 +144,7 @@ pub fn device_prefs(core: C<'_>) -> Value {
 #[tauri::command]
 pub fn patch_device_prefs(core: C<'_>, app: tauri::AppHandle, changes: Value) -> Value {
     core.env.patch_device(&changes);
+    core.push_interface_prefs(&changes);
     crate::shell::apply_device_changes(&app, &core, &changes);
     core.env.device.lock().unwrap().to_json()
 }
@@ -376,7 +377,7 @@ pub fn crash_report_text(core: C<'_>, path: Option<String>) -> String {
     let mut text = format!("Customers {}, {} {}\n", core.env.version, std::env::consts::OS, std::env::consts::ARCH);
     if let Some(p) = path {
         if let Ok(raw) = std::fs::read_to_string(&p) {
-            text.push_str("\n");
+            text.push('\n');
             text.push_str(&reports::summary(&raw, 25, 4000));
             text.push('\n');
         }

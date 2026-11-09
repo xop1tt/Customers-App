@@ -95,7 +95,8 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
     let secrets = secrets::platform_store(&paths.root).map_err(|e| e.to_string())?;
     let transport: Arc<dyn crate::search::http::HttpTransport> = Arc::new(ReqwestTransport::new());
     let device_id = device_id(secrets.as_ref());
-    let cloud = CloudConfig::embedded().map(|config| Arc::new(CloudAuth::new(config, transport.clone(), Arc::new(SecretSessionStore(secrets.clone())), device_id.clone())));
+    let cloud = CloudConfig::embedded()
+        .map(|config| Arc::new(CloudAuth::new(config, transport.clone(), Arc::new(SecretSessionStore(secrets.clone())), device_id.clone())));
     let bundle = app_bundle();
     let can_update = !cfg!(debug_assertions) && if cfg!(target_os = "macos") { bundle.is_some() } else { cfg!(windows) };
     Ok(Arc::new(Env {
@@ -205,7 +206,12 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     }
                     if !prefs.tray_hint_shown {
                         c.env.patch_device(&json!({"trayHintShown": true}));
-                        let _ = h.notification().builder().title("Customers работает в фоне").body("Поиск продолжается. Значок в области уведомлений открывает окно, меню значка — «Выйти».").show();
+                        let _ = h
+                            .notification()
+                            .builder()
+                            .title("Customers работает в фоне")
+                            .body("Поиск продолжается. Значок в области уведомлений открывает окно, меню значка — «Выйти».")
+                            .show();
                     }
                 }
             }
