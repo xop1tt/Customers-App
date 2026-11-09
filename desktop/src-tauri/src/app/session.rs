@@ -158,7 +158,9 @@ impl Core {
         let s = self.session()?;
         let cloud_user = if s.is_cloud { self.cloud_user.lock().unwrap().as_ref().map(CloudUserInfo::from) } else { None };
         let database_path = s.with_store(|st| st.path().display().to_string());
-        let display_name = stored_text(&s, "profile.name").unwrap_or_else(|| s.display_name.clone());
+        // Имя профиля из облака главнее; пока оно не пришло, берётся имя из регистрации, затем адрес почты.
+        let signup_name = if s.is_cloud { self.cloud_user.lock().unwrap().as_ref().and_then(CloudUser::username) } else { None };
+        let display_name = stored_text(&s, "profile.name").or(signup_name).unwrap_or_else(|| s.display_name.clone());
         let avatar = stored_text(&s, "profile.avatar");
         Some(SessionInfo { id: s.id.clone(), display_name, avatar, is_cloud: s.is_cloud, cloud_user, database_path })
     }
@@ -308,6 +310,7 @@ impl Core {
             tasks: Mutex::new(vec![]),
         });
         *self.current.lock().unwrap() = Some(session.clone());
+        self.apply_synced_prefs(&session);
         self.start_background(&session);
         self.env.emit("session-changed", serde_json::to_value(self.info()).unwrap_or(Value::Null));
         Ok(())
@@ -323,15 +326,6 @@ impl Core {
         let dir = self.env.paths.root.join("users").join(&id);
         *self.cloud_user.lock().unwrap() = Some(user.clone());
         let result = self.open_session(&id, &user.email, true, &dir);
-        // Имя из регистрации становится именем профиля, если на этом аккаунте его ещё нет.
-        if result.is_ok() {
-            if let (Some(name), Some(s)) = (user.username(), self.session()) {
-                if stored_text(&s, "profile.name").is_none() {
-                    let _ = s.with_store(|st| st.set_synced_value("profile.name", &serde_json::to_string(&name).unwrap_or_default()));
-                    self.env.emit("session-changed", serde_json::to_value(self.info()).unwrap_or(Value::Null));
-                }
-            }
-        }
         *self.cloud_user.lock().unwrap() = Some(user);
         result
     }
@@ -772,8 +766,12 @@ mod tests {
         core.cloud_sign_in("me@example.com", &typed_secret()).await.unwrap();
         let info = core.info().unwrap();
         assert_eq!(info.display_name, "Анна", "вместо адреса почты показывается имя");
+        // Имя из регистрации не пишется в журнал: иначе вход на новом компьютере затёр бы в облаке более новое имя.
         let dirty = core.session().unwrap().with_store(|st| st.pending_changes(100).unwrap());
-        assert!(dirty.settings.iter().any(|c| c.key == "profile.name"), "имя уходит в облако");
+        assert!(!dirty.settings.iter().any(|c| c.key == "profile.name"));
+        // Имя, пришедшее из облака, главнее имени из регистрации.
+        core.session().unwrap().with_store(|st| st.set_value("profile.name", "\"Анна Новая\"")).unwrap();
+        assert_eq!(core.info().unwrap().display_name, "Анна Новая");
     }
 
     #[tokio::test]

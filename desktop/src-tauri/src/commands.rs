@@ -144,6 +144,7 @@ pub fn device_prefs(core: C<'_>) -> Value {
 #[tauri::command]
 pub fn patch_device_prefs(core: C<'_>, app: tauri::AppHandle, changes: Value) -> Value {
     core.env.patch_device(&changes);
+    core.push_interface_prefs(&changes);
     crate::shell::apply_device_changes(&app, &core, &changes);
     core.env.device.lock().unwrap().to_json()
 }

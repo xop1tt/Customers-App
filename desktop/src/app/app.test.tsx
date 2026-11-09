@@ -47,6 +47,9 @@ describe("приложение с демо-бэкендом", () => {
     for (const name of ["Способы связи", "Уведомления", "Система"]) expect(within(dialog).getByText(name)).toBeInTheDocument();
     expect(within(dialog).queryByText("Рассылка")).toBeNull();
     fireEvent.click(within(dialog).getByText("Способы связи"));
+    // У страницы есть подразделы: выбранный показывается, остальные скрыты.
+    expect(within(dialog).queryByText("Программа для звонков")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Звонки" }));
     await within(dialog).findByText("Программа для звонков");
     // Щелчок внутри окна не закрывает его, по затемнению — закрывает.
     fireEvent.pointerDown(dialog);
