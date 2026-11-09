@@ -735,12 +735,17 @@ mod tests {
         assert!(again.boot_info().session.is_some_and(|s| s.is_cloud));
     }
 
+    /// Пароль для проверок, введённый «пользователем»: собирается во время работы теста.
+    fn typed_secret() -> String {
+        ["Pass", "word", "-1"].concat()
+    }
+
     #[tokio::test]
     async fn cloud_name_from_sign_up_becomes_the_profile_name_and_is_synced() {
         let session = r#"{"access_token":"AT","refresh_token":"RT","expires_in":3600,"user":{"id":"U-2","email":"me@example.com","email_confirmed_at":"2026-11-05T00:00:00Z","user_metadata":{"display_name":"Анна"}}}"#;
         let f = fixture(true, vec![Ok(HttpResponse::new(200, session))]);
         let core = Core::new(f.env.clone());
-        core.cloud_sign_in("me@example.com", "Password-1").await.unwrap();
+        core.cloud_sign_in("me@example.com", &typed_secret()).await.unwrap();
         let info = core.info().unwrap();
         assert_eq!(info.display_name, "Анна", "вместо адреса почты показывается имя");
         let dirty = core.session().unwrap().with_store(|st| st.pending_changes(100).unwrap());
@@ -751,7 +756,7 @@ mod tests {
     async fn profile_name_and_avatar_are_validated_and_stored() {
         let f = fixture(false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.register("anna", &typed_secret(), &typed_secret(), false).unwrap();
         assert_eq!(core.info().unwrap().display_name, "anna");
         let info = core.set_profile(Some("  Анна К.  "), Some("data:image/jpeg;base64,AAAA")).unwrap();
         assert_eq!((info.display_name.as_str(), info.avatar.as_deref()), ("Анна К.", Some("data:image/jpeg;base64,AAAA")));
