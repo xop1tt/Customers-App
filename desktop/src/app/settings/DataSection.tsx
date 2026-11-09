@@ -50,7 +50,7 @@ export function DataSection() {
 
   return (
     <>
-      <Group title="База данных">
+      <Group title="База данных" sub="db">
         <SettingRow title="Расположение" hint={<span className="selectable">{shortenHome(session.databasePath)}</span>}>
           <Button icon="folder" onClick={() => void attempt(() => api.revealPath(session.databasePath))}>Показать</Button>
           <Button busy={busy === "move"} onClick={() => void move()}>Перенести…</Button>
@@ -58,7 +58,7 @@ export function DataSection() {
         <SettingRow title="Размер" hint="Данные зашифрованы на диске ключом, который хранится в защищённом хранилище системы."><span className="num">{bytes(size)}</span></SettingRow>
       </Group>
 
-      <Group title="Резервные копии" note="Копии хранятся рядом с вашими документами. Перед восстановлением приложение всегда сохраняет текущую базу.">
+      <Group title="Резервные копии" sub="backups" note="Копии хранятся рядом с вашими документами. Перед восстановлением приложение всегда сохраняет текущую базу.">
         <SettingRow title="Автоматические копии" hint="Раз в день, пока приложение запущено."><Switch checked={a.autoBackup} onChange={(v) => void patchAccount({ autoBackup: v })} /></SettingRow>
         <SettingRow title="Хранить копий" hint="Старые копии удаляются автоматически."><NumberInput value={a.keepBackups} min={1} max={90} width={130} onChange={(v) => void patchAccount({ keepBackups: v })} /></SettingRow>
         <SettingRow title="Папка копий" hint={a.backupDirectory ? <span className="selectable">{shortenHome(a.backupDirectory)}</span> : "Стандартная папка приложения"}>
@@ -81,7 +81,7 @@ export function DataSection() {
         )}
       </Group>
 
-      <Group title="Облачные диски" note="Копии базы можно загружать в папку приложения на вашем диске. Приложение не видит другие ваши файлы.">
+      <Group title="Облачные диски" sub="drives" note="Копии базы можно загружать в папку приложения на вашем диске. Приложение не видит другие ваши файлы.">
         <DrivesPanel />
       </Group>
     </>

@@ -26,21 +26,21 @@ export function ReportsSection() {
   };
   return (
     <>
-      <Group title="Диагностика" note="Отчёты не отправляются автоматически. Вы сами решаете, что отправить, и видите текст заранее. Пароли и ключи в отчёты не попадают.">
+      <Group title="Диагностика" sub="diagnostics" note="Отчёты не отправляются автоматически. Вы сами решаете, что отправить, и видите текст заранее. Пароли и ключи в отчёты не попадают.">
         <SettingRow title="Предлагать отчёт после сбоя"><Switch checked={d.reportsOfferAfterCrash} onChange={(v) => void patchDevice({ reportsOfferAfterCrash: v })} /></SettingRow>
         <SettingRow title="Записывать ошибки в журнал" hint="Журнал хранится только на этом компьютере."><Switch checked={d.reportsLogErrors} onChange={(v) => void patchDevice({ reportsLogErrors: v })} /></SettingRow>
         <SettingRow title="Прикладывать журнал к обращению"><Switch checked={d.reportsIncludeLog} onChange={(v) => void patchDevice({ reportsIncludeLog: v })} /></SettingRow>
         <SettingRow title="Сообщить о проблеме" hint="Откроется страница обращения с описанием, которое можно отредактировать."><Button icon="report" onClick={() => setReport(true)}>Сообщить…</Button></SettingRow>
       </Group>
 
-      <Group title="Журнал ошибок" action={<>
+      <Group title="Журнал ошибок" sub="log" action={<>
         <Button small variant="ghost" onClick={() => paths && void attempt(() => api.revealPath(paths.errorLog))}>Показать файл</Button>
         <Button small variant="ghost" onClick={async () => { const ok = await confirmDialog({ title: "Очистить журнал ошибок?", confirm: "Очистить", danger: true }); if (ok) { await attempt(() => api.clearErrorLog()); load(); } }}>Очистить</Button>
       </>}>
         {lines.length === 0 ? <EmptyState icon="check" title="Журнал пуст" /> : <pre className="logbox selectable">{lines.join("\n")}</pre>}
       </Group>
 
-      <Group title={`Отчёты о сбоях (${crashes.length})`}>
+      <Group title={`Отчёты о сбоях (${crashes.length})`} sub="crashes">
         {crashes.length === 0 ? <p className="faint" style={{ paddingTop: 12 }}>Сбоев не было.</p> : crashes.map((c) => (
           <SettingRow key={c.path} title={c.date} hint={c.kind}><Button onClick={() => void showCrash(c)}>Показать</Button></SettingRow>
         ))}
@@ -113,7 +113,7 @@ export function UpdatesSection() {
 
   return (
     <>
-      <Group title="Версия">
+      <Group title="Версия" sub="version">
         <SettingRow title={`Customers ${u.current}`} hint={<>{status}{status && u.lastCheck ? " · " : ""}{u.lastCheck ? `Проверено: ${fullRu(u.lastCheck)}` : ""}</>}>
           {busy && <Spinner />}
           <Button icon="refresh" disabled={busy} onClick={() => void attempt(() => api.checkUpdates())}>Проверить</Button>
@@ -133,13 +133,13 @@ export function UpdatesSection() {
         {!u.canUpdate && <div style={{ paddingTop: 10 }}><Notice tone="info" action={<Button small onClick={() => void openLink(u.releasesPage)}>Релизы</Button>}>Установка обновлений из приложения здесь недоступна. Скачайте новую версию со страницы релизов.</Notice></div>}
       </Group>
 
-      <Group title="Параметры">
+      <Group title="Параметры" sub="params">
         <SettingRow title="Проверять обновления автоматически"><Switch checked={d.checkUpdates} onChange={(v) => void patchDevice({ checkUpdates: v })} /></SettingRow>
         <SettingRow title="Как часто проверять"><Select width={180} disabled={!d.checkUpdates} value={d.updateCheckHours} options={(intervals.length ? intervals : [{ hours: d.updateCheckHours, title: `${d.updateCheckHours} ч` }]).map((i) => ({ value: i.hours, label: i.title }))} onChange={(v) => void patchDevice({ updateCheckHours: v })} /></SettingRow>
         <SettingRow title="Скачивать в фоне" hint="Загрузка начинается сразу, установка только по вашей команде."><Switch checked={d.backgroundDownload} disabled={!d.checkUpdates} onChange={(v) => void patchDevice({ backgroundDownload: v })} /></SettingRow>
       </Group>
 
-      <Group title="История версий">
+      <Group title="История версий" sub="history">
         {releases.length === 0 ? <p className="faint" style={{ paddingTop: 12 }}>Список версий недоступен.</p> : releases.map((r) => (
           <div key={r.tag} className="release">
             <button type="button" className="release-head" onClick={() => setOpen(open === r.tag ? null : r.tag)} aria-expanded={open === r.tag}>

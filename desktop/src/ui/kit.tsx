@@ -1,6 +1,6 @@
 // Единый набор элементов управления. Все экраны собирают интерфейс только из них.
 
-import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, forwardRef, useEffect, useId, useRef, useState } from "react";
+import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, createContext, forwardRef, useContext, useEffect, useId, useRef, useState } from "react";
 import { scoreTone } from "../lib/leads";
 import { Icon } from "./icons";
 import { Popover } from "./overlay";
@@ -279,7 +279,17 @@ export function Field({ label, hint, error, children }: { label?: string; hint?:
 }
 
 /** Группа настроек: заголовок и строки, разделённые линиями. */
-export function Group({ title, note, children, action }: { title?: string; note?: ReactNode; children: ReactNode; action?: ReactNode }) {
+/** Открытый подраздел настроек: группы с `sub` показываются, только когда выбран их подраздел. */
+export const SubContext = createContext<string | null>(null);
+
+export function Sub({ id, children }: { id: string; children: ReactNode }) {
+  const current = useContext(SubContext);
+  return current === null || current === id ? <>{children}</> : null;
+}
+
+export function Group({ title, note, children, action, sub }: { title?: string; note?: ReactNode; children: ReactNode; action?: ReactNode; sub?: string }) {
+  const current = useContext(SubContext);
+  if (sub && current !== null && current !== sub) return null;
   return (
     <section className="group">
       {(title || action) && (
