@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { isLeadList } from "../lib/leads";
 import { HoverReveal } from "../lib/hoverReveal";
-import { applyAccent } from "../lib/theme";
+import { applyAccent, applyTheme, resolveTheme, systemIsDark } from "../lib/theme";
+import { resolveLanguage, setLanguage, systemLanguage } from "../lib/i18n";
 import { BASE_AUTO } from "../lib/autoScale";
 import { copyText, isMac, readText } from "../lib/platform";
 import { Icon } from "../ui/icons";
@@ -38,7 +39,24 @@ export function App() {
 
   useEffect(() => { void boot(); }, []);
   useEffect(() => installInputContextMenu(readText, copyText), []);
-  useEffect(() => { applyAccent(device.accent); }, [device.accent]);
+  useEffect(() => {
+    // Тема: свой выбор или тема системы (следим за её сменой).
+    const media = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+    const apply = () => {
+      const theme = resolveTheme(device.theme, systemIsDark());
+      applyTheme(theme);
+      applyAccent(device.accent, theme);
+    };
+    apply();
+    if (device.theme !== "system" || !media) return;
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [device.theme, device.accent]);
+  useEffect(() => {
+    const lang = resolveLanguage(device.language, systemLanguage());
+    setLanguage(lang);
+    void api.setUiLanguage(lang).catch(() => {});
+  }, [device.language]);
   useEffect(() => {
     const off = !device.animations || lightMode !== null;
     document.documentElement.dataset.motion = off ? "off" : "on";

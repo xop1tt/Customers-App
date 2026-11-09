@@ -85,7 +85,9 @@ export function Popover({ anchor, onClose, placement = "bottom-start", children,
     };
   }, [onClose, ignore]);
 
-  const style: React.CSSProperties = { left: pos?.x ?? 0, top: pos?.y ?? 0, visibility: pos ? "visible" : "hidden" };
+  // Пока положение не посчитано, слой прозрачен. `visibility: hidden` не используем: в WebKit (macOS)
+  // после его снятия текст внутри слоя мог не отрисоваться.
+  const style: React.CSSProperties = pos ? { left: pos.x, top: pos.y } : { left: 0, top: 0, opacity: 0, pointerEvents: "none", animation: "none" };
   if (minWidth === "anchor" && isRect(anchor)) style.minWidth = anchor.width;
   else if (typeof minWidth === "number") style.minWidth = minWidth;
   return createPortal(
@@ -240,7 +242,7 @@ export function TooltipHost() {
 
   if (!tip) return null;
   return createPortal(
-    <div ref={ref} className="tooltip" role="tooltip" style={{ left: pos?.x ?? 0, top: pos?.y ?? 0, visibility: pos ? "visible" : "hidden" }}>
+    <div ref={ref} className="tooltip" role="tooltip" style={pos ? { left: pos.x, top: pos.y } : { left: 0, top: 0, opacity: 0, pointerEvents: "none" }}>
       {tip.text}
     </div>,
     layerRoot(),

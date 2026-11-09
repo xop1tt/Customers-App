@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { Lead, LeadEvent, MailState } from "../api/types";
 import { KIND_TITLE, RELEVANCE_TITLE, isNegativeReason, scoreTone } from "../lib/leads";
+import { t } from "../lib/i18n";
 import { fullRu, integer, money, plural } from "../lib/format";
 import { sourceTitle } from "../lib/sources";
 import { Button, EmptyState, Field, IconButton, Notice, Score, Select, Tabs, Tag, TextArea, TextInput } from "../ui/kit";
@@ -186,13 +187,13 @@ function template(lead: Lead, signature: string): { subject: string; body: strin
   const sign = signature.trim() ? `\n\n${signature.trim()}` : "";
   if (d.kind === "order") {
     return {
-      subject: `Отклик на заказ: ${d.title}`.slice(0, 120),
-      body: `Здравствуйте!\n\nУвидел ваш запрос «${d.title}». Могу взяться за эту задачу: сделаю аккуратно и в срок. Расскажите, пожалуйста, подробнее о задаче и желаемых сроках, и я предложу решение и стоимость.${sign}`,
+      subject: t("Отклик на заказ: {title}").replace("{title}", d.title).slice(0, 120),
+      body: t("Здравствуйте!\n\nУвидел ваш запрос «{title}». Могу взяться за эту задачу: сделаю аккуратно и в срок. Расскажите, пожалуйста, подробнее о задаче и желаемых сроках, и я предложу решение и стоимость.").replace("{title}", d.title) + sign,
     };
   }
   return {
-    subject: `Предложение для «${d.title}»`.slice(0, 120),
-    body: `Здравствуйте!\n\nПишу вам по поводу «${d.title}». Помогаю компаниям привлекать клиентов через сайты и онлайн-запись. Посмотрел ваши публичные данные и вижу, что можно улучшить присутствие в интернете. Если интересно, расскажу подробнее и предложу варианты без обязательств.${sign}`,
+    subject: t("Предложение для «{title}»").replace("{title}", d.title).slice(0, 120),
+    body: t("Здравствуйте!\n\nПишу вам по поводу «{title}». Помогаю компаниям привлекать клиентов через сайты и онлайн-запись. Посмотрел ваши публичные данные и вижу, что можно улучшить присутствие в интернете. Если интересно, расскажу подробнее и предложу варианты без обязательств.").replace("{title}", d.title) + sign,
   };
 }
 

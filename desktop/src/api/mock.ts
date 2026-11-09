@@ -116,7 +116,7 @@ const eventsLog = new Map<string, { id: number; at: string; action: string }[]>(
 let eventId = 1;
 
 const baseDevice: DevicePrefs = {
-  accent: null, uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
+  accent: null, theme: "system", language: "system", uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
   sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true,
   lightModeAuto: true, lightModeThreshold: 20, checkUpdates: true, updateCheckHours: 24, lastUpdateCheck: ago(3), backgroundDownload: true,
   lastSeenVersion: "1.1.0", closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: true, rememberedUser: null, lastSection: "home",
@@ -336,6 +336,8 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
       device = { ...device, ...(args.changes as object) };
       emit("device-prefs", device);
       return device;
+    case "set_ui_language":
+      return null;
     case "set_zoom":
       if (typeof document !== "undefined") (document.body.style as CSSStyleDeclaration & { zoom: string }).zoom = String(args.scale);
       return null;

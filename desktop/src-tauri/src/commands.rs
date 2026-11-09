@@ -149,6 +149,12 @@ pub fn patch_device_prefs(core: C<'_>, app: tauri::AppHandle, changes: Value) ->
     core.env.device.lock().unwrap().to_json()
 }
 
+/// Язык интерфейса (после выбора пользователя или по языку системы): меню значка в строке меню подстраивается.
+#[tauri::command]
+pub fn set_ui_language(app: tauri::AppHandle, language: String) {
+    crate::shell::set_ui_language(&app, &language);
+}
+
 // ---------------------------------------------------------------- поиск и синхронизация
 
 sync_cmds! {
