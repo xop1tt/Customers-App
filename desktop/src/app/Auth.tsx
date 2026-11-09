@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { Button, Checkbox, Field, Notice, PasswordInput, Segmented, TextInput } from "../ui/kit";
-import { Icon } from "../ui/icons";
+import { Button, Checkbox, Field, Notice, PasswordInput, TextInput } from "../ui/kit";
+import appIcon from "../assets/app-icon.png";
 import { enterSession, errText, setState, toast, useStore } from "../state/store";
 import { useEvent } from "../state/hooks";
 
@@ -9,10 +9,9 @@ type Mode = "cloud" | "local";
 type Stage = "signIn" | "signUp" | "confirm" | "forgot" | "reset" | "newPassword";
 const RULES = "Пароль: не короче 8 символов, строчные и заглавные буквы и цифры.";
 
+/** Значок приложения (тот же, что в системе). */
 export function Brand({ size = 44 }: { size?: number }) {
-  return (
-    <span className="brand" style={{ width: size, height: size }} aria-hidden="true"><Icon name="search" size={size * 0.5} stroke={2.2} /></span>
-  );
+  return <img className="brand" src={appIcon} width={size} height={size} alt="" aria-hidden="true" draggable={false} />;
 }
 
 export function AuthScreen() {
@@ -94,7 +93,11 @@ export function AuthScreen() {
       <form className="auth-card" onSubmit={(e) => { e.preventDefault(); if (canSubmit && !busy) void submit(); }}>
         <div className="auth-brand"><Brand /><div className="col" style={{ gap: 0 }}><strong style={{ fontSize: "var(--fs-lg)" }}>Customers</strong><span className="faint">Поиск клиентов</span></div></div>
         {cloud && stage !== "newPassword" && (
-          <Segmented value={mode} onChange={(m) => { setMode(m); setError(null); setInfo(null); setStage("signIn"); }} options={[{ value: "cloud", label: "Облачный аккаунт" }, { value: "local", label: "На этом компьютере" }]} />
+          <div className="auth-modes" role="tablist">
+            {([["cloud", "Облачный аккаунт"], ["local", "На этом компьютере"]] as const).map(([m, label]) => (
+              <button key={m} type="button" role="tab" aria-selected={mode === m} className={`auth-mode${mode === m ? " on" : ""}`} onClick={() => { setMode(m); setError(null); setInfo(null); setStage("signIn"); }}>{label}</button>
+            ))}
+          </div>
         )}
         <h2>{title}</h2>
         {info && <Notice tone="info">{info}</Notice>}

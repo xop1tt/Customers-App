@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { fullRu } from "../../lib/format";
 import { avatarFromFile } from "../../lib/avatar";
-import { Avatar, Button, Field, Group, Notice, PasswordInput, SettingRow, Switch, Tag, TextInput } from "../../ui/kit";
+import { Avatar, Button, Field, Group, Notice, PasswordInput, SettingRow, Sub, Switch, Tag, TextInput } from "../../ui/kit";
 import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, leaveSession, toast, useStore } from "../../state/store";
 
@@ -45,7 +45,7 @@ function ProfileGroup() {
     if (url) { await attempt(() => api.setProfile(undefined, url)); toast(session.isCloud ? "Фото сохранено и появится на других устройствах" : "Фото сохранено", "success"); }
   };
   return (
-    <Group title="Профиль" note={session.isCloud ? "Имя и фото хранятся в облаке и одинаковы на всех ваших устройствах." : "Имя и фото хранятся на этом компьютере."}>
+    <Group title="Профиль" sub="profile" note={session.isCloud ? "Имя и фото хранятся в облаке и одинаковы на всех ваших устройствах." : "Имя и фото хранятся на этом компьютере."}>
       <SettingRow title="Фото" hint="Квадратная картинка, лучше от 200 пикселей.">
         <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
         <Button icon="upload" onClick={() => file.current?.click()}>{session.avatar ? "Заменить" : "Выбрать"}</Button>
@@ -86,13 +86,13 @@ function LocalAccount() {
   useEffect(() => { void api.isRemembered().then(setRemember).catch(() => {}); }, []);
   return (
     <>
-      <Group title="Вход">
+      <Group title="Вход" sub="security">
         <SettingRow title="Входить автоматически" hint="Приложение запомнит этот аккаунт на этом компьютере."><Switch checked={remember} onChange={(v) => { setRemember(v); void attempt(() => api.setRemembered(v)); }} /></SettingRow>
       </Group>
-      <Group title="Пароль" note="Пароль защищает базу данных на этом компьютере. Забытый пароль восстановить нельзя.">
+      <Group title="Пароль" sub="security" note="Пароль защищает базу данных на этом компьютере. Забытый пароль восстановить нельзя.">
         <div style={{ paddingTop: 14 }}><PasswordForm labels={["Текущий пароль", "Новый пароль", "Повторите новый пароль"]} onSubmit={(o, n, c) => api.changePassword(o, n, c)} /></div>
       </Group>
-      {cloudAvailable && <Notice tone="info">Чтобы синхронизировать данные между компьютерами, выйдите и войдите в облачный аккаунт. Данные локального аккаунта можно перенести при первом входе.</Notice>}
+      {cloudAvailable && <Sub id="security"><Notice tone="info">Чтобы синхронизировать данные между компьютерами, выйдите и войдите в облачный аккаунт. Данные локального аккаунта можно перенести при первом входе.</Notice></Sub>}
     </>
   );
 }
@@ -107,20 +107,20 @@ function CloudAccount() {
   if (!user) return null;
   return (
     <>
-      <Group title="Почта">
+      <Group title="Почта" sub="security">
         <SettingRow title={<span className="row">{user.email}{user.confirmed ? <Tag tone="green">подтверждена</Tag> : <Tag tone="orange">не подтверждена</Tag>}</span>} hint={user.newEmail ? `Ожидает подтверждения новый адрес: ${user.newEmail}` : "Адрес для входа и восстановления пароля."}>
           <Button onClick={() => setDialog("email")}>{user.newEmail ? "Подтвердить новый адрес" : "Изменить"}</Button>
         </SettingRow>
       </Group>
-      <Group title="Синхронизация">
+      <Group title="Синхронизация" sub="cloud">
         <SettingRow title={sync?.kind === "syncing" ? "Синхронизация…" : sync?.kind === "offline" ? "Нет связи с сервером" : sync?.kind === "failed" ? "Последняя синхронизация не удалась" : "Данные синхронизированы"}
           hint={`${sync?.lastSync ? `Последний раз: ${fullRu(sync.lastSync)}. ` : ""}${sync?.message ?? ""}${sync?.pending ? ` Ждут отправки: ${sync.pending}.` : ""}`}>
           <Button icon="refresh" busy={sync?.kind === "syncing"} onClick={() => void attempt(() => api.syncNow())}>Синхронизировать</Button>
         </SettingRow>
         {stats && <SettingRow title="В облаке" hint={`Лидов: ${stats.leads_active ?? 0}, исключений: ${stats.exclusions ?? 0}`} />}
       </Group>
-      <Group title="Пароль"><div style={{ paddingTop: 14 }}><PasswordForm labels={["Текущий пароль", "Новый пароль", "Повторите новый пароль"]} onSubmit={(o, n, c) => api.changeCloudPassword(o, n, c)} /></div></Group>
-      <Group title="Данные">
+      <Group title="Пароль" sub="security"><div style={{ paddingTop: 14 }}><PasswordForm labels={["Текущий пароль", "Новый пароль", "Повторите новый пароль"]} onSubmit={(o, n, c) => api.changeCloudPassword(o, n, c)} /></div></Group>
+      <Group title="Данные" sub="cloud">
         <SettingRow title="Перенести локальный аккаунт" hint="Добавит лиды и настройки локального аккаунта в облачный. Локальный аккаунт останется на месте."><Button onClick={() => setDialog("import")}>Перенести…</Button></SettingRow>
         <SettingRow title="Удалить облачный аккаунт" hint="Все облачные данные будут стёрты без возможности восстановления. Данные на этом компьютере останутся."><Button variant="danger" onClick={() => setDialog("delete")}>Удалить…</Button></SettingRow>
       </Group>
