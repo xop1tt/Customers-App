@@ -47,9 +47,10 @@ impl DbKey {
 
     /// Новый случайный ключ.
     pub fn random() -> Self {
-        use rand::RngCore;
+        use rand::TryRng;
         let mut b = [0u8; 32];
-        rand::rngs::OsRng.fill_bytes(&mut b);
+        // Ключ базы берётся прямо из системного генератора, без промежуточного состояния.
+        rand::rngs::SysRng.try_fill_bytes(&mut b).expect("системный генератор случайных чисел недоступен");
         DbKey::Raw(hex::encode(b))
     }
 
