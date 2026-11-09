@@ -3,14 +3,43 @@ import { count, type SectionId, SECTIONS } from "../lib/leads";
 import { integer } from "../lib/format";
 import { CONFIGURABLE, MAIN_GROUP, WORK_GROUP, move, ordered, toggled } from "../lib/sidebarPrefs";
 import { SOURCES } from "../lib/sources";
+import appIcon from "../assets/app-icon.png";
 import { Avatar, Button, IconButton } from "../ui/kit";
 import { api } from "../api";
 import { Icon } from "../ui/icons";
 import { type MenuItem, Popover, showMenu } from "../ui/overlay";
+import type { SyncStatus, UpdateInfo } from "../api/types";
 import { attempt, leaveSession, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
 import { openLink } from "../state/actions";
 
 const SCORE_STEPS = [90, 70, 50, 30];
+
+/** Кнопка «Обновить» нужна, пока есть найденная или скачанная версия. Проверка и ошибка не должны её прятать. */
+export function updateVisible(u: UpdateInfo | null): boolean {
+  if (!u || u.phase === "upToDate") return false;
+  if (["available", "downloading", "ready", "installing"].includes(u.phase)) return true;
+  return !!(u.available || u.stagedVersion);
+}
+
+/** Облачко рядом с именем: показывает, что сейчас с синхронизацией. */
+export function syncView(s: SyncStatus | null): { tone: "ok" | "sync" | "pending" | "offline" | "failed"; icon: string; label: string } | null {
+  if (!s?.enabled) return null;
+  if (s.kind === "syncing") return { tone: "sync", icon: "refresh", label: "Синхронизация…" };
+  if (s.kind === "offline") return { tone: "offline", icon: "cloudOff", label: "Потеряно соединение с облаком" };
+  if (s.kind === "failed") return { tone: "failed", icon: "cloudAlert", label: s.message ? `Не синхронизировано: ${s.message}` : "Не синхронизировано" };
+  if (s.pending > 0) return { tone: "pending", icon: "cloudAlert", label: "Не синхронизировано: изменения ждут отправки" };
+  return { tone: "ok", icon: "cloudCheck", label: "Синхронизировано" };
+}
+
+function SyncBadge({ sync }: { sync: SyncStatus | null }) {
+  const v = syncView(sync);
+  if (!v) return null;
+  return (
+    <span className={`sync-badge ${v.tone}`} role="img" aria-label={v.label} data-tip={v.label}>
+      <Icon name={v.icon} size={15} />
+    </span>
+  );
+}
 
 function NavItem({ id, active, badge, onClick }: { id: SectionId; active: boolean; badge?: number; onClick: () => void }) {
   const meta = SECTIONS[id];
@@ -55,8 +84,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
     { label: "Сообщить о проблеме", icon: "report", onSelect: () => setState({ reportOpen: true }) },
   ];
 
-  const updateReady = update && ["available", "downloading", "ready", "installing"].includes(update.phase);
-  const syncIcon = sync?.enabled ? (sync.kind === "failed" || sync.kind === "offline" ? "cloudOff" : "cloud") : null;
+  const updateReady = updateVisible(update);
 
   /** Перетаскивание строк в режиме настройки панели. */
   const [drag, setDrag] = useState<{ group: string; from: number; over: number } | null>(null);
@@ -101,7 +129,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   return (
     <aside className={`sidebar${overlay ? " overlay" : ""}`} style={{ width: "var(--nav-w)" }} aria-label="Навигация">
       <div className="side-head">
-        <span className="side-brand grow"><Icon name="search" size={15} stroke={2.2} />Customers</span>
+        <span className="side-brand grow"><img src={appIcon} width={20} height={20} alt="" draggable={false} />Customers</span>
         <IconButton icon="sidebar" tip="Свернуть панель" onClick={() => (overlay ? setState({ navPeek: false }) : void patchDevice({ navOpen: false }))} />
       </div>
 
@@ -158,21 +186,20 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
         {customize ? (
           <Button variant="primary" icon="check" onClick={() => setState({ customizeNav: false })}>Готово</Button>
         ) : (
-          <div className="row side-tools">
-            <button type="button" className="nav-item grow" onClick={() => setState({ customizeNav: true })}><Icon name="edit" size={16} /><span>Настроить панель</span></button>
-            <IconButton icon="help" tip="Справка" onClick={(e) => showMenu(helpItems(), e.currentTarget.getBoundingClientRect(), "top-start")} />
-          </div>
+          <>
+            {updateReady && <UpdateButton />}
+            <button type="button" className="nav-item" onClick={() => setState({ customizeNav: true })}><Icon name="edit" size={16} /><span>Настроить панель</span></button>
+          </>
         )}
         <div className="row side-account-row">
           <button ref={accountBtn} type="button" className="account-btn" onClick={() => setAccountRect(accountBtn.current?.getBoundingClientRect() ?? null)} aria-haspopup="menu" aria-label="Учётная запись">
             <Avatar name={session?.displayName ?? "?"} src={session?.avatar} size={28} />
-            <span className="col grow side-account">
+            <span className="side-name-row grow">
               <span className="ellipsis side-name">{session?.displayName}</span>
-              <span className="ellipsis faint side-sub">{session?.isCloud ? "Облачный аккаунт" : "Локальный аккаунт"}</span>
+              {session?.isCloud && <SyncBadge sync={sync} />}
             </span>
-            {syncIcon && <Icon name={syncIcon} size={14} className={sync?.kind === "syncing" ? "pulse" : "faint"} />}
           </button>
-          {updateReady && !customize && <UpdateButton />}
+          <IconButton icon="help" tip="Справка" onClick={(e) => showMenu(helpItems(), e.currentTarget.getBoundingClientRect(), "top-start")} />
         </div>
       </div>
       {accountRect && (
@@ -205,10 +232,10 @@ function UpdateButton() {
   const busy = update.phase === "downloading" || update.phase === "installing";
   const click = () => {
     if (!update.canUpdate) return void openLink(update.releasesPage);
-    if (update.phase === "ready") void attempt(() => api.installUpdate());
-    else if (update.phase === "available") void attempt(() => api.prepareUpdate());
+    if (update.phase === "ready" || (update.stagedVersion && update.phase !== "checking")) void attempt(() => api.installUpdate());
+    else if (update.phase === "available" || update.phase === "failed" || update.phase === "checking") void attempt(() => api.prepareUpdate());
   };
-  const tip = update.available ? `Версия ${update.available.version}` : "Обновить приложение";
+  const tip = update.phase === "failed" ? `Не удалось скачать. Нажмите, чтобы повторить` : update.available ? `Версия ${update.available.version}` : "Обновить приложение";
   return (
     <button type="button" className="update-btn" disabled={busy} onClick={click} data-tip={tip} aria-label={`Обновить. ${tip}`}>
       <Icon name={busy ? "refresh" : "download"} size={14} className={busy ? "pulse" : undefined} />

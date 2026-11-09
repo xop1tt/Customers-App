@@ -123,6 +123,7 @@ impl Core {
             self.env.emit("search-settings", Value::Null);
             self.env.emit("account-prefs", s.prefs.lock().unwrap().to_json());
         }
+        self.apply_synced_prefs(s);
     }
 
     pub fn reset_source_memory(&self, source: &str) -> CmdResult<()> {
