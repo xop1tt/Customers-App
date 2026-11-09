@@ -365,7 +365,7 @@ pub fn crash_reports(core: C<'_>) -> Value {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
     let newer = core.env.device_prefs().reports_last_seen.as_deref().and_then(crate::util::parse_date);
     let system = if cfg!(target_os = "macos") { reports::system_report_dirs(&home) } else { vec![] };
-    let found = reports::find(&system, Some(&core.env.paths.crashes()), newer);
+    let found = reports::find_for(core.env.channel, &system, Some(&core.env.paths.crashes()), newer);
     Value::Array(found.iter().map(|f| json!({"path": f.path, "date": crate::util::format_date(&f.date), "kind": f.kind})).collect())
 }
 

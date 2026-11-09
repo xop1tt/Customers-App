@@ -70,6 +70,11 @@ winreg = "0.55"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "fs", "test-util"] }
 
+[features]
+# Канал Debug/Beta: свой идентификатор, свои папки данных, секреты и облако (docs/DEBUG_BUILD.md).
+# Сборка: npm run debug:build. Обычная сборка без этого признака — Stable.
+beta = []
+
 [profile.release]
 opt-level = "s"
 lto = "thin"

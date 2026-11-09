@@ -3,6 +3,7 @@
 
 use crate::app::session::Core;
 use crate::app::{device_id, Env, Events, Opener, SecretSessionStore};
+use crate::channel::{Channel, Isolation};
 use crate::cloud::auth::CloudAuth;
 use crate::cloud::config::CloudConfig;
 use crate::paths::AppPaths;
@@ -61,7 +62,7 @@ fn notify(app: &AppHandle, payload: &Value) {
     if visible {
         return;
     }
-    let title = payload["title"].as_str().unwrap_or("Customers");
+    let title = payload["title"].as_str().unwrap_or(Channel::current().identity().product_name);
     let body = payload["body"].as_str().unwrap_or("");
     let _ = app.notification().builder().title(title).body(body).show();
 }
@@ -87,12 +88,20 @@ fn app_bundle() -> Option<PathBuf> {
 pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
     let home = home_dir(app);
     let local = if cfg!(windows) { app.path().local_data_dir().ok() } else { None };
-    let paths = AppPaths::for_system(&home, local.as_deref(), app.path().document_dir().ok());
+    let channel = Channel::current();
+    let documents = app.path().document_dir().ok();
+    let paths = AppPaths::for_channel(channel, &home, local.as_deref(), documents.clone());
+    // До создания любых файлов: идентификатор совпадает с каналом, папки каналов не пересекаются,
+    // папка данных не принадлежит другому каналу. Иначе запуск останавливается и ничего не пишется.
+    let isolation = Isolation::for_system(channel, &home, local.as_deref(), documents);
+    isolation.check_identifier(&app.config().identifier).map_err(|e| e.to_string())?;
+    isolation.check_dirs().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&paths.root).map_err(|e| format!("Не удалось создать папку данных {}: {e}", paths.root.display()))?;
+    isolation.check_marker().map_err(|e| e.to_string())?;
     let _ = std::fs::create_dir_all(&paths.logs);
     let version = AppVersion::parse(env!("CARGO_PKG_VERSION")).ok_or("неверная версия")?;
     reports::install_panic_hook(paths.logs.clone(), version.to_string());
-    let secrets = secrets::platform_store(&paths.root).map_err(|e| e.to_string())?;
+    let secrets = secrets::channel_store(channel, &paths.root).map_err(|e| e.to_string())?;
     let transport: Arc<dyn crate::search::http::HttpTransport> = Arc::new(ReqwestTransport::new());
     let device_id = device_id(secrets.as_ref());
     let cloud = CloudConfig::embedded()
@@ -116,6 +125,8 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
         app_bundle: bundle,
         can_update,
         sleeper: real_sleeper(),
+        channel,
+        isolation,
     }))
 }
 
@@ -128,11 +139,12 @@ pub fn apply_device_changes(app: &AppHandle, _core: &Core, changes: &Value) {
 }
 
 fn setup_tray(app: &AppHandle, core: Arc<Core>) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Открыть Customers", true, None::<&str>)?;
+    let product = Channel::current().identity().product_name;
+    let open = MenuItem::with_id(app, "open", format!("Открыть {product}"), true, None::<&str>)?;
     let search = MenuItem::with_id(app, "search", "Найти лидов сейчас", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Выйти", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &search, &PredefinedMenuItem::separator(app)?, &quit])?;
-    let mut builder = TrayIconBuilder::with_id("tray").tooltip("Customers").menu(&menu).show_menu_on_left_click(false);
+    let mut builder = TrayIconBuilder::with_id("tray").tooltip(product).menu(&menu).show_menu_on_left_click(false);
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
@@ -156,7 +168,8 @@ fn setup_tray(app: &AppHandle, core: Arc<Core>) -> tauri::Result<()> {
 
 /// Ссылка возврата из браузера (подтверждение почты, восстановление пароля).
 fn handle_deep_links(app: &AppHandle, core: &Arc<Core>, urls: Vec<String>) {
-    for url in urls.into_iter().filter(|u| u.starts_with("leadgenerator://")) {
+    let prefix = format!("{}://", Channel::current().identity().url_scheme);
+    for url in urls.into_iter().filter(|u| u.starts_with(&prefix)) {
         show_main(app);
         let (core, app) = (core.clone(), app.clone());
         tauri::async_runtime::spawn(async move {
@@ -171,8 +184,27 @@ fn handle_deep_links(app: &AppHandle, core: &Arc<Core>, urls: Vec<String>) {
     }
 }
 
+/// Проверка разделения каналов до создания любых файлов. При нарушении — понятное окно и выход:
+/// приложение не открывает базу, не пишет журналы и настройки.
+fn refuse_if_not_isolated(app: &AppHandle) -> bool {
+    let home = home_dir(app);
+    let local = if cfg!(windows) { app.path().local_data_dir().ok() } else { None };
+    let isolation = Isolation::for_system(Channel::current(), &home, local.as_deref(), app.path().document_dir().ok());
+    let Err(e) = isolation.check_identifier(&app.config().identifier).and_then(|_| isolation.check_dirs()).and_then(|_| isolation.check_marker()) else {
+        return false;
+    };
+    eprintln!("{e}");
+    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+    let exit = app.clone();
+    app.dialog().message(e.to_string()).title(Channel::current().identity().product_name).kind(MessageDialogKind::Error).show(move |_| exit.exit(1));
+    true
+}
+
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
+    if refuse_if_not_isolated(&handle) {
+        return Ok(());
+    }
     let env = build_env(&handle)?;
     let core = Core::new(env.clone());
     tauri::async_runtime::block_on(async { core.startup() });

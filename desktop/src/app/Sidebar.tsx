@@ -62,6 +62,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const customize = useStore((s) => s.customizeNav);
   const sourceFilter = useStore((s) => s.filter.source);
   const minScore = useStore((s) => s.filter.minScore);
+  const beta = useStore((s) => s.boot?.channel === "beta");
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
@@ -129,7 +130,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   return (
     <aside className={`sidebar${overlay ? " overlay" : ""}`} style={{ width: "var(--nav-w)" }} aria-label="Навигация">
       <div className="side-head">
-        <span className="side-brand grow"><img src={appIcon} width={20} height={20} alt="" draggable={false} />Customers</span>
+        <span className="side-brand grow"><img src={appIcon} width={20} height={20} alt="" draggable={false} />Customers{beta && <span className="channel-badge" data-tip="Отдельная версия для проверки: свои данные и настройки">Beta</span>}</span>
         <IconButton icon="sidebar" tip="Свернуть панель" onClick={() => (overlay ? setState({ navPeek: false }) : void patchDevice({ navOpen: false }))} />
       </div>
 

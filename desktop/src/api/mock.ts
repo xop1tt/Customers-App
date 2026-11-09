@@ -226,7 +226,7 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
     case "boot_info":
       return {
         version: "1.1.0", platform: demo.get("platform") === "windows" ? "windows" : "macos", cloudAvailable: true, hasUsers: true, existingInstall: true,
-        session: signedIn ? session() : null, device, error: null,
+        session: signedIn ? session() : null, device, error: null, channel: demo.has("beta") ? "beta" : "stable",
       } satisfies BootInfo;
     case "local_accounts":
       return ["anna", "boris"];

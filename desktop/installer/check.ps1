@@ -1,15 +1,33 @@
 ﻿# Проверка установщика: тихая установка в чистую папку, проверка регистрации ссылок leadgenerator:,
 # установка поверх с сохранением данных пользователя, удаление.
+# -Channel beta проверяет установщик Customers Beta так же и дополнительно убеждается, что он не трогает Stable:
+# ссылки leadgenerator:, запись Stable в списке приложений и папку данных %LOCALAPPDATA%\Customers.
 param(
-    [Parameter(Mandatory = $true)][string]$Artifacts
+    [Parameter(Mandatory = $true)][string]$Artifacts,
+    [ValidateSet('stable', 'beta')][string]$Channel = 'stable'
 )
 
 $ErrorActionPreference = 'Stop'
 $Artifacts = (Resolve-Path $Artifacts).Path
-$setup = Get-ChildItem $Artifacts -Filter 'Customers-v*-Windows-x64-Setup.exe' | Select-Object -First 1
+if ($Channel -eq 'beta') {
+    $pattern = 'Customers-Beta-v*-Windows-x64-Setup.exe'; $exeName = 'Customers Beta.exe'; $scheme = 'customers-beta'
+    $guid = 'A3E4C2B8-5D71-4F0A-9C36-2B8E7D51F4A9'; $dataName = 'Customers Beta'
+} else {
+    $pattern = 'Customers-v*-Windows-x64-Setup.exe'; $exeName = 'Customers.exe'; $scheme = 'leadgenerator'
+    $guid = '6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30'; $dataName = 'Customers'
+}
+$setup = Get-ChildItem $Artifacts -Filter $pattern | Select-Object -First 1
 if (-not $setup) { throw 'Установщик не найден' }
 
-$dir = Join-Path $env:RUNNER_TEMP 'customers-installed'
+$dir = Join-Path $env:RUNNER_TEMP "customers-installed-$Channel"
+
+# Beta: «данные Stable» до установки, которые не должны измениться.
+$stableData = Join-Path $env:LOCALAPPDATA 'Customers'
+$stableProbe = Join-Path $stableData 'stable-probe.txt'
+if ($Channel -eq 'beta') {
+    New-Item -ItemType Directory -Path $stableData -Force | Out-Null
+    Set-Content $stableProbe 'stable'
+}
 if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
 $log = Join-Path $Artifacts 'install.log'
 
@@ -17,19 +35,25 @@ Write-Host "Установка $($setup.Name) в $dir"
 $install = Start-Process -FilePath $setup.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/DIR=`"$dir`"", "/LOG=`"$log`"") -Wait -PassThru
 if ($install.ExitCode -ne 0) { throw "Установщик завершился с кодом $($install.ExitCode)" }
 
-$exe = Join-Path $dir 'Customers.exe'
-if (-not (Test-Path $exe)) { throw 'После установки нет Customers.exe' }
+$exe = Join-Path $dir $exeName
+if (-not (Test-Path $exe)) { throw "После установки нет $exeName" }
 $uninstaller = Join-Path $dir 'unins000.exe'
 if (-not (Test-Path $uninstaller)) { throw 'После установки нет программы удаления' }
 
-$protocol = Get-ItemProperty 'HKCU:\Software\Classes\leadgenerator\shell\open\command' -ErrorAction SilentlyContinue
-if (-not $protocol -or $protocol.'(default)' -notlike "*Customers.exe*") { throw 'Ссылки leadgenerator: не зарегистрированы' }
+$protocol = Get-ItemProperty "HKCU:\Software\Classes\$scheme\shell\open\command" -ErrorAction SilentlyContinue
+if (-not $protocol -or $protocol.'(default)' -notlike "*$exeName*") { throw "Ссылки ${scheme}: не зарегистрированы" }
 
-$uninstallKey = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Where-Object { $_.PSChildName -like '*6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30*' }
+$uninstallKey = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Where-Object { $_.PSChildName -like "*$guid*" }
 if (-not $uninstallKey) { throw 'Приложение не появилось в списке установленных (Параметры → Приложения)' }
 
+if ($Channel -eq 'beta') {
+    if (Test-Path 'HKCU:\Software\Classes\leadgenerator') { throw 'Beta зарегистрировала ссылки Stable (leadgenerator:)' }
+    $stableKey = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Where-Object { $_.PSChildName -like '*6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30*' }
+    if ($stableKey) { throw 'Beta появилась под AppId Stable' }
+}
+
 # Данные пользователя должны пережить обновление: ставим поверх той же версией.
-$marker = Join-Path $env:LOCALAPPDATA 'Customers'
+$marker = Join-Path $env:LOCALAPPDATA $dataName
 New-Item -ItemType Directory -Path $marker -Force | Out-Null
 Set-Content (Join-Path $marker 'keep.txt') 'data'
 # Так же, как делает само приложение при обновлении: тихо и с закрытием работающей копии.
@@ -43,8 +67,12 @@ Write-Host 'Удаление'
 $remove = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
 if ($remove.ExitCode -ne 0) { throw "Удаление завершилось с кодом $($remove.ExitCode)" }
 Start-Sleep -Seconds 2
-if (Test-Path $exe) { throw 'После удаления Customers.exe остался на диске' }
-if (Test-Path 'HKCU:\Software\Classes\leadgenerator') { throw 'После удаления остались записи leadgenerator:' }
+if (Test-Path $exe) { throw "После удаления $exeName остался на диске" }
+if (Test-Path "HKCU:\Software\Classes\$scheme") { throw "После удаления остались записи ${scheme}:" }
 if (-not (Test-Path (Join-Path $marker 'keep.txt'))) { throw 'Тихое удаление затронуло данные пользователя' }
 Remove-Item $marker -Recurse -Force
-Write-Host 'Установка, обновление поверх и удаление работают.'
+if ($Channel -eq 'beta') {
+    if ((Get-Content $stableProbe -ErrorAction SilentlyContinue) -ne 'stable') { throw 'Установка или удаление Beta изменили данные Stable' }
+    Remove-Item $stableData -Recurse -Force
+}
+Write-Host "Установка, обновление поверх и удаление работают ($Channel).

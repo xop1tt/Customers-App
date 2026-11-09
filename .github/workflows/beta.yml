@@ -1,0 +1,229 @@
+name: Beta
+
+# Канал Debug/Beta (docs/DEBUG_BUILD.md, docs/RELEASE_PROCESS.md). Отдельное приложение «Customers Beta»:
+# свой идентификатор, папки данных, секреты, ссылки и облако; ставится рядом со Stable и не трогает её.
+#
+# * push в develop — проверки и сборка Beta для macOS и Windows; файлы остаются артефактами запуска (14 дней).
+# * тег vX.Y.Z-beta.N — то же, затем GitHub Pre-release (после подтверждения в окружении beta, если оно защищено).
+# * вручную — сборка выбранной ветки без публикации.
+# Stable-релизы делает только release.yml; Stable не получает Pre-release (приложение берёт releases/latest).
+on:
+  push:
+    branches: [develop]
+    tags: ["v*-beta.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beta-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  checks:
+    name: Beta checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      # Тег задаёт версию (1.3.0-beta.1); у сборки из develop — версия из файлов с номером запуска для имени файлов.
+      - name: Version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN: ${{ github.run_number }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            if ! [[ "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then echo "Тег Beta должен иметь вид vX.Y.Z-beta.N: $REF_NAME" >&2; exit 1; fi
+            V="${REF_NAME#v}"
+            node scripts/set-version.cjs "$V"
+            node scripts/release-check.cjs --tag "$REF_NAME"
+          else
+            V="$(node -p 'require("./package.json").version')-dev.$RUN"
+            node scripts/release-check.cjs
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      # Beta не должна встраивать рабочий проект Supabase: иначе она входила бы в рабочие учётные записи.
+      - name: Beta cloud is separate from Stable
+        env:
+          STABLE_URL: ${{ vars.SUPABASE_URL }}
+          BETA_URL: ${{ vars.SUPABASE_BETA_URL }}
+        run: |
+          if [ -n "$BETA_URL" ] && [ "$BETA_URL" = "$STABLE_URL" ]; then echo "::error::SUPABASE_BETA_URL совпадает с SUPABASE_URL" >&2; exit 1; fi
+          if [ -z "$BETA_URL" ]; then echo "SUPABASE_BETA_URL не задан: Beta собирается без облака (только локальные учётные записи)"; fi
+
+      - name: System libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+      - run: npm ci --no-audit --no-fund
+      - name: Types
+        run: npm run typecheck
+      - name: Tests (interface)
+        run: npm test
+      - name: Interface build
+        run: npm run build
+      - name: Tests (core, Stable and Beta)
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml --locked
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --features beta
+
+  macos:
+    name: Build Customers Beta (macOS)
+    needs: checks
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Rust targets (Apple Silicon and Intel)
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Version
+        if: github.ref_type == 'tag'
+        env:
+          VERSION: ${{ needs.checks.outputs.version }}
+        run: node scripts/set-version.cjs "$VERSION"
+      - run: npm ci --no-audit --no-fund
+      - name: Build app
+        env:
+          SUPABASE_BETA_URL: ${{ vars.SUPABASE_BETA_URL }}
+          SUPABASE_BETA_ANON_KEY: ${{ vars.SUPABASE_BETA_ANON_KEY }}
+        run: npx tauri build --features beta --config src-tauri/tauri.beta.conf.json --bundles app --target universal-apple-darwin
+      - name: Check and pack
+        env:
+          VERSION: ${{ needs.checks.outputs.version }}
+        run: |
+          APP="$PWD/src-tauri/target/universal-apple-darwin/release/bundle/macos/Customers Beta.app"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+          test -x "$APP/Contents/MacOS/customers-beta"
+          lipo -archs "$APP/Contents/MacOS/customers-beta" | grep -q arm64
+          lipo -archs "$APP/Contents/MacOS/customers-beta" | grep -q x86_64
+          plutil -extract CFBundleIdentifier raw "$APP/Contents/Info.plist" | grep -qx local.customers.beta
+          plutil -extract CFBundleURLTypes xml1 -o - "$APP/Contents/Info.plist" | grep -q customers-beta
+          if plutil -extract CFBundleURLTypes xml1 -o - "$APP/Contents/Info.plist" | grep -q '<string>leadgenerator</string>'; then echo "Beta регистрирует ссылки Stable" >&2; exit 1; fi
+          mkdir -p out
+          ./scripts/make-dmg.sh "$PWD/out/Customers-Beta-v${VERSION}-macOS.dmg" "$APP"
+          (cd out && shasum -a 256 "Customers-Beta-v${VERSION}-macOS.dmg" | tee "Customers-Beta-v${VERSION}-macOS.dmg.sha256")
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: beta-macos
+          path: desktop/out/Customers-Beta-v*
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Build Customers Beta (Windows)
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: desktop
+        shell: pwsh
+    env:
+      VERSION: ${{ needs.checks.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Version
+        if: github.ref_type == 'tag'
+        run: node scripts/set-version.cjs $env:VERSION
+      - run: npm ci --no-audit --no-fund
+      - name: Build app
+        env:
+          SUPABASE_BETA_URL: ${{ vars.SUPABASE_BETA_URL }}
+          SUPABASE_BETA_ANON_KEY: ${{ vars.SUPABASE_BETA_ANON_KEY }}
+        run: npx tauri build --features beta --config src-tauri/tauri.beta.conf.json --no-bundle
+      - name: Stage the installer contents
+        run: |
+          New-Item -ItemType Directory -Path dist-installer -Force | Out-Null
+          Copy-Item src-tauri/target/release/customers-beta.exe "dist-installer/Customers Beta.exe"
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      # Числовая часть версии для свойств файла (Windows не принимает «-beta.1»), полная — в имени установщика.
+      - name: Build installer
+        run: |
+          $numeric = ($env:VERSION -split '-')[0]
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          & $iscc /Qp /DBeta "/DAppVersion=$numeric" "/DOutputName=Customers-Beta-v$env:VERSION-Windows-x64-Setup" /DSourceDir="$PWD\dist-installer" /DOutputDir="$PWD\artifacts" installer/Customers.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC завершился с кодом $LASTEXITCODE" }
+      - name: Installer check (Beta next to Stable)
+        run: ./installer/check.ps1 -Artifacts artifacts -Channel beta
+      - name: Checksum
+        run: |
+          $setup = Get-ChildItem artifacts -Filter 'Customers-Beta-v*-Windows-x64-Setup.exe' | Select-Object -First 1
+          $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($setup.Name)" | Out-File -FilePath "$($setup.FullName).sha256" -Encoding ascii
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: beta-windows
+          path: desktop/artifacts/Customers-Beta-v*
+          if-no-files-found: error
+          retention-days: 14
+
+  # Pre-release только по тегу Beta. Окружение beta можно защитить в Settings → Environments (обязательный ревьюер).
+  publish:
+    name: Publish Beta pre-release
+    if: github.ref_type == 'tag'
+    needs: [checks, macos, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: beta
+    permissions:
+      contents: write # создать Pre-release и приложить файлы
+      actions: read # скачать файлы этого запуска
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the files built in this run
+        run: |
+          gh run download "${{ github.run_id }}" --name beta-macos --dir files --repo "$GITHUB_REPOSITORY"
+          gh run download "${{ github.run_id }}" --name beta-windows --dir files --repo "$GITHUB_REPOSITORY"
+          ls -l files
+      - name: Publish pre-release
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then echo "Неверный тег Beta: $TAG" >&2; exit 1; fi
+          for f in files/*; do case "$(basename "$f")" in Customers-Beta-v*) ;; *) echo "Чужой файл в Beta-релизе: $f" >&2; exit 1 ;; esac; done
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" files/* --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --prerelease --repo "$GITHUB_REPOSITORY"
+            exit 0
+          fi
+          gh release create "$TAG" files/* --prerelease --verify-tag --title "Customers Beta ${TAG#v}" --generate-notes --repo "$GITHUB_REPOSITORY"

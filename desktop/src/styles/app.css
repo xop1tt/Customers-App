@@ -22,6 +22,7 @@ body.resizing .sidebar, body.resizing .inspector { transition: none; }
 .side-head { display: flex; align-items: center; gap: 4px; padding: 10px 10px 6px 14px; flex: none; }
 .side-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; color: var(--text); }
 .side-brand img { border-radius: 5px; flex: none; }
+.channel-badge { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; color: var(--orange); background: var(--orange-soft); line-height: 14px; }
 .side-account-row { gap: 4px; align-items: center; }
 .sync-badge { display: inline-grid; place-items: center; flex: none; color: var(--text-3); }
 .sync-badge.ok { color: var(--green); }
