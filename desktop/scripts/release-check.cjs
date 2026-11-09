@@ -68,15 +68,40 @@ check(sameWindow, "Beta: параметры окна совпадают со Sta
 
 // ---------------------------------------------------------------- Stable без отладочных возможностей
 const features = cargo.split("[features]")[1]?.split("\n[")[0] ?? "";
-check(/^beta\s*=\s*\[\s*\]/m.test(features), "Cargo: признак beta объявлен и ничего не включает сам", "Cargo: нет признака beta = []");
+// Признак beta включает только необязательные зависимости Debug Menu (`dep:…`), а они не попадают в Stable.
+const betaLine = features.match(/^beta\s*=\s*\[([^\]]*)\]/m);
+const betaItems = betaLine ? [...betaLine[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : null;
+check(betaItems !== null && betaItems.every((i) => i.startsWith("dep:")), "Cargo: признак beta включает только зависимости Debug Menu", `Cargo: признак beta не объявлен или включает другие признаки (${betaItems})`);
+const depsSection = cargo.split("[dependencies]")[1]?.split("\n[")[0] ?? "";
+const notOptional = (betaItems ?? []).map((i) => i.slice(4)).filter((name) => {
+  const line = (depsSection.match(new RegExp(`^${name}\\s*=.*$`, "m")) || [""])[0];
+  return !/optional\s*=\s*true/.test(line);
+});
+check(notOptional.length === 0, "Cargo: зависимости Debug Menu необязательные (в Stable их нет)", `Cargo: зависимости Debug Menu попадут в Stable: ${notOptional.join(", ")}`);
 check(!/^default\s*=.*beta/m.test(features), "Cargo: beta не входит в default (обычная сборка — Stable)", "Cargo: beta включён по умолчанию — Stable собралась бы как Beta");
 const tauriDep = (cargo.match(/^tauri\s*=\s*\{[^}]*\}/m) || [""])[0];
 check(!/devtools/.test(tauriDep), "Stable: инструменты разработчика WebView не включены", "tauri собран с devtools — их не должно быть в Stable");
 // Отладочный код (Debug Menu, сценарии, тестовые данные) живёт только под cfg(feature = "beta").
 const debugDir = path.join(root, "src-tauri/src/debug");
-if (fs.existsSync(debugDir)) {
-  const lib = read("src-tauri/src/lib.rs");
-  check(/#\[cfg\(feature = "beta"\)\]\s*pub mod debug;/.test(lib), "Debug-модуль подключается только в Beta", "src/debug подключён без #[cfg(feature = \"beta\")]");
+const lib = read("src-tauri/src/lib.rs");
+const debugMods = lib.match(/^[ \t]*pub mod debug;/gm) ?? [];
+if (fs.existsSync(debugDir) || debugMods.length) {
+  const guarded = lib.match(/#\[cfg\(feature = "beta"\)\]\s*pub mod debug;/g) ?? [];
+  check(debugMods.length === 1 && guarded.length === 1, "Debug-модуль подключается только в Beta", "src/debug подключён без #[cfg(feature = \"beta\")]");
+  // Команды Debug Menu: все с префиксом debug_ (по нему вызов уходит в обработчик Beta), все зарегистрированы
+  // в debug_handler, а среди команд Stable таких нет.
+  const cmdFile = path.join(debugDir, "commands.rs");
+  const declared = fs.existsSync(cmdFile) ? [...fs.readFileSync(cmdFile, "utf8").matchAll(/#\[tauri::command\]\s*pub (?:async )?fn (\w+)/g)].map((m) => m[1]) : [];
+  const section = (name) => (lib.split(`fn ${name}(`)[1] ?? "").split("generate_handler![")[1]?.split("]")[0] ?? "";
+  const listed = (name) => [...section(name).matchAll(/(\w+),/g)].map((m) => m[1]);
+  const debugListed = listed("debug_handler");
+  const appListed = listed("app_handler");
+  check(
+    declared.every((c) => c.startsWith("debug_") && debugListed.includes(c)) && debugListed.every((c) => declared.includes(c)),
+    `Debug Menu: ${declared.length} команд, все debug_* и зарегистрированы только в Beta`,
+    `Debug Menu: команды ${declared.join(", ")} не совпадают с debug_handler (${debugListed.join(", ")}) или без префикса debug_`,
+  );
+  check(appListed.length > 50 && appListed.every((c) => !c.startsWith("debug_")), "Stable: среди команд нет debug_*", "Stable: команда debug_* в обычном обработчике");
 }
 
 // ---------------------------------------------------------------- установщик Windows

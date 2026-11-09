@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { isLeadList } from "../lib/leads";
 import { HoverReveal } from "../lib/hoverReveal";
@@ -8,7 +8,7 @@ import { copyText, isMac, readText } from "../lib/platform";
 import { Icon } from "../ui/icons";
 import { ConfirmHost, MenuHost, TooltipHost, installInputContextMenu } from "../ui/overlay";
 import { IconButton, Spinner } from "../ui/kit";
-import { boot, checkPower, dismissToast, getState, openSettings, patchDevice, select, setState, useStore } from "../state/store";
+import { boot, checkPower, dismissToast, getState, openDebug, openSettings, patchDevice, select, setState, useStore } from "../state/store";
 import { AuthScreen } from "./Auth";
 import { Welcome } from "./Welcome";
 import { Sidebar } from "./Sidebar";
@@ -24,6 +24,9 @@ import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
 import { useViewportWidth } from "../state/hooks";
 
+// Debug Menu — отдельный модуль, загружается только при открытии в Beta.
+const DebugMenu = lazy(() => import("../debug/DebugMenu"));
+
 const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const MIN_CENTER = 560;
 const INSP_MIN = 300;
@@ -32,6 +35,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), h
 
 export function App() {
   const phase = useStore((s) => s.phase);
+  const debugOpen = useStore((s) => s.debugOpen);
   const device = useStore((s) => s.device);
   const lightMode = useStore((s) => s.lightMode);
   const platform = useStore((s) => s.boot?.platform);
@@ -56,6 +60,11 @@ export function App() {
       const mod = isMac() ? e.metaKey : e.ctrlKey;
       if (!mod || e.altKey) return;
       const st = getState();
+      // Debug Menu: Ctrl/Cmd+Shift+D, только в Beta.
+      if (e.shiftKey && e.key.toLowerCase() === "d") {
+        if (st.boot?.channel === "beta") { e.preventDefault(); openDebug(!st.debugOpen); }
+        return;
+      }
       if (e.key === "=" || e.key === "+" || e.key === "-" || e.key === "_" || e.key === "0") {
         e.preventDefault();
         const cur = st.device.uiScale;
@@ -85,6 +94,7 @@ export function App() {
       {phase === "welcome" && <Welcome />}
       {phase === "ready" && <Shell />}
       <Settings />
+      {debugOpen && <Suspense fallback={null}><DebugMenu /></Suspense>}
       <MenuHost />
       <ConfirmHost />
       <TooltipHost />

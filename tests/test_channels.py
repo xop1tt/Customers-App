@@ -19,6 +19,7 @@ FILES = [
     "src-tauri/Cargo.toml",
     "src-tauri/src/channel.rs",
     "src-tauri/src/lib.rs",
+    "src-tauri/src/debug/commands.rs",
     "src-tauri/src/cloud/config.rs",
     "installer/Customers.iss",
     "scripts/release-check.cjs",
@@ -76,7 +77,9 @@ BREAKAGES = {
     ),
     "Beta с именем файла Stable": lambda r: edit_json(r, "src-tauri/tauri.beta.conf.json", lambda d: d.update(mainBinaryName="customers")),
     "Beta со своей версией": lambda r: edit_json(r, "src-tauri/tauri.beta.conf.json", lambda d: d.update(version="0.0.1")),
-    "beta по умолчанию": lambda r: edit(r, "src-tauri/Cargo.toml", lambda t: t.replace("beta = []", "default = [\"beta\"]\nbeta = []")),
+    "beta по умолчанию": lambda r: edit(r, "src-tauri/Cargo.toml", lambda t: t.replace("\nbeta = [", "\ndefault = [\"beta\"]\nbeta = [")),
+    "beta включает другой признак": lambda r: edit(r, "src-tauri/Cargo.toml", lambda t: t.replace('beta = ["dep:sysinfo"]', 'beta = ["dep:sysinfo", "tauri/devtools"]')),
+    "зависимость Debug Menu попадает в Stable": lambda r: edit(r, "src-tauri/Cargo.toml", lambda t: t.replace('features = ["system"], optional = true }', 'features = ["system"] }')),
     "devtools в Stable": lambda r: edit(r, "src-tauri/Cargo.toml", lambda t: t.replace('features = ["tray-icon"', 'features = ["devtools", "tray-icon"')),
     "общий AppId установщика": lambda r: edit(r, "installer/Customers.iss", lambda t: t.replace("A3E4C2B8-5D71-4F0A-9C36-2B8E7D51F4A9", "6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30")),
     "облако Beta = облако Stable": lambda r: edit(r, "src-tauri/src/cloud/config.rs", lambda t: t.replace("SUPABASE_BETA_", "SUPABASE_")),
@@ -85,10 +88,12 @@ BREAKAGES = {
     ),
     "service_role в клиенте": lambda r: edit(r, "src-tauri/src/lib.rs", lambda t: t + '\nconst K: &str = "SUPABASE_SERVICE_ROLE_KEY";\n'),
     "секретный ключ в клиенте": lambda r: edit(r, "src-tauri/src/lib.rs", lambda t: t + '\nconst K: &str = "sb_secret_abcdefgh123";\n'),
-    "Debug-модуль без cfg(beta)": lambda r: (
-        (r / "src-tauri/src/debug").mkdir(),
-        edit(r, "src-tauri/src/lib.rs", lambda t: t + "\npub mod debug;\n"),
+    "команда Debug Menu не зарегистрирована": lambda r: edit(r, "src-tauri/src/lib.rs", lambda t: t.replace("        debug_set_window_size,\n", "")),
+    "команда Debug Menu без префикса": lambda r: edit(
+        r, "src-tauri/src/debug/commands.rs", lambda t: t + "\n#[tauri::command]\npub fn reset_everything() {}\n"
     ),
+    "команда Debug Menu в обработчике Stable": lambda r: edit(r, "src-tauri/src/lib.rs", lambda t: t.replace("        commands::whats_new,\n", "        commands::whats_new,\n        debug_logs,\n")),
+    "Debug-модуль без cfg(beta)": lambda r: edit(r, "src-tauri/src/lib.rs", lambda t: t.replace('#[cfg(feature = "beta")]\npub mod debug;', "pub mod debug;")),
 }
 
 
@@ -100,10 +105,10 @@ def test_each_breakage_is_caught(copy, name):
     assert "✗" in r.stderr
 
 
-def test_debug_module_behind_cfg_passes(copy):
-    (copy / "src-tauri/src/debug").mkdir()
-    edit(copy, "src-tauri/src/lib.rs", lambda t: t + '\n#[cfg(feature = "beta")]\npub mod debug;\n')
-    assert run(copy).returncode == 0
+def test_debug_module_is_behind_cfg_in_the_project():
+    lib = (DESKTOP / "src-tauri/src/lib.rs").read_text(encoding="utf-8")
+    assert '#[cfg(feature = "beta")]\npub mod debug;' in lib
+    assert lib.count("pub mod debug;") == 1
 
 
 def test_set_version_accepts_beta_and_rejects_garbage(tmp_path):

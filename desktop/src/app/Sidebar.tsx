@@ -9,7 +9,7 @@ import { api } from "../api";
 import { Icon } from "../ui/icons";
 import { type MenuItem, Popover, showMenu } from "../ui/overlay";
 import type { SyncStatus, UpdateInfo } from "../api/types";
-import { attempt, leaveSession, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
+import { attempt, leaveSession, openDebug, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
 import { openLink } from "../state/actions";
 
 const SCORE_STEPS = [90, 70, 50, 30];
@@ -209,6 +209,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("appearance"); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Настройки</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("account"); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Аккаунт и синхронизация</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("data"); }}><span className="menu-icon"><Icon name="database" size={14} /></span>Данные и копии</button></li>
+            {beta && <li><button className="menu-item" onClick={() => { setAccountRect(null); openDebug(true); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Debug Menu</button></li>}
             <li className="menu-sep" />
             <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>
           </ul>

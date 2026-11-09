@@ -13,8 +13,8 @@
 | Database | SQLCipher, миграции локальной схемы, восстановление, перенос | `db::`, `store::` | `npm run database:test` |
 | Backend (Supabase) | миграции, RLS, RPC, функции писем на одноразовом стенде | `supabase/tests/*.py`, `src-tauri/tests/stack.rs` | только CI `cloud.yml` (нужен Docker) |
 | Frontend | компоненты и состояние | Vitest + Testing Library | `npm test` |
-| UI | раскладка при размерах окна и масштабах | `scripts/screenshots.cjs` (этап 2 — сравнение снимков) | `npm run shots` |
-| E2E | сценарии пользователя на настоящем ядре | Scenario Runner (этап 2) | `npm run debug:scenario` (этап 2) |
+| UI | раскладка при размерах окна и масштабах | Debug Menu → «Интерфейс» (размеры, масштаб, поиск переполнения), `scripts/screenshots.cjs` (сравнение снимков — позже) | Debug Menu, `npm run shots` |
+| E2E | сценарии пользователя на настоящем ядре | Scenario Runner (`debug/scenarios.rs`, `src-tauri/tests/scenarios.rs`) | Debug Menu → «Сценарии», `npm run debug:scenario` |
 | Build | сборка Stable и Beta для macOS universal и Windows x64, проверка пакета | `desktop.yml`, `beta.yml`, `release.yml` | CI |
 | Security | изоляция каналов, release-check, RLS-тесты стенда, CodeQL, dependency review | `channel::`, `tests/test_channels.py`, `supabase/tests`, `codeql.yml` | `npm run debug:isolation`, `npm run release:check`, CI |
 | Regression | весь набор выше на каждом PR | `Desktop gate`, `Cloud gate`, `test`, `review`, `Analyze` | CI |
@@ -36,7 +36,20 @@
 | `tests/test_channels.py` (21) | `release-check.cjs` проходит на проекте и ловит 14 видов порчи конфигурации; `set-version.cjs` принимает Beta-версии |
 | `tests/test_workflows.py` (новые 3) | Beta публикует только Pre-release по тегу Beta; Stable-релиз игнорирует теги Beta и ждёт окружение `production`; CI запускает тесты Beta и release-check |
 
-## 3. Журнал выполненных проверок
+## 3. Тесты этапа 2 (Debug Menu)
+
+| Тест | Проверяет |
+|---|---|
+| `debug::log::tests` (3) | маскирование токенов, ключей, паролей, почты, телефонов и путей до записи в память и файл; даты и числа не портятся; кольцевой буфер, фильтры, сохранение после перезапуска, очистка; экспорт текстом и JSON Lines |
+| `debug::zip::tests` (2) | CRC-32 по эталону; архив читается обратно, порча содержимого обнаруживается (дополнительно вручную: `unzip -t` и Python `zipfile`) |
+| `debug::dashboard::tests` (1) | настоящие версия, канал, Tauri, PID, память; состояния компонентов до и после входа; CPU со второго замера |
+| `debug::diagnostics::tests` (3) | без входа проверки базы — SKIPPED, после входа — PASS; пробные файлы удаляются; чужая метка канала — FAIL; проверка Supabase идёт в `/auth/v1/health`, ответ 503 — FAIL; ZIP содержит отчёты, не содержит пароль и базы; в папку другого канала не сохраняется |
+| `debug::testdata::tests` (4) | детерминированность; отказ без отметки «тестовая»; генерация, повторная генерация, удаление только тестовых, сброс со словом; 10 000 лидов одной транзакцией |
+| `tests/scenarios.rs` (2) | все 13 сценариев PASS на настоящем ядре, временная папка удалена, в папке другого канала ничего нет; запуск одного сценария, отказ на неизвестный |
+| `src/debug/debug.test.tsx` (4) | в Stable нет пункта меню и сочетания клавиш; в Beta открывается из меню и `Ctrl/Cmd+Shift+D`; запуск сценариев и итог; фильтр журнала |
+| `tests/test_channels.py` (новые 5 поломок) | `release-check` ловит признак `beta` с лишними признаками, зависимость Debug Menu без `optional`, незарегистрированную команду, команду без префикса `debug_` и команду Debug Menu в обработчике Stable |
+
+## 4. Журнал выполненных проверок
 
 Чтобы не повторять уже сделанное: дата, что запущено, результат. SKIPPED и «только в CI» указываются явно.
 
@@ -48,4 +61,9 @@
 | 2026-11-09 | контейнер | `npm run typecheck`, `npm test`, `npm run build`, `npm run release:check` | типы без ошибок; 44 passed; сборка есть; 22 пункта пройдены |
 | 2026-11-09 | контейнер | `python -m pytest` (как в CI, покрытие ≥ 90 %) | 166 passed, покрытие 90.57 % |
 | 2026-11-09 | контейнер | `npm run debug:build` + запуск под Xvfb | создаются только `~/.local/share/customers-beta` и `local.customers.beta`; при чужой метке — окно с отказом, ничего не записано |
-| — | CI | macOS/Windows, установщик Beta рядом со Stable, стенд Supabase | не проверено до запуска CI на ветке |
+| 2026-11-09 | CI (PR #90) | Cloud: тест стенда нашёл имя серверной роли в `release-check.cjs` | исправлен `release-check.cjs`, тест не менялся |
+| 2026-11-09 | контейнер | этап 2: `cargo fmt --check`, `cargo clippy --lib --bins -D warnings` (Stable и Beta) | без замечаний |
+| 2026-11-09 | контейнер | этап 2: `cargo test --locked` / `--features beta` | Stable 255 passed (без изменений); Beta 268 passed + `tests/scenarios.rs` 2 passed (13 сценариев PASS); `stack.rs` — 2 без стенда (SKIPPED) |
+| 2026-11-09 | контейнер | этап 2: `npm run typecheck`, `npm test`, `npm run build`, `npm run release:check`, `python -m pytest` | типы без ошибок; 48 passed; модуль `DebugMenu` выделен в отдельный файл сборки; 26 пунктов пройдены; pytest 171 passed |
+| — | CI | macOS/Windows, установщик Beta рядом со Stable, стенд Supabase | см. проверки PR #90 |
+| 2026-11-09 | контейнер | этап 2: сборка `customers-beta` (release) и запуск под Xvfb | запускается; `events.jsonl` в папке журналов Beta с записью о запуске; папок Stable не появилось |

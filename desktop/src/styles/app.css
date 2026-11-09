@@ -293,3 +293,30 @@ button.kpi:not(:disabled):hover { background: var(--bg-hover); }
 @media (max-width: 1180px) { .sync-chip { display: none; } }
 @media (max-width: 760px) { .topbar-title h2 { font-size: var(--fs-md); } .topbar-count { display: none; } .search-btn .btn-label { max-width: 110px; } }
 .topbar-search { flex: 1 1 200px; min-width: 110px; max-width: 320px; width: auto; }
+
+/* ------------------------------------------------------------------ Debug Menu (только Beta) */
+.debug-menu .dialog-body { padding: 0; display: flex; flex-direction: column; height: min(640px, 76vh); }
+.debug-menu .tabs { padding: 0 16px; border-bottom: 1px solid var(--line); flex: none; }
+.debug-pane { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 16px; }
+.debug-center { display: grid; place-items: center; height: 100%; }
+.debug-col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.debug-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px; }
+@media (max-width: 760px) { .debug-grid { grid-template-columns: 1fr; } }
+.debug-kv > div { grid-template-columns: 130px 1fr; }
+.debug-components h4 { margin: 0 0 6px; font-size: var(--fs-sm); color: var(--text-3); font-weight: 600; }
+.debug-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.debug-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r-md); }
+.debug-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.debug-row:last-child { border-bottom: 0; }
+.debug-components .debug-row { padding: 6px 0; }
+.debug-sub { flex-basis: 100%; color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.debug-error { color: var(--red); }
+.debug-group { color: var(--text-3); font-size: var(--fs-xs); min-width: 84px; }
+.debug-ms { color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.debug-note { margin: 0; color: var(--text-3); font-size: var(--fs-sm); }
+.debug-summary { display: inline-flex; gap: 4px; }
+.debug-danger { padding: 10px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.debug-word { width: 110px; }
+.debug-log { border: 1px solid var(--line); border-radius: var(--r-md); max-height: 420px; overflow: auto; font-size: var(--fs-sm); }
+.debug-log-row { display: flex; gap: 8px; align-items: baseline; padding: 4px 10px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.debug-log-row:last-child { border-bottom: 0; }

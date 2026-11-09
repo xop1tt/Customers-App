@@ -170,6 +170,8 @@ impl Env {
 
     /// Записать ошибку в журнал, если журнал включён.
     pub fn log_error(&self, message: &str) {
+        #[cfg(feature = "beta")]
+        crate::debug::log::record(crate::debug::log::Level::Error, "app", message);
         if self.device_prefs().reports_log_errors {
             self.errors.append(message, chrono::Utc::now());
         }

@@ -106,6 +106,20 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
     let device_id = device_id(secrets.as_ref());
     let cloud = CloudConfig::embedded()
         .map(|config| Arc::new(CloudAuth::new(config, transport.clone(), Arc::new(SecretSessionStore(secrets.clone())), device_id.clone())));
+    let events: Arc<dyn crate::app::Events> = Arc::new(TauriEvents(app.clone()));
+    // Beta: журнал событий для Debug Menu (маскирование секретов и личных данных — до записи).
+    #[cfg(feature = "beta")]
+    let events: Arc<dyn crate::app::Events> = {
+        use crate::debug::log;
+        crate::debug::dashboard::mark_start();
+        let user = std::env::var("USER").or_else(|_| std::env::var("USERNAME")).unwrap_or_default();
+        log::install(&paths.logs, &home.display().to_string(), &user).record(
+            log::Level::Info,
+            "app",
+            &format!("Запуск {} {} ({}, {})", channel.identity().product_name, version, std::env::consts::OS, std::env::consts::ARCH),
+        );
+        Arc::new(log::LoggedEvents(events))
+    };
     let bundle = app_bundle();
     let can_update = !cfg!(debug_assertions) && if cfg!(target_os = "macos") { bundle.is_some() } else { cfg!(windows) };
     Ok(Arc::new(Env {
@@ -116,7 +130,7 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
         paths,
         secrets,
         transport,
-        events: Arc::new(TauriEvents(app.clone())),
+        events,
         opener: Arc::new(TauriOpener(app.clone())),
         cloud,
         version,

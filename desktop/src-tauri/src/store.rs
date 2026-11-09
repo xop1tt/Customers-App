@@ -190,7 +190,7 @@ impl LeadStore {
     }
 
     /// Выполняет `body` в одной транзакции (BEGIN IMMEDIATE … COMMIT), откатывая при ошибке.
-    fn transaction<T>(&self, body: impl FnOnce() -> AppResult<T>) -> AppResult<T> {
+    pub(crate) fn transaction<T>(&self, body: impl FnOnce() -> AppResult<T>) -> AppResult<T> {
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         match body() {
             Ok(v) => {
