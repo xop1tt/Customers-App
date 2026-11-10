@@ -619,7 +619,8 @@ impl Core {
         }
         let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
         let catalog = self.ws_catalog(&s)?;
-        let local = catalog.active_info().filter(|w| !w.remote).cloned().ok_or_else(|| CmdError::msg("Выберите локальный Workspace, который нужно загрузить."))?;
+        let local =
+            catalog.active_info().filter(|w| !w.remote).cloned().ok_or_else(|| CmdError::msg("Выберите локальный Workspace, который нужно загрузить."))?;
         let old = self.ws_store(&s)?;
         let snapshot: Vec<(&'static schema::Entity, Vec<Value>)> = {
             let g = old.lock().unwrap();
@@ -672,7 +673,12 @@ impl Core {
                     if e.table == "pipelines" {
                         if let Some(lp) = rows.iter().find(|p| p["is_default"] == json!(true)).or(rows.first()) {
                             pipeline_map.insert(lp["id"].as_str().unwrap_or_default().to_string(), dp["id"].as_str().unwrap_or_default().to_string());
-                            for st in snapshot.iter().filter(|(x, _)| x.table == "pipeline_stages").flat_map(|(_, r)| r.iter()).filter(|x| x["pipeline_id"] == lp["id"]) {
+                            for st in snapshot
+                                .iter()
+                                .filter(|(x, _)| x.table == "pipeline_stages")
+                                .flat_map(|(_, r)| r.iter())
+                                .filter(|x| x["pipeline_id"] == lp["id"])
+                            {
                                 let pick = theirs
                                     .iter()
                                     .find(|t| t["name"] == st["name"])
@@ -696,7 +702,10 @@ impl Core {
             for (e, rows) in &snapshot {
                 for row in rows {
                     let rid = row["id"].as_str().unwrap_or_default();
-                    let is_seed_pipeline = matches!(e.table, "pipelines" | "pipeline_stages") && (pipeline_map.contains_key(rid) || stage_map.contains_key(rid) || pipeline_map.contains_key(row["pipeline_id"].as_str().unwrap_or_default()));
+                    let is_seed_pipeline = matches!(e.table, "pipelines" | "pipeline_stages")
+                        && (pipeline_map.contains_key(rid)
+                            || stage_map.contains_key(rid)
+                            || pipeline_map.contains_key(row["pipeline_id"].as_str().unwrap_or_default()));
                     let is_builtin_collection = e.table == "collections" && !row["builtin"].is_null();
                     if is_seed_pipeline || is_builtin_collection || !row["deleted_at"].is_null() {
                         continue;
