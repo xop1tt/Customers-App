@@ -4,7 +4,7 @@
 //! суточный), и только потом приложение просит Auth отправить письмо. Обычный вход писем не
 //! тратит. Токены обновляются автоматически; при отзыве сессии сервером — `SessionExpired`.
 
-use crate::cloud::config::{CloudConfig, REDIRECT_URL};
+use crate::cloud::config::CloudConfig;
 use crate::cloud::error::{CloudError, CloudResult};
 use crate::cloud::validation;
 use crate::search::http::{HttpRequest, HttpTransport};
@@ -139,8 +139,8 @@ pub struct CloudAuth {
     refresh_lock: tokio::sync::Mutex<()>,
 }
 
-fn redirect_param() -> String {
-    percent_encoding::utf8_percent_encode(REDIRECT_URL, percent_encoding::NON_ALPHANUMERIC).to_string()
+fn redirect_param(redirect: &str) -> String {
+    percent_encoding::utf8_percent_encode(redirect, percent_encoding::NON_ALPHANUMERIC).to_string()
 }
 
 fn json_text(data: &[u8]) -> Value {
@@ -256,11 +256,11 @@ impl CloudAuth {
             return Err(CloudError::WeakPassword(Some(p)));
         }
         self.gate(MailAction::Signup, &email).await?;
-        let mut body = json!({"email": email, "password": password, "options": {"email_redirect_to": REDIRECT_URL}});
+        let mut body = json!({"email": email, "password": password, "options": {"email_redirect_to": self.config.redirect}});
         if let Some(name) = username.map(str::trim).filter(|n| !n.is_empty()) {
             body["data"] = json!({"display_name": name});
         }
-        let data = self.auth("POST", &format!("/signup?redirect_to={}", redirect_param()), Some(&body), None).await?;
+        let data = self.auth("POST", &format!("/signup?redirect_to={}", redirect_param(self.config.redirect)), Some(&body), None).await?;
         // Если на сервере выключено подтверждение почты, Auth сразу возвращает сессию.
         if json_text(&data).get("access_token").is_some() {
             self.take(&data)?;
@@ -271,7 +271,7 @@ impl CloudAuth {
     pub async fn resend_confirmation(&self, raw_email: &str) -> CloudResult<()> {
         let email = Self::valid_email(raw_email)?;
         self.gate(MailAction::Signup, &email).await?;
-        let body = json!({"type": "signup", "email": email, "options": {"email_redirect_to": REDIRECT_URL}});
+        let body = json!({"type": "signup", "email": email, "options": {"email_redirect_to": self.config.redirect}});
         self.auth("POST", "/resend", Some(&body), None).await?;
         Ok(())
     }
@@ -386,7 +386,7 @@ impl CloudAuth {
     pub async fn request_password_reset(&self, raw_email: &str) -> CloudResult<()> {
         let email = Self::valid_email(raw_email)?;
         self.gate(MailAction::Recovery, &email).await?;
-        self.auth("POST", &format!("/recover?redirect_to={}", redirect_param()), Some(&json!({"email": email})), None).await?;
+        self.auth("POST", &format!("/recover?redirect_to={}", redirect_param(self.config.redirect)), Some(&json!({"email": email})), None).await?;
         Ok(())
     }
 
@@ -443,7 +443,8 @@ impl CloudAuth {
             Ok(_) => {}
         }
         self.gate(MailAction::EmailChange, &current).await?;
-        let (status, data) = self.authorized("PUT", &format!("/auth/v1/user?redirect_to={}", redirect_param()), Some(&json!({"email": new})), &[]).await?;
+        let (status, data) =
+            self.authorized("PUT", &format!("/auth/v1/user?redirect_to={}", redirect_param(self.config.redirect)), Some(&json!({"email": new})), &[]).await?;
         if !(200..300).contains(&status) {
             return Err(CloudError::from_auth(status, &data));
         }

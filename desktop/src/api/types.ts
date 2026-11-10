@@ -38,6 +38,8 @@ export interface LeadData {
   score_reasons: string[];
   status: string;
   external_results: ExternalResult[];
+  /** Отметка «перенесён в CRM» (Customers 2.0). */
+  crm?: { workspace_id: string; company_id: string; contact_id: string | null; deal_id: string | null; converted_at: string };
 }
 
 export interface Lead {
@@ -194,6 +196,8 @@ export interface BootInfo {
   session: SessionInfo | null;
   device: DevicePrefs;
   error: string | null;
+  /** Канал сборки: Stable (обычная версия) или Beta (Debug/Beta, своя база и настройки). */
+  channel: "stable" | "beta";
 }
 
 export interface SourceReport {
@@ -424,3 +428,132 @@ export interface CmdError {
 }
 
 export type AuthCallback = { kind: "newPassword" | "signedIn" } | { kind: "message" | "error"; message: string };
+
+// ---------------------------------------------------------------- Customers 2.0: Workspace и CRM
+
+export interface WorkspaceInfo {
+  id: string;
+  name: string;
+  personal: boolean;
+  role: string;
+  roleName: string;
+  rank: number;
+  permissions: string[];
+  members: number;
+  /** Workspace в Supabase; иначе — только на этом устройстве. */
+  remote: boolean;
+  defaultCurrency: string;
+}
+
+export interface WsMember {
+  userId: string;
+  displayName: string;
+  role: string;
+  roleName: string;
+  rank: number;
+  avatarPath: string | null;
+  email: string | null;
+}
+
+export interface WsState {
+  isCloud: boolean;
+  me: string;
+  workspaces: WorkspaceInfo[];
+  active: string | null;
+  permissions: string[];
+  members: WsMember[];
+  pending: number;
+  rejected: number;
+  conflicts: number;
+  syncing: boolean;
+  lastSync: string | null;
+  error: string | null;
+}
+
+/** Строка CRM-таблицы как есть: системные столбцы и поля сущности (snake_case, как в базе). */
+export interface CrmRecord {
+  id: string;
+  workspace_id: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by?: string | null;
+  owner_id?: string | null;
+  archived_at?: string | null;
+  deleted_at?: string | null;
+  [field: string]: unknown;
+}
+
+export interface WsFilter { field: string; op: string; value?: unknown }
+export interface WsSort { field: string; dir: "asc" | "desc" }
+export interface WsQuery {
+  filters?: WsFilter[];
+  sort?: WsSort[];
+  search?: string | null;
+  limit?: number;
+  offset?: number;
+  archived?: boolean;
+  deleted?: boolean;
+}
+
+export interface WsCollection extends CrmRecord {
+  name: string;
+  emoji: string | null;
+  icon: string | null;
+  entity_type: string;
+  visibility: "private" | "workspace";
+  config: { filters?: WsFilter[]; sort?: WsSort[]; columns?: string[] };
+  position: number;
+  builtin: string | null;
+  count: number;
+}
+
+export interface WsConflict {
+  id: string;
+  entityType: string;
+  entityId: string;
+  field: string;
+  kept: unknown;
+  lost: unknown;
+  lostBy: string | null;
+  keptBy: string | null;
+  at: string | null;
+}
+
+export interface WsOp {
+  op_id: string;
+  entity: string;
+  id: string;
+  kind: string;
+  fields: Record<string, unknown>;
+  state: string;
+  last_error: string | null;
+}
+
+export interface WsStageChange { from_stage_id: string | null; to_stage_id: string; changed_by: string | null; changed_at: string }
+
+export interface WsCard {
+  record: CrmRecord;
+  tasks?: CrmRecord[];
+  activities?: CrmRecord[];
+  notes?: CrmRecord[];
+  comments?: CrmRecord[];
+  contacts?: CrmRecord[];
+  deals?: CrmRecord[];
+  history?: WsStageChange[];
+  dealContacts?: CrmRecord[];
+  dealLinks?: CrmRecord[];
+  conflicts: WsConflict[];
+}
+
+export interface WsConverted {
+  workspaceId: string;
+  companyId: string;
+  contactId: string | null;
+  dealId: string | null;
+  reusedCompany: boolean;
+  reusedContact: boolean;
+}
+
+export interface WsInvite { id: string; email: string; role: string; expiresAt: string; token: string; link: string }

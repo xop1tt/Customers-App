@@ -9,7 +9,8 @@ import { api } from "../api";
 import { Icon } from "../ui/icons";
 import { type MenuItem, Popover, showMenu } from "../ui/overlay";
 import type { SyncStatus, UpdateInfo } from "../api/types";
-import { attempt, leaveSession, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
+import { attempt, leaveSession, openCollection, openDebug, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
+import { CollectionsGroup } from "./crm/Collections";
 import { openLink } from "../state/actions";
 
 const SCORE_STEPS = [90, 70, 50, 30];
@@ -62,6 +63,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const customize = useStore((s) => s.customizeNav);
   const sourceFilter = useStore((s) => s.filter.source);
   const minScore = useStore((s) => s.filter.minScore);
+  const beta = useStore((s) => s.boot?.channel === "beta");
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
@@ -129,12 +131,14 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   return (
     <aside className={`sidebar${overlay ? " overlay" : ""}`} style={{ width: "var(--nav-w)" }} aria-label="Навигация">
       <div className="side-head">
-        <span className="side-brand grow"><img src={appIcon} width={20} height={20} alt="" draggable={false} />Customers</span>
+        <span className="side-brand grow"><img src={appIcon} width={20} height={20} alt="" draggable={false} />Customers{beta && <span className="channel-badge" data-tip="Отдельная версия для проверки: свои данные и настройки">Beta</span>}</span>
         <IconButton icon="sidebar" tip="Свернуть панель" onClick={() => (overlay ? setState({ navPeek: false }) : void patchDevice({ navOpen: false }))} />
       </div>
 
       <nav className="side-scroll">
         <div className="nav-group">{groupFor(main, MAIN_GROUP)}</div>
+
+        <CollectionsGroup customize={customize} onOpen={openCollection} />
 
         {(device.sidebarSources || customize) && (
           <div className="nav-group">
@@ -208,6 +212,8 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("appearance"); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Настройки</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("account"); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Аккаунт и синхронизация</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("data"); }}><span className="menu-icon"><Icon name="database" size={14} /></span>Данные и копии</button></li>
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство</button></li>
+            {beta && <li><button className="menu-item" onClick={() => { setAccountRect(null); openDebug(true); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Debug Menu</button></li>}
             <li className="menu-sep" />
             <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>
           </ul>

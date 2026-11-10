@@ -99,19 +99,26 @@ impl SecretStore for FileSecretStore {
 // ------------------------------------------------------------------ macOS: Связка ключей
 
 #[cfg(target_os = "macos")]
-pub struct KeychainSecretStore;
+pub struct KeychainSecretStore {
+    /// Сервис записей: у Stable прежний «LeadGenerator», у Beta свой, поэтому Beta не видит ключей Stable.
+    service: &'static str,
+}
 
 #[cfg(target_os = "macos")]
 impl KeychainSecretStore {
     pub const SERVICE: &'static str = "LeadGenerator";
     const NOT_FOUND: i32 = -25300; // errSecItemNotFound
+
+    pub fn new(service: &'static str) -> Self {
+        Self { service }
+    }
 }
 
 #[cfg(target_os = "macos")]
 impl SecretStore for KeychainSecretStore {
     fn get(&self, name: &str) -> AppResult<Option<String>> {
         use security_framework::passwords::get_generic_password;
-        match get_generic_password(Self::SERVICE, name) {
+        match get_generic_password(self.service, name) {
             Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
             Err(e) if e.code() == Self::NOT_FOUND => Ok(None),
             Err(e) => Err(AppError::msg(format!("Нет доступа к Связке ключей: {e}"))),
@@ -119,11 +126,11 @@ impl SecretStore for KeychainSecretStore {
     }
     fn set(&self, name: &str, value: &str) -> AppResult<()> {
         use security_framework::passwords::set_generic_password;
-        set_generic_password(Self::SERVICE, name, value.as_bytes()).map_err(|e| AppError::msg(format!("Не удалось сохранить в Связку ключей: {e}")))
+        set_generic_password(self.service, name, value.as_bytes()).map_err(|e| AppError::msg(format!("Не удалось сохранить в Связку ключей: {e}")))
     }
     fn delete(&self, name: &str) -> AppResult<()> {
         use security_framework::passwords::delete_generic_password;
-        match delete_generic_password(Self::SERVICE, name) {
+        match delete_generic_password(self.service, name) {
             Ok(()) => Ok(()),
             Err(e) if e.code() == Self::NOT_FOUND => Ok(()),
             Err(e) => Err(AppError::msg(format!("Не удалось удалить из Связки ключей: {e}"))),
@@ -141,17 +148,26 @@ pub mod dpapi {
     use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
 
-    const ENTROPY: &[u8] = b"Customers.Secrets.v1";
+    /// Энтропия Stable (прежние версии). У Beta своя: файлы секретов разных каналов не расшифровываются друг другом.
+    pub const ENTROPY: &[u8] = b"Customers.Secrets.v1";
 
     fn blob(data: &[u8]) -> CRYPT_INTEGER_BLOB {
         CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 }
     }
 
     pub fn protect(data: &[u8]) -> AppResult<Vec<u8>> {
+        protect_with(data, ENTROPY)
+    }
+
+    pub fn unprotect(data: &[u8]) -> Option<Vec<u8>> {
+        unprotect_with(data, ENTROPY)
+    }
+
+    pub fn protect_with(data: &[u8], entropy: &[u8]) -> AppResult<Vec<u8>> {
         // SAFETY: входные буферы живут до конца вызова; выходной буфер выделяет система, копируем и освобождаем его.
         unsafe {
             let input = blob(data);
-            let entropy = blob(ENTROPY);
+            let entropy = blob(entropy);
             let mut out = CRYPT_INTEGER_BLOB::default();
             CryptProtectData(&input, None, Some(&entropy), None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
                 .map_err(|e| AppError::msg(format!("DPAPI: {e}")))?;
@@ -161,11 +177,11 @@ pub mod dpapi {
         }
     }
 
-    pub fn unprotect(data: &[u8]) -> Option<Vec<u8>> {
-        // SAFETY: как в `protect`.
+    pub fn unprotect_with(data: &[u8], entropy: &[u8]) -> Option<Vec<u8>> {
+        // SAFETY: как в `protect_with`.
         unsafe {
             let input = blob(data);
-            let entropy = blob(ENTROPY);
+            let entropy = blob(entropy);
             let mut out = CRYPT_INTEGER_BLOB::default();
             CryptUnprotectData(&input, None, Some(&entropy), None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out).ok()?;
             let v = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
@@ -176,25 +192,29 @@ pub mod dpapi {
 
     pub struct DpapiSecretStore {
         dir: PathBuf,
+        entropy: &'static [u8],
     }
 
     impl DpapiSecretStore {
         pub fn new(dir: &Path) -> AppResult<Self> {
+            Self::with_entropy(dir, ENTROPY)
+        }
+        pub fn with_entropy(dir: &Path, entropy: &'static [u8]) -> AppResult<Self> {
             std::fs::create_dir_all(dir)?;
-            Ok(Self { dir: dir.to_path_buf() })
+            Ok(Self { dir: dir.to_path_buf(), entropy })
         }
     }
 
     impl SecretStore for DpapiSecretStore {
         fn get(&self, name: &str) -> AppResult<Option<String>> {
             match std::fs::read(self.dir.join(file_name(name))) {
-                Ok(b) => Ok(unprotect(&b).map(|p| String::from_utf8_lossy(&p).into_owned())),
+                Ok(b) => Ok(unprotect_with(&b, self.entropy).map(|p| String::from_utf8_lossy(&p).into_owned())),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(e) => Err(e.into()),
             }
         }
         fn set(&self, name: &str, value: &str) -> AppResult<()> {
-            write_atomic(&self.dir.join(file_name(name)), &protect(value.as_bytes())?)
+            write_atomic(&self.dir.join(file_name(name)), &protect_with(value.as_bytes(), self.entropy)?)
         }
         fn delete(&self, name: &str) -> AppResult<()> {
             let _ = std::fs::remove_file(self.dir.join(file_name(name)));
@@ -205,17 +225,25 @@ pub mod dpapi {
 
 /// Хранилище секретов этой платформы. `root` — папка данных приложения.
 pub fn platform_store(root: &Path) -> AppResult<Arc<dyn SecretStore>> {
+    channel_store(crate::channel::Channel::Stable, root)
+}
+
+/// Хранилище секретов канала. Stable — прежнее (Связка ключей «LeadGenerator», DPAPI с прежней энтропией);
+/// Beta — своё: свой сервис Связки ключей, своя энтропия DPAPI, файлы в своей папке данных.
+pub fn channel_store(channel: crate::channel::Channel, root: &Path) -> AppResult<Arc<dyn SecretStore>> {
+    let id = channel.identity();
     #[cfg(target_os = "macos")]
     {
         let _ = root;
-        Ok(Arc::new(KeychainSecretStore))
+        Ok(Arc::new(KeychainSecretStore::new(id.keychain_service)))
     }
     #[cfg(windows)]
     {
-        Ok(Arc::new(dpapi::DpapiSecretStore::new(&root.join("secrets"))?))
+        Ok(Arc::new(dpapi::DpapiSecretStore::with_entropy(&root.join("secrets"), id.dpapi_entropy)?))
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {
+        let _ = id;
         Ok(Arc::new(FileSecretStore::new(&root.join("secrets"))?))
     }
 }
@@ -272,6 +300,25 @@ impl DatabaseKeys {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stable_secrets_keep_previous_names_and_beta_gets_its_own() {
+        use crate::channel::Channel;
+        #[cfg(target_os = "macos")]
+        assert_eq!(Channel::Stable.identity().keychain_service, KeychainSecretStore::SERVICE);
+        #[cfg(windows)]
+        assert_eq!(Channel::Stable.identity().dpapi_entropy, dpapi::ENTROPY);
+        assert_ne!(Channel::Beta.identity().keychain_service, Channel::Stable.identity().keychain_service);
+        // Файловое хранилище (Linux) и DPAPI (Windows) лежат в папке данных канала: у Beta она своя.
+        let dir = tempfile::tempdir().unwrap();
+        let stable = channel_store(Channel::Stable, &dir.path().join("s")).unwrap();
+        let beta = channel_store(Channel::Beta, &dir.path().join("b")).unwrap();
+        if cfg!(not(target_os = "macos")) {
+            stable.set("isolation-probe", "stable").unwrap();
+            assert_eq!(beta.get("isolation-probe").unwrap(), None, "Beta не видит секреты Stable");
+            stable.delete("isolation-probe").unwrap();
+        }
+    }
+
     use super::*;
 
     #[test]

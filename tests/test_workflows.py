@@ -60,6 +60,8 @@ def test_automerge_only_for_dependabot_patch_minor_without_checkout():
 
 def test_elevated_permissions_only_in_expected_jobs():
     allowed = {"release.yml": {"publish"}, "dependabot-automerge.yml": {"automerge"}, "wiki.yml": {"publish"},
+               # Pre-release канала Beta, только по тегу vX.Y.Z-beta.N.
+               "beta.yml": {"publish"},
                # CodeQL загружает результаты во вкладку Security.
                "codeql.yml": {"analyze"},
                }
@@ -240,7 +242,48 @@ def test_ci_workflows_cancel_stale_runs_and_do_not_publish():
         text = f.read_text(encoding="utf-8")
         if "pull_request" in wf[True]:
             assert wf["concurrency"]["cancel-in-progress"] is True, f.name
-        if f.name != "release.yml":
+        # Stable публикует только release.yml; beta.yml — только Pre-release (проверяется ниже).
+        if f.name not in ("release.yml", "beta.yml"):
             assert "gh release" not in text and "git/refs" not in text, f"{f.name}: публикация только в release.yml"
     release = load("release.yml")[True]
     assert "pull_request" not in release, "релиз не запускается из PR"
+
+
+def test_beta_publishes_only_prereleases_from_beta_tags():
+    wf = load("beta.yml")
+    on = wf[True]
+    assert "pull_request" not in on and "pull_request_target" not in on, "Beta не публикуется из PR"
+    assert on["push"]["tags"] == ["v*-beta.*"] and on["push"]["branches"] == ["develop"]
+    publish = wf["jobs"]["publish"]
+    assert publish["if"] == "github.ref_type == 'tag'", "Pre-release только по тегу"
+    assert publish["environment"] == "beta"
+    text = (WF / "beta.yml").read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if "gh release create" in line:
+            assert "--prerelease" in line, line
+    assert "git/refs" not in text, "Beta не создаёт теги"
+    # Только файлы Customers-Beta-*: установщик Stable не может попасть в Pre-release.
+    assert "Customers-Beta-v*) ;;" in text
+    for job in ("macos", "windows"):
+        steps = " ".join(s.get("run", "") for s in wf["jobs"][job]["steps"])
+        assert "--features beta --config src-tauri/tauri.beta.conf.json" in steps, job
+        envs = " ".join(str(s.get("env", {})) for s in wf["jobs"][job]["steps"])
+        assert "vars.SUPABASE_URL" not in envs and "SUPABASE_ANON_KEY: " not in envs, f"{job}: облако Stable в Beta"
+
+
+def test_stable_release_ignores_beta_tags_and_waits_for_approval():
+    wf = load("release.yml")
+    assert wf[True]["push"]["tags"] == ["v*", "!v*-*"]
+    assert wf["jobs"]["publish"]["environment"] == "production"
+    steps = " ".join(s.get("run", "") for s in wf["jobs"]["macos"]["steps"])
+    assert "release-check.cjs --tag" in steps
+    for job in ("macos", "windows"):
+        text = str(wf["jobs"][job])
+        assert "--features beta" not in text and "tauri.beta.conf.json" not in text, f"{job}: Stable собирается как Beta"
+
+
+def test_ci_runs_beta_channel_tests_and_release_check():
+    desktop = load("desktop.yml")
+    steps = " ".join(s.get("run", "") for j in desktop["jobs"].values() for s in j.get("steps", []))
+    assert "--features beta" in steps and "npm run release:check" in steps
+    assert desktop[True]["push"]["branches"] == ["main", "develop"]

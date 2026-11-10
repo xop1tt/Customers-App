@@ -134,6 +134,9 @@ pub struct LeadData {
     pub score_reasons: Vec<String>,
     pub status: String,
     pub external_results: Vec<ExternalResult>,
+    /// Отметка о переносе в CRM: `{workspace_id, company_id, contact_id, deal_id, converted_at}` (Customers 2.0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crm: Option<Value>,
 }
 
 impl LeadData {
@@ -164,6 +167,7 @@ impl LeadData {
             score_reasons: vec![],
             status: "new".into(),
             external_results: vec![],
+            crm: None,
         }
     }
 

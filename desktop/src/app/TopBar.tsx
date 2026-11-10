@@ -1,12 +1,14 @@
 import { SECTIONS, isLeadList } from "../lib/leads";
 import { integer, shortRelative } from "../lib/format";
-import { Button, IconButton, Spinner, TextInput } from "../ui/kit";
+import { Avatar, Button, IconButton, Spinner, TextInput } from "../ui/kit";
 import { Icon } from "../ui/icons";
 import { sourceTitle } from "../lib/sources";
 import { patchDevice, setFilter, setState, useStore } from "../state/store";
 import { startSearch, stopSearch } from "../state/actions";
 import { visibleLeads } from "../lib/leads";
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
+import { Popover } from "../ui/overlay";
+import { useViewportWidth } from "../state/hooks";
 
 export function TopBar({ narrow }: { narrow: boolean }) {
   const navPeek = useStore((s) => s.navPeek);
@@ -17,6 +19,7 @@ export function TopBar({ narrow }: { narrow: boolean }) {
   const search = useStore((s) => s.search);
   const sync = useStore((s) => s.sync);
   const sourceTitleKey = filter.source;
+  const collection = useStore((s) => (s.section === "collection" ? s.collections.find((c) => c.id === s.collectionId) : undefined));
   const lead = isLeadList(section);
   const shown = useMemo(() => (lead ? visibleLeads(leads, section, filter).length : 0), [leads, section, filter, lead]);
 
@@ -28,8 +31,10 @@ export function TopBar({ narrow }: { narrow: boolean }) {
     <header className="topbar">
       {(!device.navOpen || narrow) && <IconButton icon="sidebar" tip="Показать панель" onClick={() => (narrow ? setState({ navPeek: !navPeek }) : void patchDevice({ navOpen: true }))} />}
       <div className="topbar-title">
-        <h2 className="ellipsis">{SECTIONS[section].title}{sourceTitleKey && section === "all" ? <span className="muted"> · {sourceTitle(sourceTitleKey)}</span> : null}</h2>
+        <span className="topbar-emoji" aria-hidden="true">{collection?.emoji || SECTIONS[section].emoji}</span>
+        <h2 className="ellipsis">{collection ? collection.name : SECTIONS[section].title}{sourceTitleKey && section === "all" ? <span className="muted"> · {sourceTitle(sourceTitleKey)}</span> : null}</h2>
         {lead && <span className="topbar-count num faint">{integer(shown)}</span>}
+        {collection && <span className="topbar-count num faint">{integer(collection.count)}</span>}
       </div>
       <span className="grow" />
       {lead && (
@@ -49,6 +54,7 @@ export function TopBar({ narrow }: { narrow: boolean }) {
           <span className="ellipsis">{syncText}</span>
         </span>
       )}
+      <WorkspaceAvatars />
       {search.running ? (
         <Button onClick={() => void stopSearch()} icon="stop" className="search-btn">
           <span className="ellipsis search-progress">{search.progress ?? "Идёт поиск…"}</span>
@@ -62,3 +68,43 @@ export function TopBar({ narrow }: { narrow: boolean }) {
   );
 }
 
+
+/** Аватары участников Workspace (docs/CRM_ARCHITECTURE.md §8.1): до 4 и «+N», в узком окне — один. */
+export function WorkspaceAvatars() {
+  const ws = useStore((s) => s.ws);
+  const width = useViewportWidth();
+  const btn = useRef<HTMLButtonElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  if (!ws?.isCloud || ws.members.length < 2) return null;
+  const max = width < 1100 ? 1 : 4;
+  const shown = ws.members.slice(0, max);
+  const rest = ws.members.length - shown.length;
+  const canInvite = ws.permissions.includes("invitations.manage");
+  return (
+    <>
+      <button ref={btn} type="button" className="ws-avatars" aria-haspopup="dialog" aria-label={`Участники: ${ws.members.length}`} data-tip="Участники Workspace"
+        onClick={() => setRect(btn.current?.getBoundingClientRect() ?? null)}>
+        {shown.map((m) => <span key={m.userId} className="ws-avatar"><Avatar name={m.displayName} src={m.avatarPath} size={24} /></span>)}
+        {rest > 0 && <span className="ws-avatar ws-more num">+{rest}</span>}
+      </button>
+      {rect && (
+        <Popover anchor={rect} onClose={() => setRect(null)} ignore={btn.current} placement="bottom-end" minWidth={260} className="popover-menu" role="dialog">
+          <ul className="menu ws-members">
+            {ws.members.map((m) => (
+              <li key={m.userId} className="ws-member">
+                <Avatar name={m.displayName} src={m.avatarPath} size={24} />
+                <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
+                  <span className="ellipsis">{m.displayName}{m.userId === ws.me ? <span className="faint"> · вы</span> : null}</span>
+                  <span className="faint ellipsis" style={{ fontSize: "var(--fs-sm)" }}>{m.roleName}</span>
+                </span>
+              </li>
+            ))}
+            <li className="menu-sep" />
+            {canInvite && <li><button className="menu-item" onClick={() => { setRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="plus" size={14} /></span>Пригласить</button></li>}
+            <li><button className="menu-item" onClick={() => { setRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство</button></li>
+          </ul>
+        </Popover>
+      )}
+    </>
+  );
+}

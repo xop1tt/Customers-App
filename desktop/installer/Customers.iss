@@ -18,11 +18,29 @@
   #define OutputDir "..\artifacts"
 #endif
 
-#define AppName "Customers"
-#define AppExe "Customers.exe"
+; Канал Debug/Beta (iscc /DBeta …): отдельное приложение со своим AppId, папкой установки, папкой данных и схемой
+; ссылок. Ставится рядом со Stable и не трогает её файлы, записи реестра и данные (docs/DEBUG_BUILD.md).
+#ifdef Beta
+  #define AppName "Customers Beta"
+  #define AppExe "Customers Beta.exe"
+  #define AppGuid "{{A3E4C2B8-5D71-4F0A-9C36-2B8E7D51F4A9}"
+  #define UrlScheme "customers-beta"
+  #define DataDirName "Customers Beta"
+  #ifndef OutputName
+    ; Полную версию с «-beta.N» передаёт сборка: /DOutputName=Customers-Beta-v1.3.0-beta.1-Windows-x64-Setup.
+    #define OutputName "Customers-Beta-v" + AppVersion + "-Windows-x64-Setup"
+  #endif
+#else
+  #define AppName "Customers"
+  #define AppExe "Customers.exe"
+  #define AppGuid "{{6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30}"
+  #define UrlScheme "leadgenerator"
+  #define DataDirName "Customers"
+  #define OutputName "Customers-v" + AppVersion + "-Windows-x64-Setup"
+#endif
 
 [Setup]
-AppId={{6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30}
+AppId={#AppGuid}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
@@ -42,7 +60,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 OutputDir={#OutputDir}
-OutputBaseFilename=Customers-v{#AppVersion}-Windows-x64-Setup
+OutputBaseFilename={#OutputName}
 SetupIconFile=..\src-tauri\icons\icon.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
@@ -70,11 +88,11 @@ Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Registry]
-; Ссылки leadgenerator://… из писем (подтверждение адреса, восстановление пароля) открывают это приложение.
-Root: HKA; Subkey: "Software\Classes\leadgenerator"; ValueType: string; ValueName: ""; ValueData: "URL:Customers"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\leadgenerator"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKA; Subkey: "Software\Classes\leadgenerator\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
-Root: HKA; Subkey: "Software\Classes\leadgenerator\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
+; Ссылки leadgenerator://… (Beta: customers-beta://…) из писем (подтверждение адреса, восстановление пароля) открывают это приложение.
+Root: HKA; Subkey: "Software\Classes\{#UrlScheme}"; ValueType: string; ValueName: ""; ValueData: "URL:{#AppName}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\{#UrlScheme}"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\{#UrlScheme}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
+Root: HKA; Subkey: "Software\Classes\{#UrlScheme}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
@@ -122,7 +140,7 @@ var
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    DataDir := ExpandConstant('{localappdata}\Customers');
+    DataDir := ExpandConstant('{localappdata}\{#DataDirName}');
     // Тихое удаление (в том числе при обновлении) данные не трогает.
     if (not UninstallSilent) and DirExists(DataDir) then
     begin

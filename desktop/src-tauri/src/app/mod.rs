@@ -9,8 +9,10 @@ pub mod session;
 pub mod sync;
 pub mod system;
 pub mod update;
+pub mod workspace;
 
 use crate::accounts::LocalAccounts;
+use crate::channel::{Channel, Isolation};
 use crate::cloud::auth::{CloudAuth, CloudSession, SessionStore};
 use crate::cloud::error::CloudError;
 use crate::error::AppError;
@@ -133,9 +135,20 @@ pub struct Env {
     pub can_update: bool,
     /// Ограничения для тестов: ускоренные паузы.
     pub sleeper: crate::search::http::Sleeper,
+    /// Канал сборки (Stable или Beta) и проверка, что пути не ведут в данные другого канала.
+    pub channel: Channel,
+    pub isolation: Isolation,
 }
 
 impl Env {
+    /// Путь, выбранный пользователем, не ведёт в данные другого канала (Stable/Beta).
+    pub fn guard_path(&self, path: &std::path::Path) -> CmdResult<()> {
+        self.isolation.check_path(path).map_err(|e| {
+            self.log_error(&format!("Изоляция каналов: {e}"));
+            CmdError::msg(e.to_string())
+        })
+    }
+
     pub fn emit(&self, name: &str, payload: Value) {
         self.events.emit(name, payload);
     }
@@ -158,6 +171,8 @@ impl Env {
 
     /// Записать ошибку в журнал, если журнал включён.
     pub fn log_error(&self, message: &str) {
+        #[cfg(feature = "beta")]
+        crate::debug::log::record(crate::debug::log::Level::Error, "app", message);
         if self.device_prefs().reports_log_errors {
             self.errors.append(message, chrono::Utc::now());
         }
@@ -217,8 +232,28 @@ pub mod testing {
 
     /// Окружение для тестов: всё во временной папке, секреты в памяти, сеть — заглушка.
     pub fn fixture(with_cloud: bool, replies: Vec<Result<crate::search::http::HttpResponse, crate::search::http::SearchError>>) -> Fixture {
+        fixture_channel(Channel::Stable, with_cloud, replies)
+    }
+
+    /// Окружение канала. Папки другого канала — `<tmp>/other-channel/{data,logs,backups}`: туда приложению нельзя.
+    pub fn fixture_channel(
+        channel: Channel,
+        with_cloud: bool,
+        replies: Vec<Result<crate::search::http::HttpResponse, crate::search::http::SearchError>>,
+    ) -> Fixture {
         let dir = tempfile::tempdir().unwrap();
         let paths = AppPaths::under(dir.path());
+        let other = dir.path().join("other-channel");
+        let isolation = Isolation::new(
+            crate::channel::ChannelDirs::of(channel, &paths),
+            crate::channel::ChannelDirs {
+                channel: channel.other(),
+                root: other.join("data"),
+                logs: other.join("logs"),
+                backups: other.join("backups"),
+                legacy: vec![],
+            },
+        );
         let secrets: Arc<dyn SecretStore> = Arc::new(MemorySecretStore::default());
         let transport = FakeTransport::new(replies);
         let events = Arc::new(RecordingEvents::default());
@@ -244,6 +279,8 @@ pub mod testing {
             app_bundle: None,
             can_update: false,
             sleeper: crate::search::http::no_sleep(),
+            channel,
+            isolation,
         });
         Fixture { dir, env, events, opener, transport }
     }

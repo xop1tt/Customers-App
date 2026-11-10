@@ -7,9 +7,12 @@ use base64::Engine;
 pub struct CloudConfig {
     pub url: String,
     pub anon_key: String,
+    /// Адрес возврата из писем: схема ссылок своего канала (Stable — leadgenerator://, Beta — customers-beta://).
+    pub redirect: &'static str,
 }
 
 pub const REDIRECT_URL: &str = "leadgenerator://auth/callback";
+pub const BETA_REDIRECT_URL: &str = "customers-beta://auth/callback";
 
 impl CloudConfig {
     pub fn new(url: &str, anon_key: &str) -> Option<Self> {
@@ -21,7 +24,7 @@ impl CloudConfig {
         if !ok_scheme || key.is_empty() || !Self::is_public_key(key) {
             return None;
         }
-        Some(Self { url: trimmed.to_string(), anon_key: key.to_string() })
+        Some(Self { url: trimmed.to_string(), anon_key: key.to_string(), redirect: REDIRECT_URL })
     }
 
     /// Публичный ключ: publishable (sb_publishable_…) или JWT с ролью anon. Секретный ключ
@@ -42,14 +45,37 @@ impl CloudConfig {
     }
 
     /// Значения, подставленные при сборке (переменные окружения SUPABASE_URL и SUPABASE_ANON_KEY).
+    /// Облако, встроенное при сборке. Stable берёт SUPABASE_URL / SUPABASE_ANON_KEY (рабочий проект),
+    /// Beta — только SUPABASE_BETA_URL / SUPABASE_BETA_ANON_KEY (отдельный тестовый проект). Без своих переменных
+    /// Beta собирается без облака: так она не может войти в рабочие учётные записи и изменить их данные.
+    /// Конфигурация для Beta: ссылки из писем открывают Beta, а не Stable.
+    pub fn for_beta(mut self) -> Self {
+        self.redirect = BETA_REDIRECT_URL;
+        self
+    }
+
     pub fn embedded() -> Option<Self> {
-        Self::new(option_env!("SUPABASE_URL").unwrap_or(""), option_env!("SUPABASE_ANON_KEY").unwrap_or(""))
+        if crate::channel::Channel::current().is_beta() {
+            Self::new(option_env!("SUPABASE_BETA_URL").unwrap_or(""), option_env!("SUPABASE_BETA_ANON_KEY").unwrap_or("")).map(|c| c.for_beta())
+        } else {
+            Self::new(option_env!("SUPABASE_URL").unwrap_or(""), option_env!("SUPABASE_ANON_KEY").unwrap_or(""))
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn beta_links_return_to_beta() {
+        let c = CloudConfig::new("https://example.supabase.co", &format!("sb_publishable_{}", "a".repeat(30))).unwrap();
+        assert_eq!(c.redirect, REDIRECT_URL);
+        assert!(c.redirect.starts_with(&format!("{}://", crate::channel::Channel::Stable.identity().url_scheme)));
+        let b = c.for_beta();
+        assert_eq!(b.redirect, BETA_REDIRECT_URL);
+        assert!(b.redirect.starts_with(&format!("{}://", crate::channel::Channel::Beta.identity().url_scheme)));
+    }
 
     fn jwt(role: &str) -> String {
         let e = base64::engine::general_purpose::URL_SAFE_NO_PAD;

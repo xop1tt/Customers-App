@@ -5,6 +5,7 @@ import type {
   AccountPrefs, AuthCallback, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
+  CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsState,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -104,6 +105,33 @@ export const api = {
   disconnectCrm: (kind: string) => call("disconnect_crm", { kind }),
   cancelCrm: () => call("cancel_crm"),
   exportToCrm: (kind: string, list: string[], resend: boolean) => call<{ report: CrmReport; summary: string }>("export_to_crm", { kind, ...ids(list), resend }),
+
+  // Customers 2.0: Workspace и CRM
+  wsState: () => call<WsState>("ws_state"),
+  wsSwitch: (id: string) => call<WsState>("ws_switch", { id }),
+  wsRefresh: () => call<WsState>("ws_refresh"),
+  wsSyncNow: () => call<WsState>("ws_sync_now"),
+  wsCreateWorkspace: (name: string) => call<WsState>("ws_create_workspace", { name }),
+  wsRenameWorkspace: (name: string) => call<WsState>("ws_rename_workspace", { name }),
+  wsList: (entity: string, query?: WsQuery) => call<{ items: CrmRecord[]; total: number }>("ws_list", { entity, query: query ?? null }),
+  wsCard: (entity: string, id: string) => call<WsCard>("ws_card", { entity, id }),
+  wsSave: (entity: string, id: string | null, fields: Record<string, unknown>) => call<CrmRecord>("ws_save", { entity, id, fields }),
+  wsDelete: (entity: string, id: string) => call<CrmRecord>("ws_delete", { entity, id }),
+  wsRestore: (entity: string, id: string) => call<CrmRecord>("ws_restore", { entity, id }),
+  wsDuplicates: (entity: string, fields: Record<string, unknown>, except?: string) => call<CrmRecord[]>("ws_duplicates", { entity, fields, except: except ?? null }),
+  wsConvertLead: (leadId: string, options?: { createDeal?: boolean; pipelineId?: string | null; ownerId?: string | null }) => call<WsConverted>("ws_convert_lead", { leadId, options: options ?? null }),
+  wsCollections: () => call<WsCollection[]>("ws_collections"),
+  wsCollectionItems: (id: string, query?: WsQuery) => call<{ collection: WsCollection; entity: string; items: CrmRecord[]; total: number }>("ws_collection_items", { id, query: query ?? null }),
+  wsReorderCollections: (list: string[]) => call("ws_reorder_collections", ids(list)),
+  wsHideCollection: (id: string, hidden: boolean) => call("ws_hide_collection", { id, hidden }),
+  wsConflicts: () => call<{ conflicts: WsConflict[]; rejected: WsOp[] }>("ws_conflicts"),
+  wsResolveConflict: (id: string, takeLost: boolean) => call("ws_resolve_conflict", { id, takeLost }),
+  wsDismissRejected: () => call<number>("ws_dismiss_rejected"),
+  wsInvite: (email: string, role: string) => call<WsInvite>("ws_invite", { email, role }),
+  wsAcceptInvitation: (token: string) => call<WsState>("ws_accept_invitation", { token }),
+  wsSetMemberRole: (user: string, role: string) => call<WsState>("ws_set_member_role", { user, role }),
+  wsRemoveMember: (user: string) => call<WsState>("ws_remove_member", { user }),
+  wsLeave: () => call<WsState>("ws_leave"),
 
   // обновления
   updateInfo: () => call<UpdateInfo>("update_info"),

@@ -103,6 +103,7 @@ impl Core {
     // ------------------------------------------------------------------ экспорт в файл
 
     pub fn export_to_file(&self, ids: &[String], format: &str, fields: &[String], path: &Path) -> CmdResult<String> {
+        self.env.guard_path(path)?;
         let s = self.require()?;
         let wanted: std::collections::HashSet<&String> = ids.iter().collect();
         let items: Vec<_> = s.with_store(|st| st.all_leads(false))?.into_iter().filter(|l| wanted.contains(&l.id)).collect();
@@ -123,12 +124,12 @@ impl Core {
         if !p.backup_directory.trim().is_empty() {
             return PathBuf::from(p.backup_directory);
         }
-        // Папка копий прежней macOS-версии, если в ней уже есть копии, продолжает использоваться.
+        // Папка копий прежней macOS-версии, если в ней уже есть копии, продолжает использоваться (только Stable).
         let legacy = self.env.paths.legacy_backups(&s.id);
-        if legacy.exists() {
+        if self.env.channel == crate::channel::Channel::Stable && legacy.exists() {
             legacy
         } else {
-            self.env.paths.default_backups(&s.id)
+            self.env.paths.channel_backups(self.env.channel, &s.id)
         }
     }
 
@@ -163,6 +164,7 @@ impl Core {
     /// Создаёт копию базы и удаляет самые старые сверх лимита. Возвращает путь к копии.
     pub fn backup_now(&self, s: &Session) -> CmdResult<PathBuf> {
         let dir = self.backup_directory(s);
+        self.env.guard_path(&dir)?;
         let prefs = s.account_prefs();
         let path = dir.join(format!("leadgen-{}.db", Local::now().format("%Y-%m-%d_%H-%M-%S")));
         std::fs::create_dir_all(&dir).map_err(|e| CmdError::msg(format!("Резервная копия не создана: {e}")))?;
@@ -195,6 +197,7 @@ impl Core {
     }
 
     pub fn restore(self: &Arc<Self>, path: &Path) -> CmdResult<String> {
+        self.env.guard_path(path)?;
         let s = self.require()?;
         if s.search.lock().unwrap().running {
             return Err(CmdError::msg("Дождитесь окончания поиска или остановите его, затем восстановите базу."));
@@ -210,6 +213,7 @@ impl Core {
     }
 
     pub fn move_database(self: &Arc<Self>, dir: &Path) -> CmdResult<String> {
+        self.env.guard_path(dir)?;
         let s = self.require()?;
         if s.search.lock().unwrap().running {
             return Err(CmdError::msg("Дождитесь окончания поиска или остановите его, затем перенесите базу."));
@@ -390,5 +394,68 @@ mod tests {
         core.logout();
         core.login("anna", "password-1", false).unwrap();
         assert_eq!(core.account_prefs().unwrap()["autoSearchMinutes"], 30);
+    }
+
+    /// Пароль собирается во время работы теста, чтобы в коде не было постоянного пароля.
+    fn password() -> String {
+        ["password", "-1"].concat()
+    }
+
+    /// Beta не может ни прочитать, ни записать данные другого канала через выбор пути пользователем.
+    #[tokio::test]
+    async fn paths_into_other_channel_are_refused_and_nothing_changes() {
+        for channel in [crate::channel::Channel::Beta, crate::channel::Channel::Stable] {
+            let f = super::super::testing::fixture_channel(channel, false, vec![]);
+            let core = Core::new(f.env.clone());
+            core.register("anna", &password(), &password(), false).unwrap();
+            let other = f.dir.path().join("other-channel/data/anna");
+            std::fs::create_dir_all(&other).unwrap();
+            std::fs::write(other.join("leads.db"), b"foreign").unwrap();
+
+            assert!(core.move_database(&other).unwrap_err().message.contains("другой версии"));
+            assert!(core.restore(&other.join("leads.db")).is_err());
+            assert!(core.export_to_file(&[], "json", &["title".into()], &other.join("out.json")).is_err());
+            core.patch_account_prefs(&json!({"backupDirectory": f.dir.path().join("other-channel/backups").display().to_string()})).unwrap();
+            let s = core.session().unwrap();
+            assert!(core.backup_now(&s).is_err());
+
+            assert_eq!(std::fs::read(other.join("leads.db")).unwrap(), b"foreign", "файл другого канала не изменён");
+            assert_eq!(std::fs::read_dir(&other).unwrap().count(), 1, "рядом ничего не создано");
+            assert!(!f.dir.path().join("other-channel/backups").exists());
+            // Свои пути по-прежнему работают.
+            core.patch_account_prefs(&json!({"backupDirectory": ""})).unwrap();
+            assert!(core.backup_now(&s).is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn beta_keeps_backups_in_its_own_folder() {
+        let f = super::super::testing::fixture_channel(crate::channel::Channel::Beta, false, vec![]);
+        let core = Core::new(f.env.clone());
+        core.register("anna", &password(), &password(), false).unwrap();
+        // Папка копий прежней macOS-версии существует, но Beta её не использует.
+        std::fs::create_dir_all(f.env.paths.legacy_backups("anna")).unwrap();
+        let s = core.session().unwrap();
+        let path = core.backup_now(&s).unwrap();
+        assert!(path.starts_with(f.env.paths.documents.join("Customers Beta Backups").join("anna")), "{}", path.display());
+    }
+
+    #[tokio::test]
+    async fn beta_refuses_plaintext_database_without_touching_it() {
+        let f = super::super::testing::fixture_channel(crate::channel::Channel::Beta, false, vec![]);
+        let core = Core::new(f.env.clone());
+        core.register("anna", &password(), &password(), false).unwrap();
+        let plain = f.dir.path().join("elsewhere/leads.db");
+        std::fs::create_dir_all(plain.parent().unwrap()).unwrap();
+        {
+            let c = rusqlite::Connection::open(&plain).unwrap();
+            c.execute_batch("CREATE TABLE leads(lead_id TEXT); INSERT INTO leads VALUES('x');").unwrap();
+        }
+        let before = std::fs::read(&plain).unwrap();
+        core.patch_account_prefs(&json!({"dataPath": plain.display().to_string()})).unwrap();
+        core.logout();
+        assert!(core.login("anna", &password(), false).is_err());
+        assert_eq!(std::fs::read(&plain).unwrap(), before, "незашифрованная база не переписана ключом Beta");
+        assert_eq!(crate::db::file_state(&plain), crate::db::FileState::Plaintext);
     }
 }

@@ -8,7 +8,8 @@ name: Release
 # Если одна из сборок упала, релиз не создаётся.
 on:
   push:
-    tags: ["v*"]
+    # Только Stable-теги: v1.2.0, v1.2.0.1. Теги Beta (v1.3.0-beta.1) собирает beta.yml как Pre-release.
+    tags: ["v*", "!v*-*"]
   workflow_dispatch:
     inputs:
       tag:
@@ -58,6 +59,11 @@ jobs:
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: node scripts/set-version.cjs "${TAG#v}"
+      # Готовность Stable: версии и тег совпадают, идентификаторы прежние, Beta отделена, нет отладочных возможностей.
+      - name: Release check
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: node scripts/release-check.cjs --tag "$TAG"
       - run: npm ci --no-audit --no-fund
 
       - name: Tests (interface)
@@ -223,6 +229,9 @@ jobs:
     needs: [macos, windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Публикация Stable ждёт ручного подтверждения, если в Settings → Environments у окружения production
+    # задан обязательный ревьюер (docs/RELEASE_PROCESS.md). Сборки выше идут без этого окружения.
+    environment: production
     permissions:
       contents: write # только для создания релиза и загрузки файлов
       actions: read # чтобы скачать собранные файлы из этого же запуска
