@@ -66,6 +66,13 @@ Gmail бесплатно отправляет около 500 писем в су�
 | `SMTP_PASS` | пароль приложения из шага 3 (без пробелов) |
 | `SMTP_FROM` | `Customers <ваш адрес Gmail>` |
 
+Срок действия кода в тексте письма берётся из секрета `OTP_EXPIRY_SECONDS` (по умолчанию `900`, 15 минут). Если меняете
+**Email OTP Expiration** в шаге 6, поменяйте и его.
+
+**Автоочистка.** Регистрации, которые не подтвердили код за 24 часа, удаляются из базы сами (миграция
+`20261110140000_purge_unconfirmed.sql`). Срок меняется в SQL Editor: `update private.email_limits set unconfirmed_ttl = interval '6 hours';`
+(от 1 часа до 30 суток).
+
 `SEND_EMAIL_HOOK_SECRET` добавите на шаге 6. `SUPABASE_URL` и `SUPABASE_SERVICE_ROLE_KEY` Supabase
 передаёт функциям сам — их добавлять не нужно.
 
@@ -94,7 +101,7 @@ npx supabase functions deploy delete-account --project-ref REF --no-verify-jwt
 - **Enable Email provider** — включено;
 - **Confirm email** — включено;
 - **Secure email change** — включено;
-- **Email OTP Expiration** — `3600`; **Email OTP Length** — `6`;
+- **Email OTP Expiration** — `900` (15 минут; код и ссылка из письма после этого перестают работать); **Email OTP Length** — `6`;
 - **Minimum password length** — `8`; **Password Requirements** — «Lowercase, uppercase letters and digits»;
 - **Save**.
 

@@ -57,7 +57,7 @@ export async function handler(req: Request): Promise<Response> {
   const base = Deno.env.get("LEADGEN_PUBLIC_URL") || supabaseUrl();
   const redirect = safeRedirect(payload.email_data.redirect_to, payload.email_data.site_url,
     Deno.env.get("APP_REDIRECT_PREFIX") || "leadgenerator://");
-  const minutes = Math.round(Number(Deno.env.get("OTP_EXPIRY_SECONDS") || 3600) / 60);
+  const minutes = Math.round(Number(Deno.env.get("OTP_EXPIRY_SECONDS") || 900) / 60);
   const mails: Mail[] = plan.mails.map((m) => {
     const r = render({
       kind: m.kind, code: m.code, email: m.to, newEmail: payload.user.new_email, minutesValid: minutes,
