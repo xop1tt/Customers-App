@@ -343,7 +343,9 @@ fn custom_fields_need_fields_manage_and_values_link_to_a_card() {
 fn attachments_keep_metadata_in_the_card_and_files_in_the_database() {
     let (_d, s) = open();
     let c = s.save("companies", None, &m(json!({"name": "Ромашка"}))).unwrap();
-    let a = s.save("attachments", None, &m(json!({"entity_type": "company", "entity_id": id(&c), "name": "договор.pdf", "mime": "application/pdf", "size": 4}))).unwrap();
+    let a = s
+        .save("attachments", None, &m(json!({"entity_type": "company", "entity_id": id(&c), "name": "договор.pdf", "mime": "application/pdf", "size": 4})))
+        .unwrap();
     s.put_blob(&id(&a), b"%PDF", false).unwrap();
     assert_eq!(s.blob(&id(&a)).unwrap(), b"%PDF");
     assert_eq!(s.linked("attachments", "company", &id(&c)).unwrap().len(), 1);
