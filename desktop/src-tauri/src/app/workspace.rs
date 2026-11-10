@@ -726,6 +726,22 @@ impl Core {
         Ok(json!({"workspace": new_id, "copied": copied, "skipped": skipped, "state": state}))
     }
 
+    // ------------------------------------------------------------ присутствие
+
+    /// «Я здесь» (и какую карточку смотрю) + кто ещё онлайн. Локальный Workspace и нет связи: пустой список.
+    pub async fn ws_presence(self: &Arc<Self>, entity_type: Option<String>, entity_id: Option<String>) -> CmdResult<Value> {
+        let s = self.require()?;
+        let c = self.ws_catalog(&s)?;
+        let Some(active) = c.active_info().filter(|w| w.remote).cloned() else { return Ok(json!([])) };
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        let list = sync::rpc(&cloud, "touch_presence", json!({"p_workspace": active.id, "p_entity_type": entity_type, "p_entity_id": entity_id})).await;
+        match list {
+            Ok(v) => Ok(v),
+            Err(CloudError::Network(_)) => Ok(json!([])),
+            Err(e) => Err(cloud_err(e)),
+        }
+    }
+
     // ------------------------------------------------------------ синхронизация
 
     fn ws_sync_soon(self: &Arc<Self>, s: &Arc<Session>) {

@@ -323,6 +323,12 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
     case "ws_hide_collection":
       ws.prefs.set(s("id"), { position: ws.prefs.get(s("id"))?.position ?? 0, hidden: Boolean(args.hidden) });
       return null;
+    case "ws_presence": {
+      // Демо: Борис всегда онлайн, Вера смотрит ту же карточку, что и вы.
+      if (!demoParams.has("team")) return [];
+      const others = ws.members.filter((m) => m.userId !== ME).slice(0, 2);
+      return others.map((m, i) => ({ user_id: m.userId, entity_type: i === 1 ? (args.entityType as string | null) : null, entity_id: i === 1 ? (args.entityId as string | null) : null, seen_at: now() }));
+    }
     case "ws_upload_local": {
       if (!demoParams.has("team")) fail("Загрузка доступна в облачной учётной записи.");
       const id = `ws-${uid()}`;

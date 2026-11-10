@@ -2,6 +2,7 @@
 // задачи, история этапов сделки и конфликты синхронизации. Новая запись создаётся здесь же.
 
 import { CustomFieldsSection } from "./CustomFields";
+import { WatchingNow } from "./Presence";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import type { CrmRecord, WsCard, WsConflict } from "../../api/types";
@@ -177,6 +178,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
           {r.deleted_at && <Tag tone="red" icon="trash">Удалено</Tag>}
         </div>
         <h3 className="insp-title selectable">{e.title(r)}</h3>
+        <WatchingNow type={e.type} id={r.id} />
         <div className="row insp-actions">
           {e.type === "task" && editable && (
             <IconButton icon="check" tip={r.status === "done" ? "Вернуть в работу" : "Выполнено"} active={r.status === "done"} onClick={() => save({ status: r.status === "done" ? "todo" : "done" })} />

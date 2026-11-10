@@ -186,3 +186,9 @@ describe("загрузка локальной CRM (демо-ядро)", () => {
     await expect(api.wsUploadLocal()).rejects.toBeDefined();
   });
 });
+
+describe("присутствие (демо-ядро)", () => {
+  it("в локальном Workspace никого нет", async () => {
+    expect(await api.wsPresence()).toEqual([]);
+  });
+});
