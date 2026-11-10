@@ -625,7 +625,13 @@ export interface ChatMessage {
   created_at: string;
   edited_at: string | null;
   deleted: boolean;
+  /** Карточки CRM в сообщении; название и подпись — только при праве просмотра. */
+  attachments?: ChatAttachment[];
 }
+
+export type ChatCardType = "company" | "contact" | "crm_lead" | "deal";
+export interface ChatCardRef { type: ChatCardType; id: string }
+export interface ChatAttachment extends ChatCardRef { title: string; subtitle: string; available: boolean }
 
 export interface ChatPage { conversation: ChatConversation; messages: ChatMessage[] }
 
@@ -658,4 +664,6 @@ export interface ChatPoll {
   available: boolean;
   /** Сервер без миграции 20261110170000. */
   missing?: boolean;
+  /** Открыт канал Realtime: новое приходит сразу, без ожидания опроса. */
+  live?: boolean;
 }

@@ -2,7 +2,7 @@
 // Повторяет правила сервера (миграция 20261110170000_team_chat.sql), которые видны в интерфейсе: права на группы,
 // упоминания по имени и почте, непрочитанное, курсор опроса. Без `?team` — локальный Workspace: только вы, чата нет.
 
-import type { AppNotification, ChatConversation, ChatMessage, TeamMember, WsMember } from "./types";
+import type { AppNotification, ChatConversation, ChatMessage, TeamMember, WsMember, ChatAttachment } from "./types";
 
 export interface TeamCtx { team: boolean; me: string; myName: string; myAvatar: string | null; wsId: string; members: WsMember[]; perms: string[] }
 
@@ -229,10 +229,23 @@ export function teamCall(cmd: string, args: Record<string, unknown>, ctx: TeamCt
       const { conversation_id: _c, ...m } = post(c, ctx.me, body, 0, mentions);
       return m;
     }
+    case "chat_post": {
+      const c = mine(ctx, a.conversation);
+      const body = String(a.body ?? "").trim();
+      const cards = (a.attachments as ChatAttachment[] | undefined) ?? [];
+      if (body.length > 4000 || (!body && !cards.length)) fail("Сообщение — от 1 до 4000 символов.");
+      if (cards.length > 10) fail("В сообщение можно добавить до 10 карточек.");
+      const mentions = [...new Set([...((a.mentions as string[]) ?? []), ...mentionedIn(body, people())])].filter((u) => u !== ctx.me && c.parts.has(u));
+      const m = post(c, ctx.me, body, 0, mentions);
+      m.attachments = cards;
+      const { conversation_id: _c, ...out } = m;
+      return out;
+    }
     case "chat_edit": {
       const m = msgs.find((x) => x.id === a.message) ?? fail("Сообщение не найдено.");
       if (m.author_id !== ctx.me || m.deleted) fail("Изменить сообщение может только автор.");
-      m.body = String(a.body ?? "").trim() || fail("Сообщение — от 1 до 4000 символов.");
+      m.body = String(a.body ?? "").trim();
+      if (!m.body && !m.attachments?.length) fail("Сообщение — от 1 до 4000 символов.");
       m.edited_at = iso();
       const { conversation_id: _c, ...out } = m;
       return out;
@@ -242,6 +255,7 @@ export function teamCall(cmd: string, args: Record<string, unknown>, ctx: TeamCt
       const c = mine(ctx, m.conversation_id);
       if (m.author_id !== ctx.me && c.parts.get(ctx.me)!.role === "member" && !ctx.perms.includes("members.manage")) fail("Нет прав удалить сообщение.");
       m.deleted = true;
+      m.attachments = [];
       return null;
     }
     case "notifications_mark_read": {

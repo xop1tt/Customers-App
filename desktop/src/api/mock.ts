@@ -236,6 +236,22 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
   if (["ws_team", "ws_update_member", "ws_chat", "ws_chat_poll"].includes(cmd)) {
     const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
     const me = session();
+    if (cmd === "ws_chat" && args.action === "chat_post") {
+      // Как сервер: название и подпись карточки берутся из CRM этого Workspace.
+      const a = (args.args ?? {}) as Record<string, unknown>;
+      const refs = (a.attachments as { type: string; id: string }[] | undefined) ?? [];
+      const cards = [];
+      for (const r of refs) {
+        const table = ({ company: "companies", contact: "contacts", crm_lead: "crm_leads", deal: "deals" } as Record<string, string>)[r.type];
+        const rows = table ? ((await wsCall("ws_list", { entity: table, query: { limit: 10000 } }, () => leads)) as { items: Record<string, unknown>[] }).items : [];
+        const row = rows.find((x) => x.id === r.id);
+        if (!row) throw { code: "error", message: "Карточка не найдена в этом Workspace." };
+        const title = String(row.name ?? row.full_name ?? row.title ?? "");
+        const subtitle = String(r.type === "deal" ? `${row.amount ?? 0} ${row.currency ?? "RUB"}` : r.type === "contact" ? row.position ?? "" : r.type === "crm_lead" ? row.company_name ?? "" : row.legal_name ?? "");
+        cards.push({ type: r.type, id: r.id, title, subtitle, available: true });
+      }
+      args = { ...args, args: { ...a, attachments: cards } };
+    }
     return teamCall(cmd, args, { team: ws.isCloud, me: ws.me, myName: me.displayName, myAvatar: me.avatar ?? null, wsId: ws.active ?? "", members: ws.members, perms: ws.permissions });
   }
   if (cmd.startsWith("ws_")) {

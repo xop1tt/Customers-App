@@ -5,21 +5,14 @@ import type { AppNotification } from "../../api/types";
 import { shortRelative } from "../../lib/format";
 import { notificationText } from "../../lib/team";
 import { Avatar, Button, EmptyState, Notice } from "../../ui/kit";
-import { attempt, getState, openCollection, openRecord, toast, useStore } from "../../state/store";
-import { openChat, pollChat } from "../../state/team";
+import { attempt, useStore } from "../../state/store";
+import { openChat, openCrmCard, pollChat } from "../../state/team";
 
-const TABLE: Record<string, string> = { company: "companies", contact: "contacts", crm_lead: "crm_leads", deal: "deals" };
-
-/** Перейти к источнику: обсуждение или карточка CRM (через подходящую коллекцию). */
+/** Перейти к источнику: обсуждение или карточка CRM. */
 export function openNotification(n: AppNotification) {
   void attempt(() => api.wsChat("notifications_mark_read", { ids: [n.id] })).then(() => pollChat());
   if (n.conversation_id) return openChat(n.conversation_id);
-  if (n.entity_type && n.entity_id) {
-    const c = getState().collections.find((x) => x.entity_type === n.entity_type && !x.config.filters?.length) ?? getState().collections.find((x) => x.entity_type === n.entity_type);
-    const table = TABLE[n.entity_type];
-    if (c && table) { openCollection(c.id); openRecord(table, n.entity_id); return; }
-    toast("Карточка недоступна: нет коллекции такого типа.", "error");
-  }
+  if (n.entity_type && n.entity_id) openCrmCard(n.entity_type, n.entity_id);
 }
 
 export function NotificationsPage() {

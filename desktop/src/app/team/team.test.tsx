@@ -107,6 +107,30 @@ describe("сообщения", () => {
     expect(mine.className).toContain("mention");
   });
 
+  it("карточка CRM в сообщении: выбор, отправка без текста и переход к карточке", async () => {
+    const n = await nav();
+    fireEvent.click(within(n).getByRole("button", { name: /Сообщения/ }));
+    const items = await screen.findByRole("complementary", { name: "Обсуждения" });
+    fireEvent.click(await within(items).findByText("Отдел продаж"));
+    await screen.findByText(/подскажи, где шаблон договора/);
+    fireEvent.click(screen.getByRole("button", { name: "Прикрепить карточку CRM" }));
+    const dlg = await screen.findByRole("dialog", { name: "Прикрепить карточку" });
+    fireEvent.click(within(dlg).getByRole("tab", { name: "Компании" }));
+    const list = await within(dlg).findByRole("list", { name: "Карточки" });
+    const first = within(list).getAllByRole("button")[0]!;
+    const name = first.textContent!.replace("🏢", "").trim();
+    fireEvent.click(first);
+    const pending = await screen.findByLabelText("Карточки в сообщении");
+    expect(within(pending).getByText(name.split(/\s{2,}/)[0]!, { exact: false })).toBeInTheDocument();
+    // Без текста: отправляется одна карточка.
+    fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    await waitFor(() => expect(screen.queryByLabelText("Карточки в сообщении")).toBeNull());
+    const sent = (await screen.findAllByRole("button", { name: /Компания/ })).at(-1)!;
+    expect(sent.className).toContain("chat-card");
+    fireEvent.click(sent);
+    await waitFor(() => expect(getState().record?.table).toBe("companies"));
+  });
+
   it("новое групповое обсуждение с участниками, участники добавляют коллег", async () => {
     const n = await nav();
     fireEvent.click(within(n).getByRole("button", { name: /Сообщения/ }));

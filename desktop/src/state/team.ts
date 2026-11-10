@@ -2,10 +2,13 @@
 
 import { useEffect } from "react";
 import { api } from "../api";
+import { on } from "../api/backend";
 import type { ChatConversation, ChatPoll, TeamMember } from "../api/types";
-import { attempt, getState, setState, toast, useStore } from "./store";
+import { attempt, getState, openCollection, openRecord, setState, toast, useStore } from "./store";
 
 export const POLL_EVERY = 15_000;
+/** Пока открыт канал Realtime, новое приходит сразу; опрос остаётся для статуса «в сети» и как подстраховка. */
+export const LIVE_POLL_EVERY = 60_000;
 /** Справочник (статус «в сети») обновляется реже, чем чат. */
 const TEAM_EVERY = 4;
 
@@ -24,8 +27,10 @@ export const unreadTotal = (c: ChatPoll | null) => Object.values(c?.unread ?? {}
 export const unreadNotifications = (c: ChatPoll | null) => (c?.notifications ?? []).filter((n) => !n.read).length;
 
 let polling = false;
+let again = false;
 export async function pollChat(): Promise<ChatPoll | null> {
-  if (polling) return getState().chat;
+  // Событие Realtime во время опроса не теряется: опрос повторится сразу после текущего.
+  if (polling) { again = true; return getState().chat; }
   polling = true;
   try {
     const chat = await api.wsChatPoll();
@@ -36,6 +41,7 @@ export async function pollChat(): Promise<ChatPoll | null> {
     return null;
   } finally {
     polling = false;
+    if (again) { again = false; void pollChat(); }
   }
 }
 
@@ -62,13 +68,39 @@ export function useChatPolling() {
     void refreshTeam();
     if (!cloud || !active) return;
     let tick = 0;
-    void pollChat();
-    const t = setInterval(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const loop = () => {
+      if (stopped) return;
+      timer = setTimeout(() => {
+        void pollChat().finally(loop);
+        if (++tick % TEAM_EVERY === 0) void refreshTeam();
+      }, getState().chat?.live ? LIVE_POLL_EVERY : POLL_EVERY);
+    };
+    void pollChat().finally(loop);
+    // Realtime: сервер сообщает только «что-то изменилось», содержимое забирается обычным запросом.
+    let unlisten: (() => void) | undefined;
+    void on<{ event: string }>("chat-live", (e) => {
+      if (e.event === "offline") {
+        const chat = getState().chat;
+        if (chat?.live) setState({ chat: { ...chat, live: false } });
+        return;
+      }
       void pollChat();
-      if (++tick % TEAM_EVERY === 0) void refreshTeam();
-    }, POLL_EVERY);
-    return () => clearInterval(t);
+    }).then((u) => { if (stopped) u(); else unlisten = u; });
+    return () => { stopped = true; clearTimeout(timer); unlisten?.(); };
   }, [cloud, active]);
+}
+
+const CARD_TABLE: Record<string, string> = { company: "companies", contact: "contacts", crm_lead: "crm_leads", deal: "deals" };
+
+/** Открыть карточку CRM (из уведомления или сообщения) через подходящую коллекцию. */
+export function openCrmCard(type: string, id: string) {
+  const all = getState().collections;
+  const c = all.find((x) => x.entity_type === type && !x.config.filters?.length) ?? all.find((x) => x.entity_type === type);
+  const table = CARD_TABLE[type];
+  if (c && table) { openCollection(c.id); openRecord(table, id); return; }
+  toast("Карточка недоступна: нет коллекции такого типа.", "error");
 }
 
 export function openChat(id: string | null) {

@@ -32,6 +32,21 @@ pub struct CrmState {
     notified: std::collections::BTreeSet<String>,
     /// Курсор опроса чата: (Workspace, последний увиденный номер сообщения или уведомления).
     chat_cursor: Option<(String, i64)>,
+    /// Канал Realtime пользователя (закрывается вместе с сессией).
+    live: Option<LiveChannel>,
+}
+
+/// Открытый канал Realtime: задача держит соединение, `on` — открыт ли он прямо сейчас.
+pub struct LiveChannel {
+    user: String,
+    on: Arc<std::sync::atomic::AtomicBool>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for LiveChannel {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
 }
 
 type Store = Arc<Mutex<WorkspaceStore>>;
@@ -909,7 +924,7 @@ impl Core {
     /// Действия чата: имя действия — функция сервера из списка ниже, аргументы — как у неё (без `p_`).
     pub async fn ws_chat(self: &Arc<Self>, action: &str, args: Map<String, Value>) -> CmdResult<Value> {
         const WITH_WORKSPACE: [&str; 4] = ["chat_list", "chat_open_direct", "chat_create_group", "notifications_mark_read"];
-        const OTHERS: [&str; 9] = [
+        const OTHERS: [&str; 10] = [
             "chat_add_members",
             "chat_remove_member",
             "chat_update",
@@ -917,6 +932,7 @@ impl Core {
             "chat_set_muted",
             "chat_messages",
             "chat_send",
+            "chat_post",
             "chat_edit",
             "chat_delete",
         ];
@@ -947,8 +963,18 @@ impl Core {
                 return Err(CmdError::msg("Сообщение — от 1 до 4000 символов."));
             }
         }
-        let out = self.ws_rpc(action, Value::Object(body), with_ws).await?;
-        if matches!(action, "chat_send" | "chat_messages" | "notifications_mark_read") {
+        if action == "chat_post" {
+            check_chat_post(&body)?;
+        }
+        let out = match self.ws_rpc(action, Value::Object(body), with_ws).await {
+            Err(e) if action == "chat_post" && (e.message.contains("chat_post") || e.message.contains("schema cache")) => {
+                return Err(CmdError::msg(
+                    "Карточки в сообщениях появятся после обновления сервера: владельцу проекта Supabase нужно применить миграцию 20261111090000_chat_live_attachments.sql.",
+                ))
+            }
+            r => r?,
+        };
+        if matches!(action, "chat_send" | "chat_post" | "chat_messages" | "notifications_mark_read") {
             self.env.emit("chat-read", Value::Null);
         }
         Ok(out)
@@ -973,6 +999,7 @@ impl Core {
         };
         let cursor = out["cursor"].as_i64().unwrap_or(0);
         s.workspace.lock().unwrap().chat_cursor = Some((active.id.clone(), cursor));
+        out["live"] = json!(self.ensure_live(&s, &cloud));
         let fresh_notes: Vec<Value> = match since {
             None => vec![],
             Some(prev) => {
@@ -987,6 +1014,26 @@ impl Core {
         out["freshNotifications"] = Value::Array(fresh_notes);
         out["available"] = json!(true);
         Ok(out)
+    }
+
+    /// Держит канал Realtime открытым для пользователя сессии. События приходят без содержимого:
+    /// интерфейс по ним сразу делает обычный опрос. Возвращает, открыт ли канал сейчас.
+    fn ensure_live(self: &Arc<Self>, s: &Arc<Session>, cloud: &Arc<crate::cloud::auth::CloudAuth>) -> bool {
+        let me = user_id(s);
+        let mut st = s.workspace.lock().unwrap();
+        if let Some(l) = &st.live {
+            if l.user == me && !l.task.is_finished() {
+                return l.on.load(std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let on = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let env = self.env.clone();
+        let on_event: Arc<dyn Fn(String, Value) + Send + Sync> = Arc::new(move |event, payload| {
+            env.emit("chat-live", json!({"event": event, "payload": payload}));
+        });
+        let task = tokio::spawn(crate::cloud::realtime::run(cloud.clone(), me.clone(), on.clone(), on_event));
+        st.live = Some(LiveChannel { user: me, on, task });
+        false
     }
 
     // ------------------------------------------------------------ синхронизация
@@ -1111,6 +1158,31 @@ impl Core {
 
 /// Тексты системных уведомлений: по одному на новое сообщение (не больше трёх, дальше — сводка) и на уведомление,
 /// которого нет среди сообщений (добавление в обсуждение, упоминание в заметке или комментарии).
+/// Сообщение с карточками: текст до 4000 символов (может быть пустым, если есть карточки), до 10 карточек
+/// известных типов. Окончательно всё проверяет сервер; здесь — чтобы не слать заведомо неверное.
+fn check_chat_post(body: &Map<String, Value>) -> CmdResult<()> {
+    let text = body.get("p_body").and_then(Value::as_str).unwrap_or("").trim().chars().count();
+    let items = match body.get("p_attachments") {
+        None | Some(Value::Null) => vec![],
+        Some(Value::Array(a)) => a.clone(),
+        Some(_) => return Err(CmdError::msg("Неверный список карточек.")),
+    };
+    if text > 4000 || (text == 0 && items.is_empty()) {
+        return Err(CmdError::msg("Сообщение — от 1 до 4000 символов."));
+    }
+    if items.len() > 10 {
+        return Err(CmdError::msg("В сообщение можно добавить до 10 карточек."));
+    }
+    for it in &items {
+        let kind_ok = matches!(it["type"].as_str(), Some("company" | "contact" | "crm_lead" | "deal"));
+        let id_ok = it["id"].as_str().map(|x| uuid::Uuid::parse_str(x).is_ok()).unwrap_or(false);
+        if !kind_ok || !id_ok {
+            return Err(CmdError::msg("Неверная карточка в сообщении."));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn chat_alerts(fresh: &Value, notes: &[Value]) -> Vec<(String, String)> {
     let mut out = vec![];
     let msgs = fresh.as_array().cloned().unwrap_or_default();
@@ -1121,7 +1193,9 @@ pub(crate) fn chat_alerts(fresh: &Value, notes: &[Value]) -> Vec<(String, String
             (Some("group"), false) => format!("{author} в «{}»", m["title"].as_str().unwrap_or("обсуждении")),
             _ => author.to_string(),
         };
-        out.push((title, m["body"].as_str().unwrap_or("").chars().take(160).collect()));
+        let body = m["body"].as_str().unwrap_or("");
+        let body = if body.is_empty() { "Карточка CRM" } else { body };
+        out.push((title, body.chars().take(160).collect()));
     }
     if msgs.len() > 3 {
         out.push(("Новые сообщения".into(), format!("И ещё {}", msgs.len() - 3)));
@@ -1182,6 +1256,22 @@ mod team_tests {
         let mut hired = Map::new();
         hired.insert("hiredOn".into(), json!("10.11.2026"));
         assert!(core.ws_update_member("u", hired).await.unwrap_err().message.contains("ГГГГ-ММ-ДД"));
+    }
+
+    #[test]
+    fn chat_post_arguments_are_checked() {
+        let ok = |v: Value| check_chat_post(v.as_object().unwrap()).is_ok();
+        let id = "0b6f5c1e-2f0a-4d7e-9b1a-1c2d3e4f5a6b";
+        assert!(ok(json!({"p_body": "текст"})));
+        assert!(ok(json!({"p_body": "", "p_attachments": [{"type": "company", "id": id}]})));
+        assert!(!ok(json!({"p_body": "  "})), "пусто и без карточек");
+        assert!(!ok(json!({"p_body": "x".repeat(4001)})));
+        assert!(!ok(json!({"p_body": "x", "p_attachments": [{"type": "leads", "id": id}]})));
+        assert!(!ok(json!({"p_body": "x", "p_attachments": [{"type": "deal", "id": "1; drop"}]})));
+        assert!(!ok(json!({"p_body": "x", "p_attachments": {"type": "deal"}})));
+        assert!(!ok(json!({"p_body": "x", "p_attachments": vec![json!({"type": "deal", "id": id}); 11]})));
+        let a = chat_alerts(&json!([{"kind": "direct", "author_name": "Борис", "body": "", "mentioned": false}]), &[]);
+        assert_eq!(a[0].1, "Карточка CRM");
     }
 
     #[test]

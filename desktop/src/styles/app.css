@@ -445,6 +445,14 @@ button.kpi:not(:disabled):hover { background: var(--bg-hover); }
 .chat-msg-act { position: absolute; top: 2px; right: 4px; opacity: 0; }
 .chat-msg:hover .chat-msg-act, .chat-msg-act:focus-visible { opacity: 1; }
 .mention { color: var(--accent-hover); font-weight: 560; }
+.chat-cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.chat-cards.compose { margin: 0 0 8px; }
+.chat-card { display: inline-flex; align-items: center; gap: 8px; max-width: 320px; min-width: 180px; padding: 6px 8px 6px 10px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-raised, transparent); color: var(--text); text-align: left; }
+button.chat-card:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--line-hover); }
+button.chat-card:disabled { opacity: 0.7; cursor: default; }
+.chat-card-emoji { font-size: 16px; line-height: 1; }
+.chat-card-title { font-weight: 500; }
+.chat-card-sub { font-size: var(--fs-sm); }
 .chat-compose { position: relative; flex: none; padding: 10px 16px 14px; border-top: 1px solid var(--line); }
 .chat-compose-row { gap: 8px; align-items: flex-end; }
 .chat-input { flex: 1 1 auto; min-height: 38px; max-height: 160px; resize: none; field-sizing: content; }

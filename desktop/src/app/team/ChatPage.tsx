@@ -1,16 +1,17 @@
 // «Сообщения»: личные диалоги и групповые обсуждения Workspace. Слева — список, справа — лента и поле ввода
-// с подсказкой @упоминаний. Новые сообщения приходят опросом (state/team.ts), без Supabase Realtime.
+// с подсказкой @упоминаний и карточками CRM. Новое приходит сразу через Realtime, а без него — опросом (state/team.ts).
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
-import type { ChatConversation, ChatMessage, ChatPage as ChatPageData, TeamMember } from "../../api/types";
+import type { ChatAttachment, ChatCardRef, ChatCardType, ChatConversation, ChatMessage, ChatPage as ChatPageData, CrmRecord, TeamMember } from "../../api/types";
+import { ENTITIES } from "../../lib/crm";
 import { dateOnly, shortRelative } from "../../lib/format";
 import { insertMention, mentionMatches, mentionQuery, mentionedIds } from "../../lib/team";
-import { Avatar, Button, Checkbox, EmptyState, Field, IconButton, Notice, Spinner, Switch, Tag, TextInput } from "../../ui/kit";
+import { Avatar, Button, Checkbox, EmptyState, Field, IconButton, Notice, Segmented, Spinner, Switch, Tag, TextInput } from "../../ui/kit";
 import { Icon } from "../../ui/icons";
 import { Dialog, type MenuItem, confirmDialog, showMenu } from "../../ui/overlay";
 import { attempt, openProfile, useStore } from "../../state/store";
-import { conversationTitle, memberName, messageMember, openChat, pollChat, refreshTeam } from "../../state/team";
+import { conversationTitle, memberName, messageMember, openChat, openCrmCard, pollChat, refreshTeam } from "../../state/team";
 import { PersonAvatar } from "./PeoplePage";
 
 const PAGE = 50;
@@ -82,7 +83,7 @@ function ConversationRow({ c, active, team, me }: { c: ChatConversation; active:
   const other = c.kind === "direct" ? team.find((m) => m.user_id === c.participants.find((p) => p.user_id !== me)?.user_id) : undefined;
   const title = conversationTitle(c, team, me);
   const last = c.last;
-  const preview = !last ? "Нет сообщений" : last.deleted ? "Сообщение удалено" : last.kind === "system" ? last.body : `${last.author_id === me ? "Вы" : memberName(team, last.author_id).split(" ")[0]}: ${last.body}`;
+  const preview = !last ? "Нет сообщений" : last.deleted ? "Сообщение удалено" : last.kind === "system" ? last.body : `${last.author_id === me ? "Вы" : memberName(team, last.author_id).split(" ")[0]}: ${last.body || "📎 Карточка CRM"}`;
   return (
     <li>
       <button type="button" className={`chat-item${active ? " active" : ""}`} aria-current={active ? "true" : undefined} onClick={() => openChat(c.id)}>
@@ -162,14 +163,17 @@ function Conversation({ c, onChanged }: { c: ChatConversation; onChanged: () => 
     requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight - before; });
   };
 
-  const send = async (body: string, mentions: string[]) => {
+  const send = async (body: string, mentions: string[], cards: ChatCardRef[]) => {
     stick.current = true;
     if (editing) {
       const m = await attempt(() => api.wsChat<ChatMessage>("chat_edit", { message: editing.id, body }));
       if (m) { setMessages((cur) => cur?.map((x) => (x.id === m.id ? m : x)) ?? cur); setEditing(null); }
       return !!m;
     }
-    const m = await attempt(() => api.wsChat<ChatMessage>("chat_send", { conversation: c.id, body, mentions }));
+    // Без карточек — прежняя chat_send: так текстовый чат работает и на сервере без новой миграции.
+    const m = await attempt(() => cards.length
+      ? api.wsChat<ChatMessage>("chat_post", { conversation: c.id, body, mentions, attachments: cards.map(({ type, id }) => ({ type, id })) })
+      : api.wsChat<ChatMessage>("chat_send", { conversation: c.id, body, mentions }));
     if (m) { setMessages((cur) => [...(cur ?? []), m]); void onChanged(); }
     return !!m;
   };
@@ -198,7 +202,7 @@ function Conversation({ c, onChanged }: { c: ChatConversation; onChanged: () => 
     { label: "Удалить", icon: "trash", danger: true, disabled: m.author_id !== me && !isAdmin,
       onSelect: async () => {
         if (!(await confirmDialog({ title: "Удалить сообщение?", message: "Текст сотрётся у всех участников.", confirm: "Удалить", danger: true }))) return;
-        if ((await attempt(() => api.wsChat("chat_delete", { message: m.id }))) !== undefined) setMessages((cur) => cur?.map((x) => (x.id === m.id ? { ...x, deleted: true, body: "" } : x)) ?? cur);
+        if ((await attempt(() => api.wsChat("chat_delete", { message: m.id }))) !== undefined) setMessages((cur) => cur?.map((x) => (x.id === m.id ? { ...x, deleted: true, body: "", attachments: [] } : x)) ?? cur);
       } },
   ];
 
@@ -264,9 +268,10 @@ function MessageRow({ m, me, team, grouped, onMenu }: { m: ChatMessage; me: stri
       <div className="col grow" style={{ gap: 2, minWidth: 0 }}>
         {!grouped && <div className="row" style={{ gap: 8 }}><span className="chat-author">{name}</span><span className="faint chat-time">{shortRelative(m.created_at)}</span></div>}
         <div className={`chat-body selectable${m.deleted ? " faint" : ""}`}>
-          {m.deleted ? "Сообщение удалено" : <MessageText text={m.body} team={team} />}
+          {m.deleted ? "Сообщение удалено" : m.body ? <MessageText text={m.body} team={team} /> : null}
           {m.edited_at && !m.deleted && <span className="faint chat-edited"> (изменено)</span>}
         </div>
+        {!m.deleted && !!m.attachments?.length && <div className="chat-cards">{m.attachments.map((a) => <CardChip key={`${a.type}:${a.id}`} card={a} />)}</div>}
       </div>
       {!m.deleted && <IconButton icon="more" tip="Действия" className="chat-msg-act" onClick={(e) => onMenu(e)} />}
     </div>
@@ -274,9 +279,12 @@ function MessageRow({ m, me, team, grouped, onMenu }: { m: ChatMessage; me: stri
 }
 
 function Composer({ people, team, editing, onCancelEdit, onSend, disabled }: {
-  people: TeamMember[]; team: TeamMember[]; editing: ChatMessage | null; onCancelEdit: () => void; onSend: (body: string, mentions: string[]) => Promise<boolean>; disabled: string | null;
+  people: TeamMember[]; team: TeamMember[]; editing: ChatMessage | null; onCancelEdit: () => void; onSend: (body: string, mentions: string[], cards: ChatAttachment[]) => Promise<boolean>; disabled: string | null;
 }) {
   const [text, setText] = useState("");
+  const [cards, setCards] = useState<ChatAttachment[]>([]);
+  const [picking, setPicking] = useState(false);
+  const canAttach = useStore((s) => s.ws?.permissions.includes("records.view") ?? false);
   const [picked, setPicked] = useState<string[]>([]);
   const [suggest, setSuggest] = useState<{ start: number; query: string } | null>(null);
   const [index, setIndex] = useState(0);
@@ -302,18 +310,24 @@ function Composer({ people, team, editing, onCancelEdit, onSend, disabled }: {
   };
   const submit = async () => {
     const body = text.trim();
-    if (!body || busy) return;
+    const withCards = editing ? [] : cards;
+    if ((!body && !withCards.length && !(editing?.attachments?.length)) || busy) return;
     setBusy(true);
     const mentions = [...new Set([...picked.filter((id) => text.includes(`@${team.find((m) => m.user_id === id)?.display_name ?? "\u0000"}`)), ...mentionedIds(body, people)])];
-    const ok = await onSend(body, mentions);
+    const ok = await onSend(body, mentions, withCards);
     setBusy(false);
-    if (ok) { setText(""); setPicked([]); setSuggest(null); }
+    if (ok) { setText(""); setPicked([]); setSuggest(null); setCards([]); }
   };
 
   if (disabled) return <div className="chat-compose"><Notice>{disabled}</Notice></div>;
   return (
     <div className="chat-compose">
       {editing && <div className="row chat-editing"><Icon name="edit" size={13} /><span className="grow">Изменение сообщения</span><Button small variant="ghost" onClick={() => { onCancelEdit(); setText(""); }}>Отмена</Button></div>}
+      {!editing && cards.length > 0 && (
+        <div className="chat-cards compose" aria-label="Карточки в сообщении">
+          {cards.map((c) => <CardChip key={`${c.type}:${c.id}`} card={c} onRemove={() => setCards((cur) => cur.filter((x) => x !== c))} />)}
+        </div>
+      )}
       {suggest && matches.length > 0 && (
         <ul className="mention-list" role="listbox" aria-label="Упомянуть">
           {matches.map((m, i) => (
@@ -347,9 +361,91 @@ function Composer({ people, team, editing, onCancelEdit, onSend, disabled }: {
           }}
         />
         <IconButton icon="at" tip="Упомянуть" onClick={() => { const caret = area.current?.selectionStart ?? text.length; const pre = caret > 0 && !/\s/.test(text[caret - 1]!) ? " @" : "@"; update(text.slice(0, caret) + pre + text.slice(caret)); area.current?.focus(); }} />
-        <Button variant="primary" icon="send" busy={busy} disabled={!text.trim()} onClick={() => void submit()}>{editing ? "Сохранить" : "Отправить"}</Button>
+        {!editing && canAttach && <IconButton icon="paperclip" tip="Прикрепить карточку CRM" disabled={cards.length >= 10} onClick={() => setPicking(true)} />}
+        <Button variant="primary" icon="send" busy={busy} disabled={!text.trim() && !(editing ? editing.attachments?.length : cards.length)} onClick={() => void submit()}>{editing ? "Сохранить" : "Отправить"}</Button>
       </div>
+      {picking && <AttachCardDialog taken={cards} onClose={() => setPicking(false)} onPick={(c) => { setCards((cur) => (cur.some((x) => x.type === c.type && x.id === c.id) ? cur : [...cur, c].slice(0, 10))); setPicking(false); requestAnimationFrame(() => area.current?.focus()); }} />}
     </div>
+  );
+}
+
+const CARD_TYPES: ChatCardType[] = ["crm_lead", "company", "contact", "deal"];
+
+/** Карточка CRM в сообщении: открывается по нажатию; без права просмотра — «Нет доступа». */
+function CardChip({ card, onRemove }: { card: ChatAttachment; onRemove?: () => void }) {
+  const meta = ENTITIES[card.type];
+  const body = (
+    <>
+      <span className="chat-card-emoji" aria-hidden>{meta.emoji}</span>
+      <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
+        <span className="ellipsis chat-card-title">{card.available ? card.title || "Без названия" : "Нет доступа к карточке"}</span>
+        <span className="ellipsis faint chat-card-sub">{[meta.one, card.available ? card.subtitle : ""].filter(Boolean).join(" · ")}</span>
+      </span>
+    </>
+  );
+  if (onRemove) {
+    return <span className="chat-card">{body}<IconButton icon="x" tip="Убрать" onClick={onRemove} /></span>;
+  }
+  return (
+    <button type="button" className="chat-card" disabled={!card.available} onClick={() => openCrmCard(card.type, card.id)}>
+      {body}
+      {card.available && <Icon name="chevronRight" size={14} className="faint" />}
+    </button>
+  );
+}
+
+function cardSubtitle(type: ChatCardType, r: CrmRecord): string {
+  const v = (k: string) => (typeof (r as Record<string, unknown>)[k] === "string" ? String((r as Record<string, unknown>)[k]) : "");
+  if (type === "company") return v("legal_name");
+  if (type === "contact") return v("position");
+  if (type === "crm_lead") return [v("person_name"), v("company_name")].filter(Boolean).join(" · ");
+  const amount = (r as Record<string, unknown>).amount;
+  return amount != null ? `${amount} ${v("currency") || "RUB"}` : "";
+}
+
+/** Выбор карточки из CRM этого Workspace: лиды, компании, контакты, сделки. */
+function AttachCardDialog({ taken, onClose, onPick }: { taken: ChatAttachment[]; onClose: () => void; onPick: (c: ChatAttachment) => void }) {
+  const [type, setType] = useState<ChatCardType>("crm_lead");
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState<CrmRecord[] | null>(null);
+  const meta = ENTITIES[type];
+  useEffect(() => {
+    let live = true;
+    setItems(null);
+    const t = setTimeout(() => {
+      void api.wsList(meta.table, { search: q.trim() || null, limit: 30 }).then((r) => { if (live) setItems(r.items); }, () => { if (live) setItems([]); });
+    }, q ? 200 : 0);
+    return () => { live = false; clearTimeout(t); };
+  }, [type, q]);
+  return (
+    <Dialog title="Прикрепить карточку" onClose={onClose} width={520}>
+      <div className="col" style={{ gap: 10, alignItems: "stretch" }}>
+        <Segmented small value={type} onChange={(v) => setType(v)} options={CARD_TYPES.map((t) => ({ value: t, label: ENTITIES[t].many }))} />
+        <TextInput value={q} onChange={setQ} icon="search" placeholder={`Поиск: ${ENTITIES[type].many.toLowerCase()}`} aria-label="Поиск карточки" autoFocus />
+        {items === null ? <div className="center-fill" style={{ minHeight: 120 }}><Spinner /></div> : items.length === 0 ? (
+          <div className="faint" style={{ padding: "16px 4px" }}>Ничего не нашлось.</div>
+        ) : (
+          <ul className="pick-list" aria-label="Карточки">
+            {items.map((r) => {
+              const used = taken.some((x) => x.type === type && x.id === r.id);
+              const sub = cardSubtitle(type, r);
+              return (
+                <li key={r.id}>
+                  <button type="button" className="pick-row" disabled={used} onClick={() => onPick({ type, id: r.id, title: meta.title(r), subtitle: sub, available: true })}>
+                    <span aria-hidden>{meta.emoji}</span>
+                    <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
+                      <span className="ellipsis">{meta.title(r)}</span>
+                      {sub && <span className="ellipsis faint" style={{ fontSize: "var(--fs-sm)" }}>{sub}</span>}
+                    </span>
+                    {used && <Icon name="check" size={14} className="faint" />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </Dialog>
   );
 }
 
