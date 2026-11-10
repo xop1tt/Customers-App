@@ -526,6 +526,83 @@ impl Core {
         self.ws_state()
     }
 
+    // ------------------------------------------------------------ роли и воронки (редакторы)
+
+    /// Роли активного Workspace и каталог разрешений. Локальная запись: ролей нет (один владелец).
+    pub async fn ws_roles(self: &Arc<Self>) -> CmdResult<Value> {
+        let s = self.require()?;
+        let c = self.ws_catalog(&s)?;
+        let Some(active) = c.active_info().filter(|w| w.remote).cloned() else {
+            return Ok(json!({"roles": [], "catalog": []}));
+        };
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        let roles = sync::select(&cloud, &format!("roles?select=key,name,rank,is_system,workspace_id,role_permissions(permission_key)&or=(workspace_id.is.null,workspace_id.eq.{})&order=rank.desc", active.id))
+            .await
+            .map_err(cloud_err)?;
+        let catalog = sync::select(&cloud, "permissions?select=key,description&order=key").await.map_err(cloud_err)?;
+        // Своя роль с тем же ключом заменяет системный шаблон.
+        let mut by_key: std::collections::BTreeMap<String, Value> = Default::default();
+        for r in roles.as_array().cloned().unwrap_or_default() {
+            let key = r["key"].as_str().unwrap_or_default().to_string();
+            let own = !r["workspace_id"].is_null();
+            if own || !by_key.contains_key(&key) {
+                let perms: Vec<Value> = r["role_permissions"].as_array().map(|a| a.iter().map(|p| p["permission_key"].clone()).collect()).unwrap_or_default();
+                by_key.insert(key.clone(), json!({"key": key, "name": r["name"], "rank": r["rank"], "system": r["is_system"], "permissions": perms}));
+            }
+        }
+        let mut list: Vec<Value> = by_key.into_values().collect();
+        list.sort_by_key(|r| std::cmp::Reverse(r["rank"].as_i64().unwrap_or(0)));
+        Ok(json!({"roles": list, "catalog": catalog}))
+    }
+
+    pub async fn ws_save_role(self: &Arc<Self>, key: &str, name: &str, rank: i64, permissions: Vec<String>) -> CmdResult<Value> {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 60 {
+            return Err(CmdError::msg("Название роли — от 1 до 60 символов."));
+        }
+        let rank_ok = (0..=100).contains(&rank);
+        if !rank_ok {
+            return Err(CmdError::msg("Ранг — число от 0 до 100."));
+        }
+        self.ws_rpc("save_role", json!({"p_key": key, "p_name": name, "p_rank": rank, "p_permissions": permissions}), true).await?;
+        self.ws_roles().await
+    }
+
+    pub async fn ws_delete_role(self: &Arc<Self>, key: &str) -> CmdResult<Value> {
+        self.ws_rpc("delete_role", json!({"p_key": key}), true).await?;
+        self.ws_roles().await
+    }
+
+    /// Удаление этапа воронки: сделки переходят на этап `move_to`.
+    pub async fn ws_delete_stage(self: &Arc<Self>, stage: &str, move_to: &str) -> CmdResult<Value> {
+        let s = self.require()?;
+        if stage == move_to {
+            return Err(CmdError::msg("Выберите другой этап для переноса сделок."));
+        }
+        if s.is_cloud {
+            let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+            let moved = sync::rpc(&cloud, "delete_stage", json!({"p_stage": stage, "p_move_to": move_to})).await.map_err(cloud_err)?;
+            self.ws_sync_now().await?;
+            return Ok(json!({"moved": moved}));
+        }
+        let moved = self.with_crm(|st| {
+            let target = st.get("pipeline_stages", move_to)?.ok_or_else(|| crate::error::AppError::msg("Этап для переноса не найден."))?;
+            let pipeline = target["pipeline_id"].clone();
+            let q = Query { filters: vec![crate::workspace::query::Filter::eq("stage_id", stage)], ..Default::default() };
+            let deals = st.list("deals", &q)?;
+            for d in &deals {
+                let mut f = Map::new();
+                f.insert("stage_id".into(), json!(move_to));
+                f.insert("pipeline_id".into(), pipeline.clone());
+                st.save("deals", d["id"].as_str(), &f)?;
+            }
+            st.delete("pipeline_stages", stage)?;
+            Ok(deals.len())
+        })?;
+        self.ws_changed();
+        Ok(json!({"moved": moved}))
+    }
+
     // ------------------------------------------------------------ синхронизация
 
     fn ws_sync_soon(self: &Arc<Self>, s: &Arc<Session>) {

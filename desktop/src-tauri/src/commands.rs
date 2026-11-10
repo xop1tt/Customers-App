@@ -444,6 +444,22 @@ sync_cmds! {
 }
 
 #[tauri::command]
+pub async fn ws_roles(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_roles().await
+}
+#[tauri::command]
+pub async fn ws_save_role(core: C<'_>, key: String, name: String, rank: i64, permissions: Vec<String>) -> CmdResult<Value> {
+    core.inner().ws_save_role(&key, &name, rank, permissions).await
+}
+#[tauri::command]
+pub async fn ws_delete_role(core: C<'_>, key: String) -> CmdResult<Value> {
+    core.inner().ws_delete_role(&key).await
+}
+#[tauri::command]
+pub async fn ws_delete_stage(core: C<'_>, stage: String, move_to: String) -> CmdResult<Value> {
+    core.inner().ws_delete_stage(&stage, &move_to).await
+}
+#[tauri::command]
 pub async fn ws_create_workspace(core: C<'_>, name: String) -> CmdResult<Value> {
     core.inner().ws_create_workspace(&name).await
 }

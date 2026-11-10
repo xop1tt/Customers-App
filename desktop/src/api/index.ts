@@ -5,7 +5,7 @@ import type {
   AccountPrefs, AuthCallback, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
-  CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsState,
+  CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsRoles, WsState,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -132,6 +132,10 @@ export const api = {
   wsAcceptInvitation: (token: string) => call<WsState>("ws_accept_invitation", { token }),
   wsSetMemberRole: (user: string, role: string) => call<WsState>("ws_set_member_role", { user, role }),
   wsRemoveMember: (user: string) => call<WsState>("ws_remove_member", { user }),
+  wsRoles: () => call<WsRoles>("ws_roles"),
+  wsSaveRole: (key: string, name: string, rank: number, permissions: string[]) => call<WsRoles>("ws_save_role", { key, name, rank, permissions }),
+  wsDeleteRole: (key: string) => call<WsRoles>("ws_delete_role", { key }),
+  wsDeleteStage: (stage: string, moveTo: string) => call<{ moved: number }>("ws_delete_stage", { stage, moveTo }),
   wsLeave: () => call<WsState>("ws_leave"),
 
   // обновления
