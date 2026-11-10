@@ -144,7 +144,8 @@ impl WorkspaceStore {
              CREATE TABLE IF NOT EXISTS deal_stage_history(id TEXT PRIMARY KEY, deal_id TEXT NOT NULL, from_stage_id TEXT,
                  to_stage_id TEXT NOT NULL, changed_by TEXT, changed_at TEXT NOT NULL, server_seq INTEGER NOT NULL DEFAULT 0,
                  local INTEGER NOT NULL DEFAULT 0);
-             CREATE INDEX IF NOT EXISTS deal_stage_history_deal ON deal_stage_history(deal_id, changed_at);",
+             CREATE INDEX IF NOT EXISTS deal_stage_history_deal ON deal_stage_history(deal_id, changed_at);
+             CREATE TABLE IF NOT EXISTS attachment_blobs(id TEXT PRIMARY KEY, data BLOB NOT NULL, uploaded INTEGER NOT NULL DEFAULT 0);",
         );
         for e in ENTITIES {
             sql.push_str(&format!(
@@ -534,6 +535,33 @@ impl WorkspaceStore {
             self.conn.prepare("SELECT op_id, entity, entity_id, kind, fields, ts, base_version, attempts, state, last_error FROM sync_outbox ORDER BY seq")?;
         let rows = st.query_map([], op_from_row)?;
         Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    // ------------------------------------------------------------ содержимое вложений (в зашифрованной базе)
+
+    pub fn put_blob(&self, id: &str, data: &[u8], uploaded: bool) -> AppResult<()> {
+        self.conn.execute("INSERT OR REPLACE INTO attachment_blobs(id, data, uploaded) VALUES(?1,?2,?3)", params![id, data, uploaded as i64])?;
+        Ok(())
+    }
+
+    pub fn blob(&self, id: &str) -> Option<Vec<u8>> {
+        self.conn.query_row("SELECT data FROM attachment_blobs WHERE id=?1", [id], |r| r.get(0)).optional().ok().flatten()
+    }
+
+    /// Файлы, ещё не отправленные в облако, только для вложений, чьи метаданные уже приняты сервером.
+    pub fn blobs_to_upload(&self) -> Vec<(String, Vec<u8>)> {
+        let Ok(mut st) = self.conn.prepare(
+            "SELECT b.id, b.data FROM attachment_blobs b JOIN attachments a ON a.id=b.id
+             WHERE b.uploaded=0 AND a.sync_state='synced' AND NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.entity='attachments' AND o.entity_id=b.id AND o.state='pending')",
+        ) else {
+            return vec![];
+        };
+        st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, Vec<u8>>(1)?))).map(|r| r.flatten().collect()).unwrap_or_default()
+    }
+
+    pub fn mark_blob_uploaded(&self, id: &str) -> AppResult<()> {
+        self.conn.execute("UPDATE attachment_blobs SET uploaded=1 WHERE id=?1", [id])?;
+        Ok(())
     }
 
     pub fn pending_count(&self) -> i64 {
