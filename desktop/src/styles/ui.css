@@ -98,7 +98,7 @@
 .tooltip { position: fixed; z-index: 2000; max-width: 280px; padding: 5px 8px; background: var(--tooltip-bg); color: var(--tooltip-text); border: 1px solid var(--line-strong); border-radius: var(--r-sm); font-size: var(--fs-sm); line-height: 1.35; pointer-events: none; animation: fade-in 90ms; }
 
 .scrim { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: 20px; background: var(--scrim); animation: fade-in 120ms; }
-.dialog { display: flex; flex-direction: column; max-width: 100%; max-height: 100%; background: var(--bg-overlay); border: 1px solid var(--line-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); animation: pop-in 140ms var(--ease); }
+.dialog { display: flex; flex-direction: column; max-width: 100%; max-height: calc(100vh - 40px); background: var(--bg-overlay); border: 1px solid var(--line-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); animation: pop-in 140ms var(--ease); }
 .dialog-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 10px 18px; flex: none; }
 .dialog-body { padding: 4px 18px 16px; overflow: auto; min-height: 0; }
 .dialog-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); flex: none; flex-wrap: wrap; }

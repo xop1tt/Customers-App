@@ -14,16 +14,16 @@ const update = (over: Partial<UpdateInfo>): UpdateInfo => ({
 const sync = (over: Partial<SyncStatus>): SyncStatus => ({ enabled: true, kind: "idle", message: null, lastSync: null, pending: 0, ...over });
 
 describe("кнопка «Обновить»", () => {
-  it("видна, пока есть найденная или скачанная версия, и не пропадает из-за проверки или ошибки", () => {
+  it("видна, только когда обновление уже загружено", () => {
     expect(updateVisible(null)).toBe(false);
     expect(updateVisible(update({ phase: "upToDate" }))).toBe(false);
     expect(updateVisible(update({ phase: "idle" }))).toBe(false);
-    for (const phase of ["available", "downloading", "ready", "installing"] as const) expect(updateVisible(update({ phase }))).toBe(true);
     const found = { version: "1.3.0", title: "", notes: "", page: null, size: 1 };
-    expect(updateVisible(update({ phase: "checking", available: found }))).toBe(true);
-    expect(updateVisible(update({ phase: "failed", message: "нет места" } as Partial<UpdateInfo>))).toBe(false);
-    expect(updateVisible(update({ phase: "failed", available: found }))).toBe(true);
+    for (const phase of ["available", "downloading", "checking", "failed"] as const) expect(updateVisible(update({ phase, available: found }))).toBe(false);
+    for (const phase of ["ready", "installing"] as const) expect(updateVisible(update({ phase }))).toBe(true);
     expect(updateVisible(update({ phase: "checking", stagedVersion: "1.3.0" }))).toBe(true);
+    expect(updateVisible(update({ phase: "failed", stagedVersion: "1.3.0" }))).toBe(true);
+    expect(updateVisible(update({ phase: "downloading", stagedVersion: "1.3.0" }))).toBe(false);
   });
 
   it("стоит в левой панели над «Настроить панель»", async () => {
