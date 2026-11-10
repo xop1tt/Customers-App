@@ -54,6 +54,11 @@ pub async fn rpc(auth: &CloudAuth, name: &str, args: Value) -> CloudResult<Value
     call(auth, "POST", &format!("/rest/v1/rpc/{name}"), Some(&args), &[]).await
 }
 
+/// Чтение таблицы через PostgREST (`path` — часть после `/rest/v1/`).
+pub async fn select(auth: &CloudAuth, path: &str) -> CloudResult<Value> {
+    call(auth, "GET", &format!("/rest/v1/{path}"), None, &[]).await
+}
+
 /// Список своих Workspace; при первом входе 2.0 создаётся личный (идемпотентно).
 pub async fn workspaces(auth: &CloudAuth) -> CloudResult<Vec<WorkspaceInfo>> {
     rpc(auth, "ensure_personal_workspace", json!({})).await?;

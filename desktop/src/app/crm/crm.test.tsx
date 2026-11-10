@@ -150,3 +150,21 @@ describe("интерфейс CRM", () => {
     await waitFor(() => expect(document.querySelector(".topbar-title")).toHaveTextContent("🔥Горячие"));
   });
 });
+
+describe("редакторы воронок и ролей (демо-ядро)", () => {
+  it("удаление этапа переносит сделки на выбранный этап", async () => {
+    const stages = (await api.wsList("pipeline_stages", { sort: [{ field: "position", dir: "asc" }] })).items;
+    const deals = (await api.wsList("deals")).items;
+    const from = stages.find((s) => deals.some((d) => d.stage_id === s.id))!;
+    const to = stages.find((s) => s.id !== from.id && s.pipeline_id === from.pipeline_id)!;
+    const n = deals.filter((d) => d.stage_id === from.id).length;
+    expect(await api.wsDeleteStage(from.id, to.id)).toEqual({ moved: n });
+    expect((await api.wsList("deals")).items.filter((d) => d.stage_id === from.id)).toHaveLength(0);
+    expect((await api.wsList("pipeline_stages")).items.some((s) => s.id === from.id)).toBe(false);
+    await expect(api.wsDeleteStage(to.id, to.id)).rejects.toBeDefined();
+  });
+
+  it("локальный Workspace не показывает роли", async () => {
+    expect(await api.wsRoles()).toEqual({ roles: [], catalog: [] });
+  });
+});

@@ -24,9 +24,24 @@ let seq = 1;
 const uid = () => `00000000-0000-4000-8000-${String(1000 + seq++).padStart(12, "0")}`;
 const now = () => new Date().toISOString();
 
+const PERM_TEXT: Record<string, string> = {
+  "records.view": "Читать записи CRM", "records.create": "Создавать записи", "records.edit_own": "Менять свои записи", "records.edit": "Менять любые записи",
+  "records.delete": "Удалять и восстанавливать записи", "records.export": "Экспорт и массовая выгрузка", "members.view": "Видеть участников",
+  "members.manage": "Менять роли и удалять участников", "invitations.manage": "Приглашать участников", "roles.manage": "Создавать и менять свои роли",
+  "workspace.manage": "Название, валюта и настройки Workspace", "workspace.delete": "Удалить Workspace", "ownership.transfer": "Передать владение",
+  "pipelines.manage": "Воронки и этапы", "fields.manage": "Пользовательские поля", "collections.manage": "Общие коллекции",
+  "analytics.view": "Аналитика и отчёты", "audit.view": "Журнал действий",
+};
+interface CustomRole { key: string; name: string; rank: number; permissions: string[] }
+const customRoles = new Map<string, CustomRole[]>();
+
 interface Ws { info: WorkspaceInfo; members: WsMember[]; tables: Map<string, Row[]>; prefs: Map<string, { position: number; hidden: boolean }>; conflicts: WsConflict[] }
 
-const member = (userId: string, displayName: string, role: string): WsMember => ({ userId, displayName, role, roleName: ROLE_NAME[role] ?? role, rank: RANK[role] ?? 0, avatarPath: null, email: null });
+const roleOf = (wsId: string, key: string) => customRoles.get(wsId)?.find((r) => r.key === key);
+const member = (userId: string, displayName: string, role: string, wsId = ""): WsMember => {
+  const own = roleOf(wsId, role);
+  return { userId, displayName, role, roleName: own?.name ?? ROLE_NAME[role] ?? role, rank: own?.rank ?? RANK[role] ?? 0, avatarPath: null, email: null };
+};
 
 function info(id: string, name: string, role: string, personal: boolean, members: number): WorkspaceInfo {
   return { id, name, personal, role, roleName: ROLE_NAME[role] ?? role, rank: RANK[role] ?? 0, permissions: ROLE_PERMS[role] ?? [], members, remote: false, defaultCurrency: "RUB" };
@@ -307,6 +322,44 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
     case "ws_hide_collection":
       ws.prefs.set(s("id"), { position: ws.prefs.get(s("id"))?.position ?? 0, hidden: Boolean(args.hidden) });
       return null;
+    case "ws_roles": {
+      if (!demoParams.has("team") || !ws.info.remote) return { roles: [], catalog: [] };
+      const sys = Object.keys(ROLE_PERMS).map((key) => ({ key, name: ROLE_NAME[key], rank: RANK[key], system: true, permissions: ROLE_PERMS[key] }));
+      const own = (customRoles.get(ws.info.id) ?? []).map((r) => ({ ...r, system: false }));
+      return { roles: [...sys, ...own].sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0)), catalog: ALL_PERMS.map((key) => ({ key, description: PERM_TEXT[key] })) };
+    }
+    case "ws_save_role": {
+      if (!demoParams.has("team")) return remoteOnly();
+      if (!has(ws, "roles.manage")) fail("Нет прав на роли.");
+      const key = s("key");
+      if (key in ROLE_PERMS) fail("Ключи системных ролей зарезервированы.");
+      const rank = Number(args.rank);
+      if (!(rank >= 0 && rank < ws.info.rank)) fail("Ранг роли должен быть ниже вашего.");
+      const perms = args.permissions as string[];
+      const lacking = perms.find((p) => !has(ws, p));
+      if (lacking) fail(`Нельзя выдать разрешение, которого нет у вас: ${lacking}`);
+      const list = customRoles.get(ws.info.id) ?? [];
+      const next = { key, name: s("name").trim(), rank, permissions: perms };
+      customRoles.set(ws.info.id, [...list.filter((r) => r.key !== key), next]);
+      ws.members.forEach((m) => { if (m.role === key) Object.assign(m, member(m.userId, m.displayName, key, ws.info.id)); });
+      return wsCall("ws_roles", {}, leads);
+    }
+    case "ws_delete_role": {
+      if (!demoParams.has("team")) return remoteOnly();
+      if (!has(ws, "roles.manage")) fail("Нет прав на роли.");
+      if (ws.members.some((m) => m.role === s("key"))) fail("Роль используется участниками.");
+      customRoles.set(ws.info.id, (customRoles.get(ws.info.id) ?? []).filter((r) => r.key !== s("key")));
+      return wsCall("ws_roles", {}, leads);
+    }
+    case "ws_delete_stage": {
+      if (!has(ws, "pipelines.manage")) fail("Нет прав на изменение воронок.");
+      const target = table(ws, "pipeline_stages").find((x) => x.id === s("moveTo") && !x.deleted_at) ?? fail("Этап для переноса не найден.");
+      if (target.id === s("stage")) fail("Выберите другой этап для переноса сделок.");
+      const deals = table(ws, "deals").filter((d) => d.stage_id === s("stage"));
+      deals.forEach((d) => save(ws, "deals", d.id, { stage_id: target.id, pipeline_id: target.pipeline_id }));
+      save(ws, "pipeline_stages", s("stage"), { deleted_at: now() });
+      return { moved: deals.length };
+    }
     case "ws_conflicts": return { conflicts: ws.conflicts, rejected: [] };
     case "ws_resolve_conflict": ws.conflicts = ws.conflicts.filter((c) => c.id !== s("id")); return null;
     case "ws_dismiss_rejected": return 0;
@@ -320,7 +373,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       if (!demoParams.has("team")) return remoteOnly();
       if (!has(ws, "members.manage")) fail("Нет прав на изменение ролей.");
       const m = ws.members.find((x) => x.userId === s("user")) ?? fail("Участник не найден.");
-      Object.assign(m, member(m.userId, m.displayName, s("role")));
+      Object.assign(m, member(m.userId, m.displayName, s("role"), ws.info.id));
       return state();
     }
     case "ws_remove_member":
