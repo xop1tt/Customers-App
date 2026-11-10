@@ -328,7 +328,13 @@ fn custom_fields_need_fields_manage_and_values_link_to_a_card() {
     let v = s.save("custom_field_values", None, &m(json!({"field_id": id(&f), "entity_type": "company", "entity_id": id(&c), "value": "A"}))).unwrap();
     assert_eq!(s.linked("custom_field_values", "company", &id(&c)).unwrap().len(), 1);
     s.save("custom_field_values", Some(&id(&v)), &m(json!({"value": null}))).unwrap();
-    assert!(s
-        .save("custom_field_values", None, &m(json!({"field_id": "99999999-9999-4999-8999-999999999999", "entity_type": "company", "entity_id": id(&c), "value": "A"})))
-        .is_err(), "поле должно существовать");
+    assert!(
+        s.save(
+            "custom_field_values",
+            None,
+            &m(json!({"field_id": "99999999-9999-4999-8999-999999999999", "entity_type": "company", "entity_id": id(&c), "value": "A"}))
+        )
+        .is_err(),
+        "поле должно существовать"
+    );
 }
