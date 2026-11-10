@@ -339,6 +339,12 @@ button.kpi:not(:disabled):hover { background: var(--bg-hover); }
 .ws-member-list .ws-member:last-child { border-bottom: 0; }
 .nav-title.row { display: flex; align-items: center; padding-right: 4px; }
 .nav-title-btn { width: 22px; height: 22px; }
+.nav-title-toggle { padding-left: 4px; }
+.nav-toggle { display: flex; align-items: center; gap: 4px; min-width: 0; height: 20px; padding: 0 6px 0 2px; border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; text-align: left; cursor: pointer; }
+.nav-toggle:hover:not(:disabled) { color: var(--text-2); }
+.nav-toggle:disabled { cursor: default; }
+.nav-toggle:disabled .nav-toggle-icon { visibility: hidden; }
+.nav-toggle-icon { flex: none; opacity: 0.8; }
 .nav-emoji { flex: none; width: 16px; font-size: 14px; line-height: 1; text-align: center; }
 
 /* ---------- страницы и карточки CRM ---------- */
@@ -370,3 +376,16 @@ button.kpi:not(:disabled):hover { background: var(--bg-hover); }
 .emoji-cell:hover { background: var(--bg-hover); }
 .emoji-cell.on { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 @media (max-width: 760px) { .emoji-grid { grid-template-columns: repeat(8, 1fr); } .topbar-emoji { font-size: 18px; } }
+
+/* ---------- профиль сотрудника ---------- */
+.profile { width: 100%; max-width: 760px; margin: 0 auto; padding: 28px 24px 40px; display: flex; flex-direction: column; gap: 22px; }
+.profile-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.profile-title { gap: 6px; min-width: 0; }
+.profile-title h1 { margin: 0; font-size: 22px; font-weight: 650; line-height: 1.2; overflow-wrap: anywhere; }
+.profile-sub { color: var(--text-2); }
+.profile-tags { gap: 6px; flex-wrap: wrap; }
+.profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.profile-facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.profile-fact { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-raised); min-width: 0; }
+.profile-fact dt { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+.profile-fact dd { margin: 0; overflow-wrap: anywhere; }

@@ -10,6 +10,7 @@ import { Button, Field, IconButton, Segmented, Select, TextInput } from "../../u
 import { Icon } from "../../ui/icons";
 import { Dialog, type MenuItem, confirmDialog, showMenu } from "../../ui/overlay";
 import { attempt, setState, toast, useStore } from "../../state/store";
+import { GroupTitle, useCollapsed } from "../SideGroup";
 
 /** Может ли пользователь менять коллекцию: общие — с `collections.manage`, личные — автор. */
 export function canManage(c: Pick<WsCollection, "visibility" | "created_by">, perms: string[], me: string | undefined): boolean {
@@ -23,6 +24,7 @@ export function CollectionsGroup({ customize, onOpen }: { customize: boolean; on
   const current = useStore((s) => s.collectionId);
   const counts = useStore((s) => s.device.sidebarCounts);
   const [drag, setDrag] = useState<{ from: number; over: number } | null>(null);
+  const shut = useCollapsed("collections");
   if (!ws?.active && !list.length) return null;
   const perms = ws?.permissions ?? [];
   const canCreate = perms.includes("records.view");
@@ -52,11 +54,9 @@ export function CollectionsGroup({ customize, onOpen }: { customize: boolean; on
 
   return (
     <div className="nav-group">
-      <div className="nav-title row">
-        <span className="grow">Коллекции</span>
-        {canCreate && <IconButton icon="plus" size={14} className="nav-title-btn" tip="Новая коллекция" onClick={() => setState({ collectionEdit: { id: null } })} />}
-      </div>
-      {list.map((c, i) =>
+      <GroupTitle id="collections" title="Коллекции"
+        extra={canCreate && <IconButton icon="plus" size={14} className="nav-title-btn" tip="Новая коллекция" onClick={() => setState({ collectionEdit: { id: null } })} />} />
+      {(shut ? list.filter((c) => section === "collection" && current === c.id) : list).map((c, i) =>
         customize ? (
           <div
             key={c.id}

@@ -118,7 +118,7 @@ let eventId = 1;
 
 const baseDevice: DevicePrefs = {
   accent: null, theme: "system", language: "system", uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
-  sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true,
+  sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true, sidebarCollapsed: [],
   lightModeAuto: true, lightModeThreshold: 20, checkUpdates: true, updateCheckHours: 24, lastUpdateCheck: ago(3), backgroundDownload: true,
   lastSeenVersion: "1.1.0", closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: true, rememberedUser: null, lastSection: "home",
   listSort: "score", listSortDescending: true, reportsOfferAfterCrash: true, reportsLogErrors: true, reportsIncludeLog: true, reportsLastSeen: null, legacyImported: true,

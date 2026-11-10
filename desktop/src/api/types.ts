@@ -148,6 +148,8 @@ export interface DevicePrefs {
   sidebarCounts: boolean;
   sidebarSources: boolean;
   sidebarHover: boolean;
+  /** Свёрнутые группы боковой панели. */
+  sidebarCollapsed: string[];
   lightModeAuto: boolean;
   lightModeThreshold: number;
   checkUpdates: boolean;

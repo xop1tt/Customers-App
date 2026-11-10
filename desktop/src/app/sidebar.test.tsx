@@ -105,3 +105,42 @@ describe("экран входа", () => {
     expect(container.querySelector(".brand svg")).toBeNull();
   });
 });
+
+describe("сворачиваемые группы и меню учётной записи", () => {
+  it("группа сворачивается по заголовку и оставляет только открытый пункт", async () => {
+    render(<App />);
+    const nav = await screen.findByLabelText("Навигация");
+    const head = within(nav).getByRole("button", { name: "Работа" });
+    expect(head).toHaveAttribute("aria-expanded", "true");
+    expect(within(nav).getByText("Журнал поиска")).toBeInTheDocument();
+    fireEvent.click(head);
+    await waitFor(() => expect(within(nav).getByRole("button", { name: "Работа" })).toHaveAttribute("aria-expanded", "false"));
+    expect(within(nav).queryByText("Журнал поиска")).toBeNull();
+    fireEvent.click(within(nav).getByRole("button", { name: "По оценке" }));
+    await waitFor(() => expect(within(nav).queryByText("Оценка 90+")).toBeNull());
+    // В режиме настройки панели всё раскрыто.
+    fireEvent.click(within(nav).getByText("Настроить панель"));
+    expect(await within(nav).findByText("Журнал поиска")).toBeInTheDocument();
+    fireEvent.click(within(nav).getByRole("button", { name: "Готово" }));
+    await waitFor(() => expect(within(nav).queryByText("Журнал поиска")).toBeNull());
+    fireEvent.click(within(nav).getByRole("button", { name: "Работа" }));
+    expect(await within(nav).findByText("Журнал поиска")).toBeInTheDocument();
+    fireEvent.click(within(nav).getByRole("button", { name: "По оценке" }));
+    expect(await within(nav).findByText("Оценка 90+")).toBeInTheDocument();
+  });
+
+  it("меню: Профиль, Настройки, Рабочее пространство — без «Аккаунт и синхронизация» и «Данные и копии»", async () => {
+    render(<App />);
+    await screen.findByLabelText("Навигация");
+    fireEvent.click(screen.getByLabelText("Учётная запись"));
+    const items = (await screen.findAllByRole("button")).filter((b) => b.classList.contains("menu-item")).map((b) => b.textContent);
+    expect(items.slice(0, 3)).toEqual(["Профиль", "Настройки", "Рабочее пространство"]);
+    expect(items).not.toContain("Аккаунт и синхронизация");
+    expect(items).not.toContain("Данные и копии");
+    fireEvent.click(screen.getByText("Профиль", { selector: ".menu-item" }));
+    expect(await screen.findByRole("button", { name: "Изменить профиль" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Изменить профиль" }));
+    const dialog = await screen.findByRole("dialog", { name: "Настройки" });
+    expect(within(dialog).getAllByText("Профиль").length).toBeGreaterThan(0);
+  });
+});

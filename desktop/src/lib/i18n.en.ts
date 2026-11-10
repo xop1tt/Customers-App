@@ -703,6 +703,13 @@ export const EN: Record<string, string> = {
   "С уважением,\nИмя Фамилия\n+7 …": "Best regards,\nFirst Last\n+7 …",
   "муниципальный округ": "municipal district",
   "г.": "city",
+  "Изменить профиль": "Edit profile",
+  "Облачная учётная запись": "Cloud account",
+  "Локальная учётная запись": "Local account",
+  "Нет: локальная учётная запись": "None: local account",
+  "Рабочее пространство": "Workspace",
+  "Развернуть": "Expand",
+  "Коллекции": "Collections",
 };
 
 /** Дополнительные шаблоны на регулярных выражениях (числа, склонения). */

@@ -53,13 +53,15 @@ export interface AppState {
   workspaceOpen: boolean;
   /** Диалог коллекции: новая (`id: null`) или изменение существующей. */
   collectionEdit: { id: string | null } | null;
+  /** Открытый профиль сотрудника (раздел «profile»); null — свой. */
+  profileId: string | null;
   /** Растёт при каждом изменении данных Workspace: открытые списки и карточки перечитываются. */
   wsVersion: number;
 }
 
 export const DEFAULT_DEVICE: DevicePrefs = {
   accent: null, theme: "system", language: "system", uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
-  sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true,
+  sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true, sidebarCollapsed: [],
   lightModeAuto: true, lightModeThreshold: 20, checkUpdates: true, updateCheckHours: 24, lastUpdateCheck: null, backgroundDownload: true, lastSeenVersion: null,
   closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: false, rememberedUser: null, lastSection: "home", listSort: "score",
   listSortDescending: true, reportsOfferAfterCrash: true, reportsLogErrors: true, reportsIncludeLog: true, reportsLastSeen: null, legacyImported: false,
@@ -71,7 +73,7 @@ const initial: AppState = {
   phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
   section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru", debugOpen: false,
-  ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0,
+  ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0, profileId: null,
 };
 
 let state = initial;
@@ -207,6 +209,10 @@ const scheduleWorkspace = () => {
 
 export function openCollection(id: string) {
   setState({ section: "collection", collectionId: id, record: null, selection: [], anchor: null, navPeek: false });
+}
+/** Профиль сотрудника; без id — свой. */
+export function openProfile(id: string | null = null) {
+  setState({ section: "profile", profileId: id, collectionId: null, record: null, selection: [], anchor: null, navPeek: false });
 }
 export const openRecord = (table: string, id: string | null) => setState({ record: id ? { table, id } : null });
 

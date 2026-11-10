@@ -28,6 +28,7 @@ import { CollectionPage } from "./crm/CollectionPage";
 import { CrmCard } from "./crm/CrmCard";
 import { CollectionDialog } from "./crm/Collections";
 import { WorkspaceDialog } from "./crm/WorkspaceDialog";
+import { ProfilePage } from "./team/ProfilePage";
 
 // Debug Menu — отдельный модуль, загружается только при открытии в Beta.
 const DebugMenu = lazy(() => import("../debug/DebugMenu"));
@@ -230,6 +231,7 @@ function Shell() {
   const peek = useStore((st) => st.navPeek);
   const crmRecord = useStore((st) => st.record);
   const collectionId = useStore((st) => st.collectionId);
+  const profileId = useStore((st) => st.profileId);
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
   const crm = section === "collection";
   const showInsp = (lead && device.inspectorShown && (!floatInsp || selected === 1)) || (crm && !!crmRecord);
@@ -253,12 +255,13 @@ function Shell() {
       ) : device.sidebarHover ? <HoverNav /> : null}
       <main className="center">
         <TopBar narrow={narrow} />
-        <div className="page-host" key={section === "collection" ? `collection:${collectionId}` : section}>
+        <div className="page-host" key={section === "collection" ? `collection:${collectionId}` : section === "profile" ? `profile:${profileId ?? "me"}` : section}>
           {section === "home" && <HomePage />}
           {lead && <LeadsPage />}
           {section === "sources" && <SourcesPage />}
           {section === "runs" && <RunsPage />}
           {crm && <CollectionPage />}
+          {section === "profile" && <ProfilePage />}
         </div>
       </main>
       {showInsp && (
