@@ -23,6 +23,10 @@ import { ReportDialog } from "./settings/SystemSections";
 import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
 import { useViewportWidth } from "../state/hooks";
+import { CollectionPage } from "./crm/CollectionPage";
+import { CrmCard } from "./crm/CrmCard";
+import { CollectionDialog } from "./crm/Collections";
+import { WorkspaceDialog } from "./crm/WorkspaceDialog";
 
 // Debug Menu — отдельный модуль, загружается только при открытии в Beta.
 const DebugMenu = lazy(() => import("../debug/DebugMenu"));
@@ -206,7 +210,13 @@ function Shell() {
   const inspDock = clamp(inspW, INSP_MIN, Math.max(INSP_MIN, Math.min(INSP_MAX, room)));
   const selected = useStore((st) => st.selection.length);
   const peek = useStore((st) => st.navPeek);
-  const showInsp = lead && device.inspectorShown && (!floatInsp || selected === 1);
+  const crmRecord = useStore((st) => st.record);
+  const collectionId = useStore((st) => st.collectionId);
+  const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
+  const crm = section === "collection";
+  const showInsp = (lead && device.inspectorShown && (!floatInsp || selected === 1)) || (crm && !!crmRecord);
+  const InspectorBody = crm ? CrmCard : Inspector;
+  const inspLabel = crm ? "Карточка записи" : "Сведения о лиде";
 
   return (
     <div className="shell" style={{ ["--nav-w" as string]: `${navW}px`, ["--insp-w" as string]: `${floatInsp ? Math.min(inspW, 460) : inspDock}px` }}>
@@ -225,24 +235,25 @@ function Shell() {
       ) : device.sidebarHover ? <HoverNav /> : null}
       <main className="center">
         <TopBar narrow={narrow} />
-        <div className="page-host" key={section}>
+        <div className="page-host" key={section === "collection" ? `collection:${collectionId}` : section}>
           {section === "home" && <HomePage />}
           {lead && <LeadsPage />}
           {section === "sources" && <SourcesPage />}
           {section === "runs" && <RunsPage />}
+          {crm && <CollectionPage />}
         </div>
       </main>
       {showInsp && (
         floatInsp ? (
-          <aside className="inspector float" aria-label="Сведения о лиде">
-            <IconButton icon="x" tip="Закрыть" className="inspector-close" onClick={() => select([])} />
-            <Inspector />
+          <aside className="inspector float" aria-label={inspLabel}>
+            {!crm && <IconButton icon="x" tip="Закрыть" className="inspector-close" onClick={() => select([])} />}
+            <InspectorBody />
           </aside>
         ) : (
           <>
             <Resizer side="right" value={inspDock} min={INSP_MIN} max={Math.max(INSP_MIN, Math.min(INSP_MAX, room))} onLive={setInspLive} onCommit={(v) => { setInspLive(null); void patchDevice({ inspectorWidth: v }); }} />
-            <aside className="inspector" aria-label="Сведения о лиде">
-              <Inspector />
+            <aside className="inspector" aria-label={inspLabel}>
+              <InspectorBody />
             </aside>
           </>
         )
@@ -250,6 +261,8 @@ function Shell() {
       {exportOpen && <ExportDialog />}
       {whatsNew && <WhatsNewDialog />}
       {reportOpen && <ReportDialog onClose={() => setState({ reportOpen: false })} />}
+      <WorkspaceDialog />
+      <CollectionDialog key={collectionKey} />
       <CrashPrompt />
     </div>
   );

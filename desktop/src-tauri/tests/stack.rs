@@ -163,3 +163,142 @@ async fn mail_limit_message_reaches_user() {
         other => panic!("повтор раньше 15 минут должен быть отклонён, получено {other:?}"),
     }
 }
+
+// ---------------------------------------------------------------- Customers 2.0: Workspace и CRM
+
+use customers_lib::workspace::query::{Filter, Query};
+use customers_lib::workspace::store::WorkspaceStore;
+use customers_lib::workspace::sync::{self as crm_sync, CrmSync};
+use serde_json::{json, Map, Value};
+
+fn fields(v: Value) -> Map<String, Value> {
+    v.as_object().cloned().unwrap()
+}
+
+impl Stack {
+    async fn user(&self, name: &str) -> (Arc<CloudAuth>, String) {
+        let email = unique(name);
+        let (auth, _, _) = self.device(name);
+        auth.sign_up(&email, "Str0ngPassw0rd").await.unwrap();
+        auth.verify(&email, &self.code(&email).await, "signup").await.unwrap();
+        (auth, email)
+    }
+
+    /// Локальная база Workspace пользователя, как её открывает приложение: права и участники с сервера.
+    async fn crm(&self, auth: &Arc<CloudAuth>, workspace: &str, perms: Option<Vec<String>>) -> (Arc<Mutex<WorkspaceStore>>, CrmSync) {
+        let me = auth.user().unwrap().id;
+        let info = crm_sync::workspaces(auth).await.unwrap().into_iter().find(|w| w.id == workspace).expect("Workspace в списке");
+        let members = crm_sync::members(auth, workspace).await.unwrap();
+        let path = self.dir.path().join(format!("{me}-{workspace}.db"));
+        let store = WorkspaceStore::open(&path, None, workspace, &me).unwrap();
+        store.set_permissions(&perms.unwrap_or(info.permissions)).unwrap();
+        store.replace_members(&members).unwrap();
+        let store = Arc::new(Mutex::new(store));
+        let sync = CrmSync::new(auth.clone(), store.clone(), format!("dev-{me}"));
+        (store, sync)
+    }
+}
+
+#[tokio::test]
+async fn workspace_crm_sync_rights_and_conflicts() {
+    let Some(stack) = stack() else {
+        eprintln!("локальный стенд не задан, тест пропущен");
+        return;
+    };
+    // Владелец: личный Workspace создаётся при первом входе, шаблон воронки и коллекций приходит с сервера.
+    let (owner, _) = stack.user("crm-owner").await;
+    let ws = crm_sync::workspaces(&owner).await.unwrap();
+    assert_eq!(ws.len(), 1);
+    let wid = ws[0].id.clone();
+    assert!(ws[0].personal && ws[0].role == "owner");
+    let (store_a, sync_a) = stack.crm(&owner, &wid, None).await;
+    sync_a.sync().await.unwrap();
+    let stages = store_a.lock().unwrap().list("pipeline_stages", &Query::default()).unwrap();
+    assert_eq!(stages.len(), 7);
+    assert_eq!(store_a.lock().unwrap().list("collections", &Query::default()).unwrap().len(), 7);
+
+    // Компания и сделка с устройства владельца уходят на сервер одной синхронизацией.
+    let company = store_a.lock().unwrap().save("companies", None, &fields(json!({"name": "ООО «Альфа»", "phones": ["+7 900 000-00-01"]}))).unwrap();
+    let cid = company["id"].as_str().unwrap().to_string();
+    let open = stages.iter().find(|s| s["kind"] == "open").unwrap();
+    let won = stages.iter().find(|s| s["kind"] == "won").unwrap();
+    let deal = store_a
+        .lock()
+        .unwrap()
+        .save("deals", None, &fields(json!({"title": "Сайт", "pipeline_id": open["pipeline_id"], "stage_id": open["id"], "company_id": cid, "amount": 100000})))
+        .unwrap();
+    let did = deal["id"].as_str().unwrap().to_string();
+    let r = sync_a.sync().await.unwrap();
+    assert_eq!((r.pushed, r.rejected, r.conflicts), (2, 0, 0));
+    assert_eq!(store_a.lock().unwrap().pending_count(), 0);
+
+    // Приглашение сотрудника: токен один раз, принятие добавляет в участники.
+    let (worker, worker_email) = stack.user("crm-worker").await;
+    let invite = crm_sync::rpc(&owner, "invite_member", json!({"p_workspace": wid, "p_email": worker_email, "p_role": "employee"})).await.unwrap();
+    assert!(crm_sync::rpc(&owner, "accept_invitation", json!({"p_token": invite["token"]})).await.is_err(), "приглашение на чужую почту");
+    let joined = crm_sync::rpc(&worker, "accept_invitation", json!({"p_token": invite["token"]})).await.unwrap();
+    assert_eq!(joined.as_str(), Some(wid.as_str()));
+    assert!(crm_sync::rpc(&worker, "accept_invitation", json!({"p_token": invite["token"]})).await.is_err(), "токен одноразовый");
+
+    // Сотрудник видит данные Workspace. Его устройство ещё думает, что может править всё (права устарели) —
+    // сервер отклоняет правку чужой компании, локальная копия перечитывается.
+    let all: Vec<String> = ws[0].permissions.clone();
+    let (store_b, sync_b) = stack.crm(&worker, &wid, Some(all)).await;
+    sync_b.sync().await.unwrap();
+    assert_eq!(store_b.lock().unwrap().get("companies", &cid).unwrap().unwrap()["name"], "ООО «Альфа»");
+    store_b.lock().unwrap().save("companies", Some(&cid), &fields(json!({"name": "Взлом"}))).unwrap();
+    let r = sync_b.sync().await.unwrap();
+    assert_eq!(r.rejected, 1);
+    assert_eq!(store_b.lock().unwrap().get("companies", &cid).unwrap().unwrap()["name"], "ООО «Альфа»");
+    assert_eq!(store_b.lock().unwrap().rejected_ops().unwrap().len(), 1);
+
+    // Своя запись сотрудника; правка одного поля на двух устройствах: позднее по времени правки побеждает,
+    // проигравшая сохраняется в конфликтах у того, чью правку не применили.
+    let own = store_b.lock().unwrap().save("contacts", None, &fields(json!({"first_name": "Ольга", "company_id": cid}))).unwrap();
+    let oid = own["id"].as_str().unwrap().to_string();
+    sync_b.sync().await.unwrap();
+    sync_a.sync().await.unwrap();
+    store_b.lock().unwrap().save("contacts", Some(&oid), &fields(json!({"position": "Директор"}))).unwrap();
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    store_a.lock().unwrap().save("contacts", Some(&oid), &fields(json!({"position": "Закупки"}))).unwrap();
+    sync_a.sync().await.unwrap();
+    let r = sync_b.sync().await.unwrap();
+    assert_eq!(r.conflicts, 1);
+    assert_eq!(store_b.lock().unwrap().get("contacts", &oid).unwrap().unwrap()["position"], "Закупки");
+    let conflicts = store_b.lock().unwrap().conflicts().unwrap();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!((conflicts[0]["field"].as_str(), conflicts[0]["lost"].as_str()), (Some("position"), Some("Директор")));
+
+    // Этап сделки: статус и история этапов считает сервер, другое устройство получает их при загрузке.
+    store_a.lock().unwrap().save("deals", Some(&did), &fields(json!({"stage_id": won["id"]}))).unwrap();
+    sync_a.sync().await.unwrap();
+    sync_b.sync().await.unwrap();
+    let d = store_b.lock().unwrap().get("deals", &did).unwrap().unwrap();
+    assert_eq!(d["status"], "won");
+    assert!(d["closed_at"].is_string());
+    // История: создание на первом этапе и переход на «Успех».
+    let history = store_b.lock().unwrap().stage_history(&did).unwrap();
+    assert_eq!(history.len(), 2);
+    assert_eq!((history[0]["from_stage_id"].is_null(), &history[1]["to_stage_id"]), (true, &won["id"]));
+
+    // Удаление владельцем: у сотрудника запись уходит в корзину, а не пропадает молча.
+    store_a.lock().unwrap().delete("deals", &did).unwrap();
+    sync_a.sync().await.unwrap();
+    sync_b.sync().await.unwrap();
+    let q = Query { filters: vec![Filter::eq("title", "Сайт")], ..Default::default() };
+    assert!(store_b.lock().unwrap().list("deals", &q).unwrap().is_empty());
+    assert!(store_b.lock().unwrap().get("deals", &did).unwrap().unwrap()["deleted_at"].is_string());
+
+    // Исключённый участник теряет доступ: чтение ничего не отдаёт, отправка отвечает «не участник»,
+    // а Workspace пропадает из его списка (по этому приложение удаляет локальную копию).
+    let worker_id = worker.user().unwrap().id;
+    crm_sync::rpc(&owner, "remove_member", json!({"p_workspace": wid, "p_user": worker_id})).await.unwrap();
+    store_b.lock().unwrap().save("contacts", Some(&oid), &fields(json!({"last_name": "Иванова"}))).unwrap();
+    let err = sync_b.sync().await.unwrap_err();
+    assert!(crm_sync::is_not_member(&err), "{err:?}");
+    assert!(crm_sync::workspaces(&worker).await.unwrap().iter().all(|w| w.id != wid));
+
+    // Повторная синхронизация владельца без изменений ничего не гоняет.
+    let idle = sync_a.sync().await.unwrap();
+    assert_eq!((idle.pushed, idle.pulled), (0, 0));
+}

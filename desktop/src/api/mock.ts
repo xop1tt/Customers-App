@@ -6,6 +6,7 @@ import type {
   AccountPrefs, BootInfo, DevicePrefs, DrivesState, Exclusion, ExclusionKind, Lead, OsmCategory, SearchSettings, SearchStatus, SessionInfo, Snapshot, SourceReport,
   SyncStatus, UpdateInfo,
 } from "./types";
+import { wsCall } from "./wsMock";
 
 type Handler = (p: unknown) => void;
 const listeners = new Map<string, Set<Handler>>();
@@ -231,6 +232,17 @@ const DEBUG_SCENARIOS = [
 ];
 
 export async function call(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+  if (cmd.startsWith("ws_")) {
+    const out = await wsCall(cmd, args, () => leads);
+    if (["ws_save", "ws_delete", "ws_restore", "ws_convert_lead", "ws_switch", "ws_create_workspace", "ws_rename_workspace", "ws_reorder_collections", "ws_hide_collection", "ws_resolve_conflict"].includes(cmd)) {
+      setTimeout(() => emit("workspace-changed", null), 0);
+      if (cmd === "ws_convert_lead") {
+        const c = out as { workspaceId: string; companyId: string; contactId: string | null; dealId: string | null };
+        patchLeads([String(args.leadId)], (l) => { l.data.crm = { workspace_id: c.workspaceId, company_id: c.companyId, contact_id: c.contactId, deal_id: c.dealId, converted_at: new Date().toISOString() }; });
+      }
+    }
+    return out;
+  }
   switch (cmd) {
     case "boot_info":
       return {

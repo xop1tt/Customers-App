@@ -320,3 +320,49 @@ button.kpi:not(:disabled):hover { background: var(--bg-hover); }
 .debug-log { border: 1px solid var(--line); border-radius: var(--r-md); max-height: 420px; overflow: auto; font-size: var(--fs-sm); }
 .debug-log-row { display: flex; gap: 8px; align-items: baseline; padding: 4px 10px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .debug-log-row:last-child { border-bottom: 0; }
+
+/* ---------- Customers 2.0: три новых элемента (docs/CRM_ARCHITECTURE.md §8) ---------- */
+.topbar-emoji { flex: none; font-size: 22px; line-height: 1; }
+.ws-avatars { display: inline-flex; align-items: center; height: 28px; padding: 0 2px; border: 0; border-radius: var(--r-sm); background: transparent; }
+.ws-avatars:hover { background: var(--bg-hover); }
+.ws-avatar { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg); }
+.ws-avatar + .ws-avatar { margin-left: -6px; }
+.ws-more { align-items: center; justify-content: center; background: var(--bg-raised); color: var(--text-2); font-size: var(--fs-xs); font-weight: 600; }
+.ws-members { min-width: 240px; }
+.ws-member { display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
+.ws-member-list { display: flex; flex-direction: column; }
+.ws-member-list .ws-member { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.ws-member-list .ws-member:last-child { border-bottom: 0; }
+.nav-title.row { display: flex; align-items: center; padding-right: 4px; }
+.nav-title-btn { width: 22px; height: 22px; }
+.nav-emoji { flex: none; width: 16px; font-size: 14px; line-height: 1; text-align: center; }
+
+/* ---------- страницы и карточки CRM ---------- */
+.crm-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.crm-search { width: min(320px, 100%); }
+.tr.static { position: static; height: 44px; }
+.crm-title { font-weight: 560; }
+.crm-row .td-title { align-items: stretch; }
+.crm-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 12px; }
+.crm-fields .field:has(textarea) { grid-column: 1 / -1; }
+.stage-bar { display: flex; flex-wrap: wrap; gap: 3px; }
+.stage-step { flex: 1 1 72px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 26px; padding: 0 6px; border: 0; border-radius: var(--r-xs); background: var(--bg-raised); color: var(--text-2); font-size: var(--fs-xs); font-weight: 600; }
+.stage-step:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.stage-step.on, .stage-step.on:hover:not(:disabled) { background: var(--accent); color: var(--text-on-accent); }
+.stage-step.won.on, .stage-step.won.on:hover:not(:disabled) { background: var(--green); }
+.stage-step.lost.on, .stage-step.lost.on:hover:not(:disabled) { background: var(--red); }
+.crm-related { display: flex; flex-direction: column; }
+.crm-link { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; height: 32px; padding: 0 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); text-align: left; }
+.crm-link:hover { background: var(--bg-hover); }
+.crm-link .done { text-decoration: line-through; color: var(--text-3); }
+.crm-link .bad, .bad { color: var(--orange); }
+.insp-sec h4.row { display: flex; align-items: center; }
+.insp-sec h4 a { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.tl-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--bg-raised); color: var(--text-2); }
+.crm-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.crm-convert { gap: 12px; flex-wrap: wrap; }
+.emoji-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; }
+.emoji-cell { aspect-ratio: 1; padding: 0; border: 0; border-radius: var(--r-xs); background: transparent; font-size: 17px; line-height: 1; }
+.emoji-cell:hover { background: var(--bg-hover); }
+.emoji-cell.on { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+@media (max-width: 760px) { .emoji-grid { grid-template-columns: repeat(8, 1fr); } .topbar-emoji { font-size: 18px; } }
