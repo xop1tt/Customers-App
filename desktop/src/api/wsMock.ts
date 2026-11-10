@@ -65,7 +65,7 @@ const STAGES: [string, string, number][] = [["Новая", "open", 10], ["Ква
 
 function seed(id: string, demo: boolean): Map<string, Row[]> {
   const t = new Map<string, Row[]>();
-  for (const name of ["pipelines", "pipeline_stages", "companies", "contacts", "crm_leads", "deals", "deal_contacts", "tasks", "activities", "notes", "comments", "collections"]) t.set(name, []);
+  for (const name of ["pipelines", "pipeline_stages", "companies", "contacts", "crm_leads", "deals", "deal_contacts", "tasks", "activities", "notes", "comments", "custom_fields", "custom_field_values", "collections"]) t.set(name, []);
   const pipe = row(id, { name: "Продажи", position: 1, is_default: true });
   t.get("pipelines")!.push(pipe);
   STAGES.forEach(([name, kind, probability], i) => t.get("pipeline_stages")!.push(row(id, { pipeline_id: pipe.id, name, kind, probability, position: i + 1, color: null })));
@@ -181,6 +181,7 @@ function list(ws: Ws, name: string, q: WsQuery = {}): { items: Row[]; total: num
 function rights(ws: Ws, name: string, current: Row | undefined, fields: Record<string, unknown>) {
   if (name === "collections" && fields.visibility !== "private" && (current?.visibility ?? fields.visibility ?? "workspace") === "workspace" && !has(ws, "collections.manage")) fail("Нет прав на общие коллекции.");
   if ((name === "pipelines" || name === "pipeline_stages") && !has(ws, "pipelines.manage")) fail("Нет прав на изменение воронок.");
+  if (name === "custom_fields" && !has(ws, "fields.manage")) fail("Нет прав на свои поля.");
   if (!current) {
     if (!has(ws, "records.create") && name !== "collections") fail("Нет прав на создание записей.");
     return;
@@ -232,7 +233,7 @@ function card(ws: Ws, name: string, id: string) {
   const type = Object.entries(TYPE_TABLE).find(([, t]) => t === name)?.[0];
   const out: Record<string, unknown> = { record, conflicts: ws.conflicts.filter((c) => c.entityId === id) };
   const linked = (t: string) => list(ws, t, { filters: [{ field: "entity_type", op: "eq", value: type }, { field: "entity_id", op: "eq", value: id }], sort: [{ field: "created_at", dir: "desc" }] }).items;
-  if (type && type !== "task") for (const t of ["tasks", "activities", "notes", "comments"]) out[t] = linked(t);
+  if (type && type !== "task") for (const t of ["tasks", "activities", "notes", "comments", "custom_field_values"]) out[t] = linked(t);
   const by = (t: string, field: string) => list(ws, t, { filters: [{ field, op: "eq", value: id }] }).items;
   if (name === "companies") { out.contacts = by("contacts", "company_id"); out.deals = by("deals", "company_id"); }
   if (name === "deals") { out.history = history.get(id) ?? []; out.dealContacts = by("deal_contacts", "deal_id"); }

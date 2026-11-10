@@ -168,3 +168,15 @@ describe("редакторы воронок и ролей (демо-ядро)", 
     expect(await api.wsRoles()).toEqual({ roles: [], catalog: [] });
   });
 });
+
+describe("свои поля (демо-ядро)", () => {
+  it("значения хранятся отдельными записями и приходят в карточке", async () => {
+    const company = (await api.wsList("companies")).items[0]!;
+    const field = await api.wsSave("custom_fields", null, { entity_type: "company", label: "Сегмент", kind: "select", options: ["A", "B"], position: 1 });
+    const value = await api.wsSave("custom_field_values", null, { field_id: field.id, entity_type: "company", entity_id: company.id, value: "A" });
+    const card = await api.wsCard("companies", company.id);
+    expect(card.custom_field_values?.map((v) => v.id)).toEqual([value.id]);
+    await api.wsSave("custom_field_values", value.id, { value: null });
+    expect((await api.wsCard("companies", company.id)).custom_field_values?.[0]?.value).toBeNull();
+  });
+});

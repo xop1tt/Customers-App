@@ -291,7 +291,7 @@ impl Core {
             let record = st.get(entity, id)?.ok_or_else(|| crate::error::AppError::msg("Запись не найдена."))?;
             let mut out = json!({"record": record});
             if let Some(t) = schema::entity(entity).and_then(|e| e.entity_type).filter(|t| *t != "task") {
-                for table in ["tasks", "activities", "notes", "comments"] {
+                for table in ["tasks", "activities", "notes", "comments", "custom_field_values"] {
                     out[table] = json!(st.linked(table, t, id)?);
                 }
             }

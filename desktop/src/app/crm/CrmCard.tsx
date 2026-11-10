@@ -1,6 +1,7 @@
 // Карточка CRM-записи в панели сведений: поля, связанные записи, лента (заметки, события, комментарии),
 // задачи, история этапов сделки и конфликты синхронизации. Новая запись создаётся здесь же.
 
+import { CustomFieldsSection } from "./CustomFields";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import type { CrmRecord, WsCard, WsConflict } from "../../api/types";
@@ -237,6 +238,7 @@ function Overview({ e, data, lk, editable, save }: { e: EntityMeta; data: WsCard
         </div>
       )}
       <Fields e={e} rec={r} lk={lk} editable={editable} onChange={(f, v) => save({ [f]: v })} />
+      <CustomFieldsSection e={e} data={data} editable={editable} />
       {data.contacts && (
         <section className="insp-sec">
           <h4 className="row"><span className="grow">Контакты</span>{creatable && <a onClick={() => void quick("contacts", { company_id: r.id, first_name: "Новый контакт" })}>Добавить</a>}</h4>

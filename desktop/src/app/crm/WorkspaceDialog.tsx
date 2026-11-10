@@ -10,6 +10,7 @@ import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, refreshWorkspace, setState, toast, useStore } from "../../state/store";
 import { useWsQuery } from "./useCrm";
 import { PipelineEditor, RolesEditor } from "./Editors";
+import { CustomFieldsEditor } from "./CustomFields";
 
 const ROLES = [
   { value: "admin", label: "Администратор" },
@@ -29,7 +30,7 @@ function WorkspaceDialogBody() {
   const [name, setName] = useState("");
   const [rename, setRename] = useState<string | null>(null);
   const [token, setToken] = useState("");
-  const [editor, setEditor] = useState<"pipelines" | "roles" | null>(null);
+  const [editor, setEditor] = useState<"pipelines" | "roles" | "fields" | null>(null);
   const close = () => setState({ workspaceOpen: false });
   if (!ws) {
     return (
@@ -79,6 +80,9 @@ function WorkspaceDialogBody() {
           <SettingRow title="Воронки и этапы" hint="Названия, порядок, вероятность, тип этапа.">
             <Button small icon="edit" onClick={() => setEditor("pipelines")}>Открыть</Button>
           </SettingRow>
+          <SettingRow title="Свои поля" hint="Дополнительные поля в карточках компаний, контактов, лидов и сделок.">
+            <Button small icon="edit" onClick={() => setEditor("fields")}>Открыть</Button>
+          </SettingRow>
           {ws.isCloud && (
             <SettingRow title="Роли" hint="Свои роли с набором разрешений.">
               <Button small icon="shield" onClick={() => setEditor("roles")}>Открыть</Button>
@@ -87,6 +91,7 @@ function WorkspaceDialogBody() {
         </Group>
       )}
       {editor === "pipelines" && <PipelineEditor onClose={() => setEditor(null)} />}
+      {editor === "fields" && <CustomFieldsEditor onClose={() => setEditor(null)} />}
       {editor === "roles" && <RolesEditor onClose={() => setEditor(null)} />}
       {ws.isCloud && current && <Members />}
       {ws.isCloud && current && perms.includes("invitations.manage") && <Invite />}
