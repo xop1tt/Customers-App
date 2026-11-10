@@ -459,7 +459,7 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
     // Debug Menu (демо в браузере при ?beta; в приложении отвечает ядро)
     case "debug_dashboard":
       return {
-        version: "1.1.0", channel: "beta", identifier: "local.customers.beta", gitCommit: "demo", gitBranch: "develop", buildProfile: "debug",
+        version: "1.1.0", channel: "beta", identifier: "local.customers.beta", gitCommit: "demo", gitBranch: "main", buildProfile: "debug",
         os: "Demo OS", osVersion: "1.0", kernel: null, arch: "aarch64", tauri: "2.x", webview: null,
         window: { scaleFactor: window.devicePixelRatio, physicalWidth: null, physicalHeight: null, logicalWidth: window.innerWidth, logicalHeight: window.innerHeight },
         uptimeSecs: Math.round(performance.now() / 1000), pid: null, memoryBytes: null, cpuPercent: null, dataDir: "~/.local/share/customers-beta", logsDir: "~/.local/share/customers-beta/logs",
