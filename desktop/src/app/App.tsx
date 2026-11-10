@@ -29,6 +29,10 @@ import { CrmCard } from "./crm/CrmCard";
 import { CollectionDialog } from "./crm/Collections";
 import { WorkspaceDialog } from "./crm/WorkspaceDialog";
 import { ProfilePage } from "./team/ProfilePage";
+import { PeoplePage } from "./team/PeoplePage";
+import { ChatPage } from "./team/ChatPage";
+import { NotificationsPage } from "./team/NotificationsPage";
+import { useChatPolling } from "../state/team";
 
 // Debug Menu — отдельный модуль, загружается только при открытии в Beta.
 const DebugMenu = lazy(() => import("../debug/DebugMenu"));
@@ -232,6 +236,7 @@ function Shell() {
   const crmRecord = useStore((st) => st.record);
   const collectionId = useStore((st) => st.collectionId);
   const profileId = useStore((st) => st.profileId);
+  useChatPolling();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
   const crm = section === "collection";
   const showInsp = (lead && device.inspectorShown && (!floatInsp || selected === 1)) || (crm && !!crmRecord);
@@ -262,6 +267,9 @@ function Shell() {
           {section === "runs" && <RunsPage />}
           {crm && <CollectionPage />}
           {section === "profile" && <ProfilePage />}
+          {section === "people" && <PeoplePage />}
+          {section === "chat" && <ChatPage />}
+          {section === "notifications" && <NotificationsPage />}
         </div>
       </main>
       {showInsp && (

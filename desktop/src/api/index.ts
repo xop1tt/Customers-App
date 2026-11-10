@@ -5,7 +5,7 @@ import type {
   AccountPrefs, AuthCallback, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
-  CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState,
+  CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -141,6 +141,11 @@ export const api = {
   wsDeleteRole: (key: string) => call<WsRoles>("ws_delete_role", { key }),
   wsDeleteStage: (stage: string, moveTo: string) => call<{ moved: number }>("ws_delete_stage", { stage, moveTo }),
   wsLeave: () => call<WsState>("ws_leave"),
+  wsTeam: () => call<TeamMember[]>("ws_team"),
+  wsUpdateMember: (user: string, fields: MemberPatch) => call<TeamMember>("ws_update_member", { user, fields }),
+  /** Действие чата: имя функции сервера (chat_list, chat_send…) и её аргументы без префикса `p_`. */
+  wsChat: <T = unknown>(action: string, args: Record<string, unknown> = {}) => call<T>("ws_chat", { action, args }),
+  wsChatPoll: () => call<ChatPoll>("ws_chat_poll"),
 
   // обновления
   updateInfo: () => call<UpdateInfo>("update_info"),

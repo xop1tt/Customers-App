@@ -104,7 +104,7 @@ function ensure(): Ws {
       const team = "ws-team";
       const members = [member(ME, "Анна", "manager"), member("00000000-0000-4000-8000-000000000002", "Борис Петров", "owner"), member("00000000-0000-4000-8000-000000000003", "Вера Ким", "employee"),
         member("00000000-0000-4000-8000-000000000004", "Глеб Орлов", "employee"), member("00000000-0000-4000-8000-000000000005", "Дина Лис", "viewer"), member("00000000-0000-4000-8000-000000000006", "Егор Сом", "employee")];
-      workspaces.push({ info: info(team, "Отдел продаж", "manager", false, members.length), members, tables: seed(team, true), prefs: new Map(), conflicts: [] });
+      workspaces.push({ info: { ...info(team, "Отдел продаж", "manager", false, members.length), remote: true }, members, tables: seed(team, true), prefs: new Map(), conflicts: [] });
       active = team;
     }
     active ??= personal;

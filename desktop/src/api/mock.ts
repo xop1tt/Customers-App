@@ -4,9 +4,10 @@
 import catalog from "../../src-tauri/data/osm_catalog.json";
 import type {
   AccountPrefs, BootInfo, DevicePrefs, DrivesState, Exclusion, ExclusionKind, Lead, OsmCategory, SearchSettings, SearchStatus, SessionInfo, Snapshot, SourceReport,
-  SyncStatus, UpdateInfo,
+  SyncStatus, UpdateInfo, WsState,
 } from "./types";
 import { wsCall } from "./wsMock";
+import { teamCall } from "./chatMock";
 
 type Handler = (p: unknown) => void;
 const listeners = new Map<string, Set<Handler>>();
@@ -127,7 +128,7 @@ let device: DevicePrefs = { ...baseDevice };
 
 let account: AccountPrefs = {
   autoSearchMinutes: 60, signature: "", backupDirectory: "~/Documents/Customers Backups/anna", autoBackup: true, keepBackups: 14, dataPath: null,
-  notifyNewLeads: true, notifyErrors: true, notifySync: false, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1, callApp: "system",
+  notifyNewLeads: true, notifyErrors: true, notifySync: false, notifyMessages: true, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1, callApp: "system",
   welcomeDone: !demo.has("welcome"), exportLastTab: "file",
 };
 
@@ -232,6 +233,11 @@ const DEBUG_SCENARIOS = [
 ];
 
 export async function call(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+  if (["ws_team", "ws_update_member", "ws_chat", "ws_chat_poll"].includes(cmd)) {
+    const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
+    const me = session();
+    return teamCall(cmd, args, { team: ws.isCloud, me: ws.me, myName: me.displayName, myAvatar: me.avatar ?? null, wsId: ws.active ?? "", members: ws.members, perms: ws.permissions });
+  }
   if (cmd.startsWith("ws_")) {
     const out = await wsCall(cmd, args, () => leads);
     if (["ws_save", "ws_delete", "ws_restore", "ws_convert_lead", "ws_switch", "ws_create_workspace", "ws_rename_workspace", "ws_reorder_collections", "ws_hide_collection", "ws_resolve_conflict"].includes(cmd)) {

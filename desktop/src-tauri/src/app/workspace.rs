@@ -30,6 +30,8 @@ pub struct CrmState {
     last_sync: Option<String>,
     reminders: bool,
     notified: std::collections::BTreeSet<String>,
+    /// Курсор опроса чата: (Workspace, последний увиденный номер сообщения или уведомления).
+    chat_cursor: Option<(String, i64)>,
 }
 
 type Store = Arc<Mutex<WorkspaceStore>>;
@@ -833,6 +835,160 @@ impl Core {
         }
     }
 
+    // ------------------------------------------------------------ сотрудники, чат и уведомления (облако)
+
+    /// Активный облачный Workspace; локальный — None (там один пользователь, чата нет).
+    fn remote_active(&self, s: &Session) -> CmdResult<Option<WorkspaceInfo>> {
+        Ok(self.ws_catalog(s)?.active_info().filter(|w| w.remote).cloned())
+    }
+
+    /// Справочник сотрудников. Локальный Workspace: только вы. Облако недоступно: участники из локальной копии.
+    pub async fn ws_team(self: &Arc<Self>) -> CmdResult<Value> {
+        let s = self.require()?;
+        let me = user_id(&s);
+        let info = self.info();
+        let (name, avatar) = info.as_ref().map(|i| (i.display_name.clone(), i.avatar.clone())).unwrap_or_default();
+        let email = self.cloud_user.lock().unwrap().as_ref().map(|u| u.email.clone());
+        let Some(active) = self.remote_active(&s)? else {
+            return Ok(json!([{"user_id": me, "display_name": name, "avatar": avatar, "email": email, "role": "owner",
+                              "role_name": "Владелец", "rank": 100, "joined_at": null, "title": "", "department": "",
+                              "manager_id": null, "hired_on": null, "last_seen": null, "online": true, "can_edit": false}]));
+        };
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        match sync::rpc(&cloud, "team_directory", json!({"p_workspace": active.id})).await {
+            Ok(list) => {
+                // Своё имя и фото у коллег устарели (например, сменили на другом устройстве) — обновляем.
+                if let Some(mine) = list.as_array().and_then(|a| a.iter().find(|p| p["user_id"].as_str() == Some(me.as_str()))) {
+                    let name_changed = !name.is_empty() && mine["display_name"].as_str() != Some(name.as_str());
+                    let avatar_changed = mine["avatar"].as_str().unwrap_or("") != avatar.as_deref().unwrap_or("");
+                    if name_changed || avatar_changed {
+                        self.publish_profile(&s, name_changed.then_some(name.as_str()), avatar_changed.then(|| avatar.as_deref().unwrap_or("")));
+                    }
+                }
+                Ok(list)
+            }
+            Err(CloudError::Network(_)) => {
+                let members = self.ws_store(&s)?.lock().unwrap().members().map_err(cmd)?;
+                Ok(Value::Array(
+                    members
+                        .into_iter()
+                        .map(|m| {
+                            json!({"user_id": m.user_id, "display_name": m.display_name, "avatar": null, "email": m.email,
+                                   "role": m.role, "role_name": m.role_name, "rank": m.rank, "joined_at": null, "title": "",
+                                   "department": "", "manager_id": null, "hired_on": null, "last_seen": null,
+                                   "online": false, "can_edit": false, "offline": true})
+                        })
+                        .collect(),
+                ))
+            }
+            Err(e) => Err(cloud_err(e)),
+        }
+    }
+
+    /// Карточка сотрудника: должность, отдел, руководитель, дата прихода.
+    pub async fn ws_update_member(self: &Arc<Self>, user: &str, fields: Map<String, Value>) -> CmdResult<Value> {
+        let text = |k: &str| fields.get(k).and_then(Value::as_str).map(|v| v.trim().chars().take(120).collect::<String>());
+        let manager = fields.get("managerId");
+        let hired = fields.get("hiredOn");
+        let hired_ok = hired.and_then(Value::as_str).map(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").is_ok()).unwrap_or(true);
+        if !hired_ok {
+            return Err(CmdError::msg("Дата прихода — в формате ГГГГ-ММ-ДД."));
+        }
+        let args = json!({
+            "p_user": user,
+            "p_title": text("title"),
+            "p_department": text("department"),
+            "p_manager": manager.and_then(Value::as_str),
+            "p_hired_on": hired.and_then(Value::as_str),
+            "p_clear_manager": manager.is_some_and(Value::is_null),
+            "p_clear_hired": hired.is_some_and(Value::is_null),
+        });
+        self.ws_rpc("update_member_profile", args, true).await
+    }
+
+    /// Действия чата: имя действия — функция сервера из списка ниже, аргументы — как у неё (без `p_`).
+    pub async fn ws_chat(self: &Arc<Self>, action: &str, args: Map<String, Value>) -> CmdResult<Value> {
+        const WITH_WORKSPACE: [&str; 4] = ["chat_list", "chat_open_direct", "chat_create_group", "notifications_mark_read"];
+        const OTHERS: [&str; 9] = [
+            "chat_add_members",
+            "chat_remove_member",
+            "chat_update",
+            "chat_set_role",
+            "chat_set_muted",
+            "chat_messages",
+            "chat_send",
+            "chat_edit",
+            "chat_delete",
+        ];
+        let with_ws = WITH_WORKSPACE.contains(&action);
+        if !with_ws && !OTHERS.contains(&action) {
+            return Err(CmdError::msg("Неизвестное действие чата."));
+        }
+        let s = self.require()?;
+        if self.remote_active(&s)?.is_none() {
+            if action == "chat_list" {
+                return Ok(json!([]));
+            }
+            return Err(CmdError::new(
+                "localWorkspace",
+                "Сообщения доступны в облачном Workspace: войдите в облачную учётную запись и выберите общий Workspace.",
+            ));
+        }
+        let mut body = Map::new();
+        for (k, v) in args {
+            if !k.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                return Err(CmdError::msg("Неверный аргумент."));
+            }
+            body.insert(format!("p_{k}"), v);
+        }
+        if action == "chat_send" {
+            let text = body.get("p_body").and_then(Value::as_str).unwrap_or("").trim().to_string();
+            if text.is_empty() || text.chars().count() > 4000 {
+                return Err(CmdError::msg("Сообщение — от 1 до 4000 символов."));
+            }
+        }
+        let out = self.ws_rpc(action, Value::Object(body), with_ws).await?;
+        if matches!(action, "chat_send" | "chat_messages" | "notifications_mark_read") {
+            self.env.emit("chat-read", Value::Null);
+        }
+        Ok(out)
+    }
+
+    /// Опрос раз в ~15 с: «в сети», непрочитанное, новые сообщения и уведомления. Новое (после прошлого опроса)
+    /// уходит системным уведомлением, если окно не в фокусе и уведомления о сообщениях включены.
+    pub async fn ws_chat_poll(self: &Arc<Self>) -> CmdResult<Value> {
+        let s = self.require()?;
+        let empty = json!({"cursor": 0, "unread": {}, "fresh": [], "notifications": [], "freshNotifications": [], "available": false});
+        let Some(active) = self.remote_active(&s)? else { return Ok(empty) };
+        let Some(cloud) = self.env.cloud.clone() else { return Ok(empty) };
+        let since = s.workspace.lock().unwrap().chat_cursor.clone().filter(|(w, _)| *w == active.id).map(|(_, c)| c);
+        let mut out = match sync::rpc(&cloud, "chat_poll", json!({"p_workspace": active.id, "p_since": since})).await {
+            Ok(v) => v,
+            Err(CloudError::Network(_)) => return Ok(empty),
+            // Сервер без миграции чата: функции нет. Интерфейс показывает подсказку, а не ошибку каждые 15 с.
+            Err(CloudError::Server(m)) if m.contains("chat_poll") || m.contains("schema cache") => {
+                return Ok(json!({"cursor": 0, "unread": {}, "fresh": [], "notifications": [], "freshNotifications": [], "available": false, "missing": true}))
+            }
+            Err(e) => return Err(cloud_err(e)),
+        };
+        let cursor = out["cursor"].as_i64().unwrap_or(0);
+        s.workspace.lock().unwrap().chat_cursor = Some((active.id.clone(), cursor));
+        let fresh_notes: Vec<Value> = match since {
+            None => vec![],
+            Some(prev) => {
+                out["notifications"].as_array().map(|a| a.iter().filter(|n| n["seq"].as_i64().unwrap_or(0) > prev).cloned().collect()).unwrap_or_default()
+            }
+        };
+        if s.account_prefs().notify_messages {
+            for (title, body) in chat_alerts(&out["fresh"], &fresh_notes) {
+                self.env.emit("notify", json!({"kind": "message", "title": title, "body": body}));
+            }
+        }
+        out["freshNotifications"] = Value::Array(fresh_notes);
+        out["available"] = json!(true);
+        Ok(out)
+    }
+
     // ------------------------------------------------------------ синхронизация
 
     fn ws_sync_soon(self: &Arc<Self>, s: &Arc<Session>) {
@@ -950,5 +1106,101 @@ impl Core {
             }
         }
         fresh
+    }
+}
+
+/// Тексты системных уведомлений: по одному на новое сообщение (не больше трёх, дальше — сводка) и на уведомление,
+/// которого нет среди сообщений (добавление в обсуждение, упоминание в заметке или комментарии).
+pub(crate) fn chat_alerts(fresh: &Value, notes: &[Value]) -> Vec<(String, String)> {
+    let mut out = vec![];
+    let msgs = fresh.as_array().cloned().unwrap_or_default();
+    for m in msgs.iter().take(3) {
+        let author = m["author_name"].as_str().unwrap_or("Сотрудник");
+        let title = match (m["kind"].as_str(), m["mentioned"].as_bool().unwrap_or(false)) {
+            (Some("group"), true) => format!("{author} упоминает вас в «{}»", m["title"].as_str().unwrap_or("обсуждении")),
+            (Some("group"), false) => format!("{author} в «{}»", m["title"].as_str().unwrap_or("обсуждении")),
+            _ => author.to_string(),
+        };
+        out.push((title, m["body"].as_str().unwrap_or("").chars().take(160).collect()));
+    }
+    if msgs.len() > 3 {
+        out.push(("Новые сообщения".into(), format!("И ещё {}", msgs.len() - 3)));
+    }
+    for n in notes {
+        let actor = n["actor_name"].as_str().unwrap_or("Сотрудник");
+        let excerpt: String = n["excerpt"].as_str().unwrap_or("").chars().take(160).collect();
+        match n["kind"].as_str() {
+            Some("added_to_group") => out.push((format!("{actor} добавляет вас в обсуждение"), excerpt)),
+            Some("note_mention") => out.push((format!("{actor} упоминает вас в заметке"), excerpt)),
+            Some("comment_mention") => out.push((format!("{actor} упоминает вас в комментарии"), excerpt)),
+            _ => {}
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod team_tests {
+    use super::super::testing::fixture;
+    use super::*;
+
+    fn local() -> (super::super::testing::Fixture, Arc<Core>) {
+        let f = fixture(false, vec![]);
+        let core = Core::new(f.env.clone());
+        core.register("anna", "password-1", "password-1", false).unwrap();
+        (f, core)
+    }
+
+    #[tokio::test]
+    async fn local_workspace_has_only_me_and_no_chat() {
+        let (_f, core) = local();
+        let team = core.ws_team().await.unwrap();
+        let list = team.as_array().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0]["user_id"], json!(user_id(&core.require().unwrap())));
+        assert_eq!(list[0]["display_name"], "anna");
+        assert_eq!(core.ws_chat("chat_list", Map::new()).await.unwrap(), json!([]));
+        let e = core.ws_chat("chat_send", Map::new()).await.unwrap_err();
+        assert_eq!(e.code, "localWorkspace");
+        let poll = core.ws_chat_poll().await.unwrap();
+        assert_eq!(poll["available"], false);
+        assert!(core.ws_update_member("x", Map::new()).await.is_err(), "карточки — только в облаке");
+    }
+
+    #[tokio::test]
+    async fn chat_actions_are_whitelisted_and_arguments_checked() {
+        let (_f, core) = local();
+        for bad in ["crm_push", "delete_workspace", "chat_poll", "", "chat_list; drop"] {
+            let e = core.ws_chat(bad, Map::new()).await.unwrap_err();
+            assert_eq!(e.message, "Неизвестное действие чата.", "{bad}");
+        }
+        let mut hired = Map::new();
+        hired.insert("hiredOn".into(), json!("10.11.2026"));
+        assert!(core.ws_update_member("u", hired).await.unwrap_err().message.contains("ГГГГ-ММ-ДД"));
+    }
+
+    #[test]
+    fn chat_alerts_name_the_author_and_conversation() {
+        let fresh = json!([
+            {"kind": "direct", "author_name": "Борис", "body": "Привет", "mentioned": false},
+            {"kind": "group", "title": "Продажи", "author_name": "Вера", "body": "@Анна смотри", "mentioned": true},
+            {"kind": "group", "title": "Продажи", "author_name": "Вера", "body": "ещё", "mentioned": false},
+            {"kind": "group", "title": "Продажи", "author_name": "Вера", "body": "и ещё", "mentioned": false},
+            {"kind": "group", "title": "Продажи", "author_name": "Вера", "body": "последнее", "mentioned": false}
+        ]);
+        let notes = vec![
+            json!({"kind": "added_to_group", "actor_name": "Глеб", "excerpt": "Отдел продаж"}),
+            json!({"kind": "note_mention", "actor_name": "Глеб", "excerpt": "проверь счёт"}),
+            json!({"kind": "mention", "actor_name": "Вера", "excerpt": "уже в сообщениях"}),
+        ];
+        let a = chat_alerts(&fresh, &notes);
+        assert_eq!(a[0], ("Борис".to_string(), "Привет".to_string()));
+        assert_eq!(a[1].0, "Вера упоминает вас в «Продажи»");
+        assert_eq!(a[2].0, "Вера в «Продажи»");
+        assert_eq!(a[3], ("Новые сообщения".to_string(), "И ещё 2".to_string()));
+        assert_eq!(a[4].0, "Глеб добавляет вас в обсуждение");
+        assert_eq!(a[5].0, "Глеб упоминает вас в заметке");
+        assert_eq!(a.len(), 6, "упоминание в чате уже показано как сообщение");
+        assert!(chat_alerts(&json!([]), &[]).is_empty());
     }
 }

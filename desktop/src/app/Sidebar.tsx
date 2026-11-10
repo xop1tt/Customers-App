@@ -14,6 +14,7 @@ import { attempt, leaveSession, openCollection, openDebug, openProfile, openScor
 import { CollectionsGroup } from "./crm/Collections";
 import { openLink } from "../state/actions";
 import { GroupTitle, useCollapsed } from "./SideGroup";
+import { unreadNotifications, unreadTotal } from "../state/team";
 
 const SCORE_STEPS = [90, 70, 50, 30];
 
@@ -69,6 +70,8 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const sourcesShut = useCollapsed("sources");
   const scoresShut = useCollapsed("scores");
   const workShut = useCollapsed("work");
+  const teamShut = useCollapsed("team");
+  const chat = useStore((s) => s.chat);
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
@@ -176,6 +179,23 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
                 {device.sidebarCounts && <span className="nav-count num">{integer(perScore.get(n) ?? 0)}</span>}
               </button>
             ))}
+          </div>
+        )}
+
+        {!customize && (
+          <div className="nav-group">
+            <GroupTitle id="team" title="Команда" />
+            {(["chat", "people", "notifications"] as const).filter((id) => !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
+              const n = id === "chat" ? unreadTotal(chat) : id === "notifications" ? unreadNotifications(chat) : 0;
+              const active = section === id || (id === "people" && section === "profile");
+              return (
+                <button key={id} type="button" className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => setSection(id)}>
+                  <Icon name={SECTIONS[id].icon} size={16} />
+                  <span className="ellipsis grow">{SECTIONS[id].title}</span>
+                  {n > 0 && <span className="nav-count accent num" aria-label={`Непрочитанных: ${n}`}>{integer(n)}</span>}
+                </button>
+              );
+            })}
           </div>
         )}
 

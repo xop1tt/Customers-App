@@ -182,6 +182,7 @@ export interface AccountPrefs {
   notifyNewLeads: boolean;
   notifyErrors: boolean;
   notifySync: boolean;
+  notifyMessages: boolean;
   mailAccount: string;
   mailDelivery: string;
   confirmCalls: boolean;
@@ -567,3 +568,94 @@ export interface WsConverted {
 }
 
 export interface WsInvite { id: string; email: string; role: string; expiresAt: string; token: string; link: string }
+
+// ---------------------------------------------------------------- сотрудники, чат и уведомления
+
+/** Сотрудник в справочнике Workspace (snake_case — как отдаёт сервер). */
+export interface TeamMember {
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
+  email: string | null;
+  role: string;
+  role_name: string;
+  rank: number;
+  joined_at: string | null;
+  title: string;
+  department: string;
+  manager_id: string | null;
+  /** Дата прихода в компанию (ГГГГ-ММ-ДД); по умолчанию — дата входа в Workspace. */
+  hired_on: string | null;
+  last_seen: string | null;
+  online: boolean;
+  can_edit: boolean;
+  /** Нет связи с облаком: данные из локальной копии, без карточек и статуса. */
+  offline?: boolean;
+}
+
+export interface MemberPatch { title?: string; department?: string; managerId?: string | null; hiredOn?: string | null }
+
+export interface ChatParticipant { user_id: string; role: "owner" | "admin" | "member"; active: boolean }
+
+export interface ChatLast { seq: number; author_id: string | null; kind: "text" | "system"; body: string; deleted: boolean; created_at: string }
+
+export interface ChatConversation {
+  id: string;
+  kind: "direct" | "group";
+  title: string | null;
+  members_can_add: boolean;
+  created_by: string | null;
+  created_at: string;
+  last_message_at: string;
+  my_role: "owner" | "admin" | "member";
+  muted: boolean;
+  last_read_seq: number;
+  participants: ChatParticipant[];
+  last: ChatLast | null;
+  unread: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  seq: number;
+  author_id: string | null;
+  kind: "text" | "system";
+  body: string;
+  mentions: string[];
+  created_at: string;
+  edited_at: string | null;
+  deleted: boolean;
+}
+
+export interface ChatPage { conversation: ChatConversation; messages: ChatMessage[] }
+
+export interface ChatFresh { seq: number; conversation_id: string; kind: "direct" | "group"; title: string | null; author_id: string | null; author_name: string; body: string; mentioned: boolean }
+
+export interface AppNotification {
+  id: string;
+  seq: number;
+  kind: "mention" | "added_to_group" | "note_mention" | "comment_mention";
+  actor_id: string | null;
+  actor_name: string;
+  conversation_id: string | null;
+  message_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  excerpt: string;
+  created_at: string;
+  read: boolean;
+}
+
+export interface ChatPoll {
+  cursor: number;
+  /** Непрочитанные сообщения по обсуждениям. */
+  unread: Record<string, number>;
+  /** Новые сообщения после прошлого опроса. */
+  fresh: ChatFresh[];
+  notifications: AppNotification[];
+  freshNotifications: AppNotification[];
+  /** Чат работает: облачный Workspace и сервер с миграцией чата. */
+  available: boolean;
+  /** Сервер без миграции 20261110170000. */
+  missing?: boolean;
+}

@@ -185,6 +185,8 @@ pub struct AccountPrefs {
     pub notify_new_leads: bool,
     pub notify_errors: bool,
     pub notify_sync: bool,
+    /// Уведомления о сообщениях, упоминаниях и добавлении в обсуждения (облачный Workspace).
+    pub notify_messages: bool,
     /// Настройки почтового ящика (JSON без пароля; пароль — в защищённом хранилище).
     pub mail_account: String,
     pub mail_delivery: String,
@@ -210,6 +212,7 @@ impl Default for AccountPrefs {
             notify_new_leads: true,
             notify_errors: true,
             notify_sync: false,
+            notify_messages: true,
             mail_account: String::new(),
             mail_delivery: "mailApp".into(),
             confirm_calls: true,

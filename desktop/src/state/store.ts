@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import { api } from "../api";
 import { on } from "../api/backend";
 import type {
-  AccountPrefs, AuthCallback, BootInfo, DevicePrefs, SearchOverview, SearchStatus, SessionInfo, Snapshot, SyncStatus, UpdateInfo, WsCollection, WsState,
+  AccountPrefs, AuthCallback, BootInfo, ChatPoll, TeamMember, DevicePrefs, SearchOverview, SearchStatus, SessionInfo, Snapshot, SyncStatus, UpdateInfo, WsCollection, WsState,
 } from "../api/types";
 import { type LeadFilter, type SectionId, emptyFilter, isLeadList } from "../lib/leads";
 import { type LightModeReason, evaluate } from "../lib/powerPolicy";
@@ -55,6 +55,12 @@ export interface AppState {
   collectionEdit: { id: string | null } | null;
   /** Открытый профиль сотрудника (раздел «profile»); null — свой. */
   profileId: string | null;
+  /** Справочник сотрудников активного Workspace (раздел «Сотрудники», профили, чат). */
+  team: TeamMember[];
+  /** Последний опрос чата: непрочитанное и уведомления. */
+  chat: ChatPoll | null;
+  /** Открытое обсуждение в разделе «Сообщения». */
+  chatOpen: string | null;
   /** Растёт при каждом изменении данных Workspace: открытые списки и карточки перечитываются. */
   wsVersion: number;
 }
@@ -73,7 +79,7 @@ const initial: AppState = {
   phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
   section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru", debugOpen: false,
-  ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0, profileId: null,
+  ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0, profileId: null, team: [], chat: null, chatOpen: null,
 };
 
 let state = initial;
@@ -184,7 +190,7 @@ export async function leaveSession() {
   setState({ phase: "auth", session: null, snap: EMPTY_SNAP, account: null, overview: null, settings: null, exportOpen: false, selection: [], ...NO_WORKSPACE });
 }
 
-const NO_WORKSPACE: Partial<AppState> = { ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null };
+const NO_WORKSPACE: Partial<AppState> = { ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, team: [], chat: null, chatOpen: null };
 
 // ---------------------------------------------------------------- Workspace и коллекции
 

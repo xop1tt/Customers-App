@@ -508,3 +508,22 @@ pub async fn ws_leave(core: C<'_>) -> CmdResult<Value> {
 pub async fn ws_rename_workspace(core: C<'_>, name: String) -> CmdResult<Value> {
     core.inner().ws_rename_workspace(&name).await
 }
+
+// ---------------------------------------------------------------- сотрудники, чат и уведомления
+
+#[tauri::command]
+pub async fn ws_team(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_team().await
+}
+#[tauri::command]
+pub async fn ws_update_member(core: C<'_>, user: String, fields: serde_json::Map<String, Value>) -> CmdResult<Value> {
+    core.inner().ws_update_member(&user, fields).await
+}
+#[tauri::command]
+pub async fn ws_chat(core: C<'_>, action: String, args: Option<serde_json::Map<String, Value>>) -> CmdResult<Value> {
+    core.inner().ws_chat(&action, args.unwrap_or_default()).await
+}
+#[tauri::command]
+pub async fn ws_chat_poll(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_chat_poll().await
+}
