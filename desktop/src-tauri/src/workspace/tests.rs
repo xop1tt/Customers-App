@@ -314,3 +314,27 @@ fn encrypted_database_needs_the_key_and_belongs_to_one_workspace() {
     let s = WorkspaceStore::open(&path, Some(&key), WS, ME).unwrap();
     assert_eq!(s.count("companies", &Query::default()).unwrap(), 1);
 }
+
+#[test]
+fn custom_fields_need_fields_manage_and_values_link_to_a_card() {
+    let (_d, s) = open();
+    let c = s.save("companies", None, &m(json!({"name": "Ромашка"}))).unwrap();
+    s.set_permissions(&["records.view".into(), "records.create".into(), "records.edit".into(), "pipelines.manage".into()]).unwrap();
+    assert!(s.save("custom_fields", None, &m(json!({"entity_type": "company", "label": "Сегмент"}))).unwrap_err().to_string().contains("прав"));
+    s.set_permissions(&["records.view".into(), "records.create".into(), "records.edit".into(), "fields.manage".into()]).unwrap();
+    let f = s.save("custom_fields", None, &m(json!({"entity_type": "company", "label": "Сегмент", "kind": "select", "options": ["A", "B"]}))).unwrap();
+    assert!(s.save("custom_fields", None, &m(json!({"entity_type": "task", "label": "x"}))).is_err(), "тип записи — из списка");
+    assert!(s.save("custom_fields", None, &m(json!({"entity_type": "company", "label": "x", "kind": "color"}))).is_err());
+    let v = s.save("custom_field_values", None, &m(json!({"field_id": id(&f), "entity_type": "company", "entity_id": id(&c), "value": "A"}))).unwrap();
+    assert_eq!(s.linked("custom_field_values", "company", &id(&c)).unwrap().len(), 1);
+    s.save("custom_field_values", Some(&id(&v)), &m(json!({"value": null}))).unwrap();
+    assert!(
+        s.save(
+            "custom_field_values",
+            None,
+            &m(json!({"field_id": "99999999-9999-4999-8999-999999999999", "entity_type": "company", "entity_id": id(&c), "value": "A"}))
+        )
+        .is_err(),
+        "поле должно существовать"
+    );
+}

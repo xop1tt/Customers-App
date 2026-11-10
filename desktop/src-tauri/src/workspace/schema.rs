@@ -23,6 +23,8 @@ pub enum Class {
     Records,
     /// Воронки и этапы: меняет только `pipelines.manage`.
     Settings,
+    /// Определения своих полей: меняет только `fields.manage`.
+    Fields,
     Collections,
 }
 
@@ -263,6 +265,34 @@ pub static COMMENTS: Entity = Entity {
     search: &["body"],
 };
 
+pub static CUSTOM_FIELDS: Entity = Entity {
+    table: "custom_fields",
+    entity_type: None,
+    class: Class::Fields,
+    fields: &[
+        w("archived_at", Ts, 40),
+        w("deleted_at", Ts, 40),
+        w("entity_type", Text, 20),
+        w("label", Text, 80),
+        w("kind", Text, 10),
+        w("options", Json, 8192),
+        w("position", Num, 0),
+    ],
+    required: &["entity_type", "label"],
+    title: "label",
+    search: &["label"],
+};
+
+pub static CUSTOM_FIELD_VALUES: Entity = Entity {
+    table: "custom_field_values",
+    entity_type: None,
+    class: Class::Records,
+    fields: &[w("deleted_at", Ts, 40), w("field_id", Uuid, 36), w("entity_type", Text, 20), w("entity_id", Uuid, 36), w("value", Json, 8192)],
+    required: &["field_id", "entity_type", "entity_id"],
+    title: "entity_id",
+    search: &[],
+};
+
 pub static COLLECTIONS: Entity = Entity {
     table: "collections",
     entity_type: None,
@@ -284,8 +314,22 @@ pub static COLLECTIONS: Entity = Entity {
 };
 
 /// Порядок важен: ссылки идут на сущности выше по списку (так же применяются загруженные строки).
-pub static ENTITIES: [&Entity; 12] =
-    [&PIPELINES, &PIPELINE_STAGES, &COMPANIES, &CONTACTS, &CRM_LEADS, &DEALS, &DEAL_CONTACTS, &TASKS, &ACTIVITIES, &NOTES, &COMMENTS, &COLLECTIONS];
+pub static ENTITIES: [&Entity; 14] = [
+    &PIPELINES,
+    &PIPELINE_STAGES,
+    &COMPANIES,
+    &CONTACTS,
+    &CRM_LEADS,
+    &DEALS,
+    &DEAL_CONTACTS,
+    &TASKS,
+    &ACTIVITIES,
+    &NOTES,
+    &COMMENTS,
+    &CUSTOM_FIELDS,
+    &CUSTOM_FIELD_VALUES,
+    &COLLECTIONS,
+];
 
 pub fn entity(table: &str) -> Option<&'static Entity> {
     ENTITIES.iter().copied().find(|e| e.table == table)
@@ -305,7 +349,8 @@ pub fn allowed_values(table: &str, field: &str) -> Option<&'static [&'static str
         ("tasks", "priority") => &["low", "normal", "high", "urgent"],
         ("tasks", "status") => &["todo", "in_progress", "done", "cancelled"],
         ("activities", "type") => &["call", "email", "meeting", "follow_up", "reminder", "agreement", "payment", "custom", "system"],
-        ("tasks" | "activities" | "notes" | "comments", "entity_type") => REF_TYPES,
+        ("tasks" | "activities" | "notes" | "comments" | "custom_fields" | "custom_field_values", "entity_type") => REF_TYPES,
+        ("custom_fields", "kind") => &["text", "number", "date", "select", "bool"],
         ("collections", "visibility") => &["private", "workspace"],
         ("collections", "entity_type") => &["company", "contact", "crm_lead", "deal", "task"],
         _ => return None,
@@ -313,7 +358,7 @@ pub fn allowed_values(table: &str, field: &str) -> Option<&'static [&'static str
 }
 
 /// Ссылки на другие записи: столбец → таблица (проверяются на месте, как триггер `crm_stamp`).
-pub const REFERENCES: [(&str, &str); 8] = [
+pub const REFERENCES: [(&str, &str); 9] = [
     ("company_id", "companies"),
     ("contact_id", "contacts"),
     ("converted_company_id", "companies"),
@@ -322,6 +367,7 @@ pub const REFERENCES: [(&str, &str); 8] = [
     ("stage_id", "pipeline_stages"),
     ("deal_id", "deals"),
     ("parent_id", "comments"),
+    ("field_id", "custom_fields"),
 ];
 
 /// Служебные столбцы каждой таблицы (сверх полей сущности).
@@ -388,11 +434,12 @@ mod tests {
             include_str!("../../../../supabase/migrations/20261110120200_sales.sql"),
             include_str!("../../../../supabase/migrations/20261110120300_work.sql"),
             include_str!("../../../../supabase/migrations/20261110120400_collections.sql"),
+            include_str!("../../../../supabase/migrations/20261110130100_custom_fields.sql"),
         ]
         .concat();
         for e in ENTITIES {
             let marker = format!("private.crm_attach('{}'", e.table);
-            let start = migrations.find(&marker).unwrap_or_else(|| panic!("{} нет в миграциях", e.table));
+            let start = migrations.rfind(&marker).unwrap_or_else(|| panic!("{} нет в миграциях", e.table));
             let rest = &migrations[start..];
             let list = &rest[rest.find("array[").unwrap() + 6..rest.find("]);").unwrap()];
             let mut server: Vec<String> = list.split(',').map(|s| s.trim().trim_matches('\'').to_string()).collect();

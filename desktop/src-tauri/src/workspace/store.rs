@@ -421,6 +421,11 @@ impl WorkspaceStore {
                     return denied("воронки и этапы меняет администратор");
                 }
             }
+            Class::Fields => {
+                if !self.can("fields.manage") {
+                    return denied("свои поля меняет менеджер или администратор");
+                }
+            }
             Class::Collections => {
                 let vis = fields.get("visibility").or(current.map(|c| &c["visibility"])).and_then(Value::as_str).unwrap_or("private");
                 let author = current.map(|c| c["created_by"].as_str() == Some(me)).unwrap_or(true);
@@ -1102,11 +1107,18 @@ fn check_value(e: &Entity, name: &str, kind: Kind, max_len: usize, v: &Value) ->
             json!(s.to_lowercase())
         }
         Kind::Json => {
-            let array_field = matches!(name, "phones" | "emails" | "dedupe_keys");
-            if array_field {
+            let array_field = matches!(name, "phones" | "emails" | "dedupe_keys" | "options");
+            if name == "value" {
+                // Значение своего поля: строка, число или да/нет.
+                if !(v.is_string() || v.is_number() || v.is_boolean()) || v.to_string().len() > 2000 {
+                    return bad("ожидается строка, число или да/нет (до 2000 знаков)");
+                }
+                v.clone()
+            } else if array_field {
                 let arr = v.as_array().ok_or_else(|| err(format!("Поле «{name}»: ожидается список.")))?;
-                if arr.len() > max_len {
-                    return bad(&format!("не больше {max_len} значений"));
+                let limit = if name == "options" { 100 } else { max_len };
+                if arr.len() > limit {
+                    return bad(&format!("не больше {limit} значений"));
                 }
                 let mut out: Vec<String> = Vec::new();
                 for x in arr {
