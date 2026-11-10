@@ -293,6 +293,17 @@ pub static CUSTOM_FIELD_VALUES: Entity = Entity {
     search: &[],
 };
 
+/// Метаданные вложения; содержимое хранится отдельно (`attachment_blobs`) и в операциях синхронизации не передаётся.
+pub static ATTACHMENTS: Entity = Entity {
+    table: "attachments",
+    entity_type: None,
+    class: Class::Records,
+    fields: &[w("deleted_at", Ts, 40), w("entity_type", Text, 20), w("entity_id", Uuid, 36), w("name", Text, 255), w("mime", Text, 100), w("size", Num, 0)],
+    required: &["entity_type", "entity_id", "name"],
+    title: "name",
+    search: &["name"],
+};
+
 pub static COLLECTIONS: Entity = Entity {
     table: "collections",
     entity_type: None,
@@ -314,7 +325,7 @@ pub static COLLECTIONS: Entity = Entity {
 };
 
 /// Порядок важен: ссылки идут на сущности выше по списку (так же применяются загруженные строки).
-pub static ENTITIES: [&Entity; 14] = [
+pub static ENTITIES: [&Entity; 15] = [
     &PIPELINES,
     &PIPELINE_STAGES,
     &COMPANIES,
@@ -328,6 +339,7 @@ pub static ENTITIES: [&Entity; 14] = [
     &COMMENTS,
     &CUSTOM_FIELDS,
     &CUSTOM_FIELD_VALUES,
+    &ATTACHMENTS,
     &COLLECTIONS,
 ];
 
@@ -349,7 +361,7 @@ pub fn allowed_values(table: &str, field: &str) -> Option<&'static [&'static str
         ("tasks", "priority") => &["low", "normal", "high", "urgent"],
         ("tasks", "status") => &["todo", "in_progress", "done", "cancelled"],
         ("activities", "type") => &["call", "email", "meeting", "follow_up", "reminder", "agreement", "payment", "custom", "system"],
-        ("tasks" | "activities" | "notes" | "comments" | "custom_fields" | "custom_field_values", "entity_type") => REF_TYPES,
+        ("tasks" | "activities" | "notes" | "comments" | "custom_fields" | "custom_field_values" | "attachments", "entity_type") => REF_TYPES,
         ("custom_fields", "kind") => &["text", "number", "date", "select", "bool"],
         ("collections", "visibility") => &["private", "workspace"],
         ("collections", "entity_type") => &["company", "contact", "crm_lead", "deal", "task"],
@@ -435,6 +447,7 @@ mod tests {
             include_str!("../../../../supabase/migrations/20261110120300_work.sql"),
             include_str!("../../../../supabase/migrations/20261110120400_collections.sql"),
             include_str!("../../../../supabase/migrations/20261110130100_custom_fields.sql"),
+            include_str!("../../../../supabase/migrations/20261110130300_attachments.sql"),
         ]
         .concat();
         for e in ENTITIES {

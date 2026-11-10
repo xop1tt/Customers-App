@@ -3,6 +3,7 @@
 
 import { CustomFieldsSection } from "./CustomFields";
 import { WatchingNow } from "./Presence";
+import { AttachmentsSection } from "./Attachments";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import type { CrmRecord, WsCard, WsConflict } from "../../api/types";
@@ -241,6 +242,7 @@ function Overview({ e, data, lk, editable, save }: { e: EntityMeta; data: WsCard
       )}
       <Fields e={e} rec={r} lk={lk} editable={editable} onChange={(f, v) => save({ [f]: v })} />
       <CustomFieldsSection e={e} data={data} editable={editable} />
+      <AttachmentsSection e={e} data={data} />
       {data.contacts && (
         <section className="insp-sec">
           <h4 className="row"><span className="grow">Контакты</span>{creatable && <a onClick={() => void quick("contacts", { company_id: r.id, first_name: "Новый контакт" })}>Добавить</a>}</h4>

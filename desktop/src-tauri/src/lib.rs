@@ -83,6 +83,8 @@ fn app_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::ws_convert_lead,
         commands::ws_collections,
         commands::ws_roles,
+        commands::ws_attach_add,
+        commands::ws_attach_save,
         commands::ws_presence,
         commands::ws_upload_local,
         commands::ws_save_role,

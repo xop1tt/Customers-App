@@ -34,6 +34,8 @@ pub struct CrmState {
 
 type Store = Arc<Mutex<WorkspaceStore>>;
 
+const MAX_ATTACHMENT: usize = 5 * 1024 * 1024;
+
 /// Идентификатор пользователя в записях CRM: uuid облачной учётной записи или постоянный uuid локальной.
 pub fn user_id(s: &Session) -> String {
     if let Some(id) = s.id.strip_prefix("cloud-") {
@@ -291,7 +293,7 @@ impl Core {
             let record = st.get(entity, id)?.ok_or_else(|| crate::error::AppError::msg("Запись не найдена."))?;
             let mut out = json!({"record": record});
             if let Some(t) = schema::entity(entity).and_then(|e| e.entity_type).filter(|t| *t != "task") {
-                for table in ["tasks", "activities", "notes", "comments", "custom_field_values"] {
+                for table in ["tasks", "activities", "notes", "comments", "custom_field_values", "attachments"] {
                     out[table] = json!(st.linked(table, t, id)?);
                 }
             }
@@ -726,6 +728,82 @@ impl Core {
         Ok(json!({"workspace": new_id, "copied": copied, "skipped": skipped, "state": state}))
     }
 
+    // ------------------------------------------------------------ вложения
+
+    /// Файл к карточке: метаданные — запись CRM (синхронизируется), содержимое — в зашифрованной базе Workspace
+    /// и отдельным запросом в облако (до 5 МБ).
+    pub fn ws_attach_add(self: &Arc<Self>, entity_type: &str, entity_id: &str, name: &str, mime: &str, data_base64: &str) -> CmdResult<Value> {
+        use base64::Engine;
+        let data = base64::engine::general_purpose::STANDARD.decode(data_base64.trim()).map_err(|_| CmdError::msg("Файл не читается."))?;
+        if data.len() > MAX_ATTACHMENT {
+            return Err(CmdError::msg("Файл больше 5 МБ."));
+        }
+        let name: String = name.rsplit(['/', '\\']).next().unwrap_or("").trim().chars().take(255).collect();
+        if name.is_empty() {
+            return Err(CmdError::msg("У файла нет имени."));
+        }
+        let mut f = Map::new();
+        f.insert("entity_type".into(), json!(entity_type));
+        f.insert("entity_id".into(), json!(entity_id));
+        f.insert("name".into(), json!(name));
+        f.insert("mime".into(), json!(mime.chars().take(100).collect::<String>()));
+        f.insert("size".into(), json!(data.len()));
+        let row = self.with_crm(|st| {
+            let row = st.save("attachments", None, &f)?;
+            st.put_blob(row["id"].as_str().unwrap_or_default(), &data, false)?;
+            Ok(row)
+        })?;
+        self.ws_changed();
+        Ok(row)
+    }
+
+    /// Сохраняет вложение в файл, выбранный пользователем.
+    pub async fn ws_attach_save(self: &Arc<Self>, id: &str, path: &str) -> CmdResult<String> {
+        use base64::Engine;
+        let v = self.ws_attach_get(id).await?;
+        let data = base64::engine::general_purpose::STANDARD.decode(v["data"].as_str().unwrap_or_default()).map_err(|_| CmdError::msg("Файл повреждён."))?;
+        std::fs::write(path, data).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
+        Ok(v["name"].as_str().unwrap_or_default().to_string())
+    }
+
+    /// Содержимое вложения; нет на устройстве — скачивается из облака и остаётся в базе.
+    async fn ws_attach_get(self: &Arc<Self>, id: &str) -> CmdResult<Value> {
+        use base64::Engine;
+        let s = self.require()?;
+        let store = self.ws_store(&s)?;
+        let (meta, local) = {
+            let g = store.lock().unwrap();
+            (g.get("attachments", id).map_err(cmd)?, g.blob(id))
+        };
+        let meta = meta.ok_or_else(|| CmdError::msg("Вложение не найдено."))?;
+        let data = match local {
+            Some(d) => d,
+            None => {
+                let cloud = self.env.cloud.clone().filter(|_| s.is_cloud).ok_or_else(|| CmdError::msg("Файл есть только в облаке: нужна связь."))?;
+                let rows = sync::select(&cloud, &format!("attachment_blobs?select=data&attachment_id=eq.{id}")).await.map_err(cloud_err)?;
+                let text = rows[0]["data"].as_str().ok_or_else(|| CmdError::msg("Файл ещё не загружен автором в облако."))?;
+                let d = base64::engine::general_purpose::STANDARD.decode(text).map_err(|_| CmdError::msg("Файл в облаке повреждён."))?;
+                store.lock().unwrap().put_blob(id, &d, true).map_err(cmd)?;
+                d
+            }
+        };
+        Ok(json!({"name": meta["name"], "mime": meta["mime"], "data": base64::engine::general_purpose::STANDARD.encode(data)}))
+    }
+
+    /// После выгрузки очереди: файлы, чьи метаданные сервер уже принял, уходят в облако (повтор при следующей синхронизации).
+    async fn upload_blobs(&self, cloud: &crate::cloud::auth::CloudAuth, store: &Store) {
+        use base64::Engine;
+        let pending = store.lock().unwrap().blobs_to_upload();
+        for (id, data) in pending {
+            let ws = store.lock().unwrap().workspace_id.clone();
+            let body = json!({"attachment_id": id, "workspace_id": ws, "data": base64::engine::general_purpose::STANDARD.encode(&data)});
+            let r = cloud.authorized("POST", "/rest/v1/attachment_blobs", Some(&body), &[("Prefer", "return=minimal,resolution=ignore-duplicates")]).await;
+            if matches!(r, Ok((s, _)) if (200..300).contains(&s)) {
+                let _ = store.lock().unwrap().mark_blob_uploaded(&id);
+            }
+        }
+    }
+
     // ------------------------------------------------------------ присутствие
 
     /// «Я здесь» (и какую карточку смотрю) + кто ещё онлайн. Локальный Workspace и нет связи: пустой список.
@@ -763,6 +841,9 @@ impl Core {
             tokio::time::sleep(Duration::from_millis(300)).await;
             loop {
                 let result = CrmSync::new(cloud.clone(), store.clone(), core.env.device_id.clone()).sync().await;
+                if result.is_ok() {
+                    core.upload_blobs(&cloud, &store).await;
+                }
                 let again = {
                     let mut st = session.workspace.lock().unwrap();
                     match &result {

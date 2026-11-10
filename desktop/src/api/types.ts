@@ -546,6 +546,7 @@ export interface WsCard {
   notes?: CrmRecord[];
   comments?: CrmRecord[];
   custom_field_values?: CrmRecord[];
+  attachments?: CrmRecord[];
   contacts?: CrmRecord[];
   deals?: CrmRecord[];
   history?: WsStageChange[];

@@ -192,3 +192,13 @@ describe("присутствие (демо-ядро)", () => {
     expect(await api.wsPresence()).toEqual([]);
   });
 });
+
+describe("вложения (демо-ядро)", () => {
+  it("метаданные приходят в карточке, большие файлы отклоняются", async () => {
+    const company = (await api.wsList("companies")).items[0]!;
+    const a = await api.wsAttachAdd("company", company.id, "договор.pdf", "application/pdf", btoa("%PDF"));
+    expect(a.size).toBe(4);
+    expect((await api.wsCard("companies", company.id)).attachments?.map((x) => x.id)).toContain(a.id);
+    await expect(api.wsAttachAdd("company", company.id, "x.bin", "", "A".repeat(7_500_000))).rejects.toBeDefined();
+  });
+});
