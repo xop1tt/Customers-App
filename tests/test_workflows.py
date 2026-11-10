@@ -287,3 +287,13 @@ def test_ci_runs_beta_channel_tests_and_release_check():
     steps = " ".join(s.get("run", "") for j in desktop["jobs"].values() for s in j.get("steps", []))
     assert "--features beta" in steps and "npm run release:check" in steps
     assert desktop[True]["push"]["branches"] == ["main"]
+
+
+def test_inactive_accounts_job_is_weekly_and_uses_only_the_cron_secret():
+    wf = load("inactive-accounts.yml")
+    on = wf[True]
+    assert "schedule" in on and "workflow_dispatch" in on
+    assert wf["concurrency"]["cancel-in-progress"] is False
+    text = (WF / "inactive-accounts.yml").read_text(encoding="utf-8")
+    assert "uses:" not in text and "${{ secrets.CRON_SECRET }}" in text
+    assert "${{ " not in text.split("run: |")[1]  # в шелл ничего не подставляется напрямую
