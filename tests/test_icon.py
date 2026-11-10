@@ -74,8 +74,13 @@ def test_tile_is_dark(letter):
 def test_there_is_no_light_variant_or_dark_override():
     root = ICONS.parents[2]
     assert not list(ICONS.glob("*Dark*")), "светлого и тёмного вариантов нет, значок один"
+    # Значок в пакете один, тёмный. Подмена на светлый в Dock допустима только в macOS-коде оболочки и только пока
+    # приложение запущено (по просьбе пользователя значок следует теме системы); закрытое приложение показывает пакетный.
     for path in (ICONS.parent / "src").rglob("*.rs"):
         text = path.read_text(encoding="utf-8")
+        if path.name == "shell.rs":
+            assert re.search(r'#\[cfg\(target_os = "macos"\)\]\s*pub fn set_dock_icon', text), "подмена значка Dock только на macOS"
+            continue
         assert not re.search(r"set_(dock_)?icon\s*\(", text), f"{path.name}: значок приложения не подменяется"
     conf = (ICONS.parent / "tauri.conf.json").read_text(encoding="utf-8")
     assert "icons/icon.icns" in conf and "icons/icon.ico" in conf

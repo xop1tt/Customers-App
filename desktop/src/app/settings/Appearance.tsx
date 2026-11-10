@@ -6,6 +6,18 @@ import { patchDevice, setState, useStore } from "../../state/store";
 
 const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2].map((v) => ({ value: v, label: `${Math.round(v * 100)}%` }));
 
+const THEMES: Array<{ value: "system" | "dark" | "light"; label: string }> = [
+  { value: "system", label: "Как в системе" },
+  { value: "dark", label: "Тёмная" },
+  { value: "light", label: "Светлая" },
+];
+// Названия языков не переводятся: их узнают на любом языке.
+const LANGUAGES: Array<{ value: "system" | "ru" | "en"; label: string }> = [
+  { value: "system", label: "Как в системе" },
+  { value: "ru", label: "Русский" },
+  { value: "en", label: "English" },
+];
+
 export function Appearance() {
   const d = useStore((s) => s.device);
   const [hex, setHex] = useState(d.accent ?? "");
@@ -13,6 +25,12 @@ export function Appearance() {
   return (
     <>
       <Group title="Оформление" sub="look">
+        <SettingRow title="Тема оформления" hint="«Как в системе» следует за светлой или тёмной темой macOS и Windows.">
+          <Select width={170} value={d.theme} options={THEMES} onChange={(v) => void patchDevice({ theme: v })} label="Тема оформления" />
+        </SettingRow>
+        <SettingRow title="Язык интерфейса" hint="Для «Как в системе» берётся язык системы: русский или английский.">
+          <Select width={170} value={d.language} options={LANGUAGES} onChange={(v) => void patchDevice({ language: v })} label="Язык интерфейса" />
+        </SettingRow>
         <SettingRow title="Акцентный цвет" hint="Используется для кнопок, выделения и переключателей.">
           <div className="swatches" role="radiogroup" aria-label="Акцентный цвет">
             {ACCENTS.map((c) => (

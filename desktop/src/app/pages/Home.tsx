@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { dailyCounts, isNew, SECTIONS, count } from "../../lib/leads";
-import { dateOnly, integer, plural, shortRelative } from "../../lib/format";
+import { dateOnly, dayShort, integer, plural, shortRelative } from "../../lib/format";
 import { SOURCES, sourceItemCount, sourceSettings } from "../../lib/sources";
 import { Button, EmptyState, Notice, Score, Tag } from "../../ui/kit";
 import { Icon } from "../../ui/icons";
@@ -99,7 +99,7 @@ export function HomePage() {
                     <title>{`${dateOnly(p.day.toISOString())}: заказов ${p.orders}, организаций ${p.organizations}`}</title>
                     <rect x={x} y={chartH - oh - gh} width={w} height={gh} className="bar-org" rx="2" />
                     <rect x={x} y={chartH - oh} width={w} height={oh} className="bar-order" rx="2" />
-                    {(i === 0 || i === series.length - 1 || i === 7) && <text x={x + w / 2} y={chartH + 16} className="chart-label" textAnchor="middle">{p.day.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</text>}
+                    {(i === 0 || i === series.length - 1 || i === 7) && <text x={x + w / 2} y={chartH + 16} className="chart-label" textAnchor="middle">{dayShort(p.day)}</text>}
                   </g>
                 );
               })}
