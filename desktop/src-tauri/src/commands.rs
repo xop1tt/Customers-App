@@ -444,6 +444,10 @@ sync_cmds! {
 }
 
 #[tauri::command]
+pub async fn ws_upload_local(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_upload_local().await
+}
+#[tauri::command]
 pub async fn ws_roles(core: C<'_>) -> CmdResult<Value> {
     core.inner().ws_roles().await
 }

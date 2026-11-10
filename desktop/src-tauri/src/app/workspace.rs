@@ -603,6 +603,129 @@ impl Core {
         Ok(json!({"moved": moved}))
     }
 
+    // ------------------------------------------------------------ загрузка локальной CRM в облако
+
+    /// Копирует локальный Workspace (на этом устройстве) в новый облачный: записи сохраняют идентификаторы, поэтому
+    /// повторная загрузка не плодит дубли. Воронки нового Workspace создаёт сервер; сделки переносятся на этапы с теми же названиями.
+    /// Локальный Workspace остаётся на месте.
+    pub async fn ws_upload_local(self: &Arc<Self>) -> CmdResult<Value> {
+        let s = self.require()?;
+        if !s.is_cloud {
+            return Err(CmdError::msg("Загрузка доступна в облачной учётной записи."));
+        }
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        let catalog = self.ws_catalog(&s)?;
+        let local = catalog.active_info().filter(|w| !w.remote).cloned().ok_or_else(|| CmdError::msg("Выберите локальный Workspace, который нужно загрузить."))?;
+        let old = self.ws_store(&s)?;
+        let snapshot: Vec<(&'static schema::Entity, Vec<Value>)> = {
+            let g = old.lock().unwrap();
+            let mut out = Vec::new();
+            for e in schema::ENTITIES {
+                let mut rows = Vec::new();
+                loop {
+                    let q = Query { archived: true, limit: Some(500), offset: Some(rows.len() as u32), ..Default::default() };
+                    let page = g.list(e.table, &q).map_err(cmd)?;
+                    let n = page.len();
+                    rows.extend(page);
+                    if n < 500 {
+                        break;
+                    }
+                }
+                out.push((e, rows));
+            }
+            out
+        };
+
+        let name = local.name.replace(" (на этом устройстве)", "");
+        let id = sync::rpc(&cloud, "create_workspace", json!({"p_name": name})).await.map_err(cloud_err)?;
+        let new_id = id.as_str().unwrap_or_default().to_string();
+        if new_id.is_empty() {
+            return Err(CmdError::msg("Сервер не создал Workspace."));
+        }
+        // Серверный список без переключения: загрузку ведём здесь, фоновая синхронизация не должна мешать.
+        let fresh = sync::workspaces(&cloud).await.map_err(cloud_err)?;
+        let mut c = self.ws_catalog(&s)?;
+        c.replace_remote(fresh);
+        c.active = Some(new_id.clone());
+        self.set_catalog(&s, c)?;
+        s.workspace.lock().unwrap().store = None;
+        let target = self.ws_store(&s)?;
+        if let Ok(members) = sync::members(&cloud, &new_id).await {
+            target.lock().unwrap().replace_members(&members).map_err(cmd)?;
+        }
+        CrmSync::new(cloud.clone(), target.clone(), self.env.device_id.clone()).sync().await.map_err(cloud_err)?; // сначала получаем воронки, созданные сервером
+
+        let (stage_map, pipeline_map) = {
+            let g = target.lock().unwrap();
+            let stages = g.list("pipeline_stages", &Query::default()).map_err(cmd)?;
+            let pipelines = g.list("pipelines", &Query::default()).map_err(cmd)?;
+            let default_pipeline = pipelines.iter().find(|p| p["is_default"] == json!(true)).or(pipelines.first()).cloned();
+            let mut stage_map = std::collections::HashMap::new();
+            let mut pipeline_map = std::collections::HashMap::new();
+            if let Some(dp) = default_pipeline {
+                let theirs: Vec<&Value> = stages.iter().filter(|x| x["pipeline_id"] == dp["id"]).collect();
+                for (e, rows) in &snapshot {
+                    if e.table == "pipelines" {
+                        if let Some(lp) = rows.iter().find(|p| p["is_default"] == json!(true)).or(rows.first()) {
+                            pipeline_map.insert(lp["id"].as_str().unwrap_or_default().to_string(), dp["id"].as_str().unwrap_or_default().to_string());
+                            for st in snapshot.iter().filter(|(x, _)| x.table == "pipeline_stages").flat_map(|(_, r)| r.iter()).filter(|x| x["pipeline_id"] == lp["id"]) {
+                                let pick = theirs
+                                    .iter()
+                                    .find(|t| t["name"] == st["name"])
+                                    .or_else(|| theirs.iter().find(|t| t["kind"] == st["kind"]))
+                                    .or(theirs.first());
+                                if let Some(t) = pick {
+                                    stage_map.insert(st["id"].as_str().unwrap_or_default().to_string(), t["id"].as_str().unwrap_or_default().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            (stage_map, pipeline_map)
+        };
+
+        let mut copied = 0usize;
+        let mut skipped = 0usize;
+        {
+            let g = target.lock().unwrap();
+            for (e, rows) in &snapshot {
+                for row in rows {
+                    let rid = row["id"].as_str().unwrap_or_default();
+                    let is_seed_pipeline = matches!(e.table, "pipelines" | "pipeline_stages") && (pipeline_map.contains_key(rid) || stage_map.contains_key(rid) || pipeline_map.contains_key(row["pipeline_id"].as_str().unwrap_or_default()));
+                    let is_builtin_collection = e.table == "collections" && !row["builtin"].is_null();
+                    if is_seed_pipeline || is_builtin_collection || !row["deleted_at"].is_null() {
+                        continue;
+                    }
+                    let mut f = Map::new();
+                    for fld in e.fields.iter().filter(|x| x.writable) {
+                        let v = &row[fld.name];
+                        if !v.is_null() && !(fld.name == "is_default") {
+                            f.insert(fld.name.into(), v.clone());
+                        }
+                    }
+                    if let Some(p) = f.get("pipeline_id").and_then(Value::as_str).and_then(|p| pipeline_map.get(p)) {
+                        f.insert("pipeline_id".into(), json!(p));
+                    }
+                    if let Some(st) = f.get("stage_id").and_then(Value::as_str).and_then(|x| stage_map.get(x)) {
+                        f.insert("stage_id".into(), json!(st));
+                    }
+                    match g.save(e.table, Some(rid), &f) {
+                        Ok(_) => copied += 1,
+                        Err(err) => {
+                            skipped += 1;
+                            self.env.log_error(&format!("Загрузка CRM: {} {rid}: {err}", e.table));
+                        }
+                    }
+                }
+            }
+        }
+        old.lock().unwrap().set_meta("uploaded_to", &new_id).map_err(cmd)?;
+        self.ws_changed();
+        let state = self.ws_state()?;
+        Ok(json!({"workspace": new_id, "copied": copied, "skipped": skipped, "state": state}))
+    }
+
     // ------------------------------------------------------------ синхронизация
 
     fn ws_sync_soon(self: &Arc<Self>, s: &Arc<Session>) {

@@ -323,8 +323,17 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
     case "ws_hide_collection":
       ws.prefs.set(s("id"), { position: ws.prefs.get(s("id"))?.position ?? 0, hidden: Boolean(args.hidden) });
       return null;
+    case "ws_upload_local": {
+      if (!demoParams.has("team")) fail("Загрузка доступна в облачной учётной записи.");
+      const id = `ws-${uid()}`;
+      const tables = new Map([...ws.tables].map(([k, rows]) => [k, rows.filter((r) => !r.deleted_at).map((r) => ({ ...r, workspace_id: id }))]));
+      workspaces.push({ info: info(id, ws.info.name, "owner", false, 1), members: [member(ME, "Анна", "owner")], tables, prefs: new Map(), conflicts: [] });
+      active = id;
+      const copied = [...tables.values()].reduce((n, rows) => n + rows.length, 0);
+      return { workspace: id, copied, skipped: 0, state: state() };
+    }
     case "ws_roles": {
-      if (!demoParams.has("team") || !ws.info.remote) return { roles: [], catalog: [] };
+      if (!demoParams.has("team")) return { roles: [], catalog: [] };
       const sys = Object.keys(ROLE_PERMS).map((key) => ({ key, name: ROLE_NAME[key], rank: RANK[key], system: true, permissions: ROLE_PERMS[key] }));
       const own = (customRoles.get(ws.info.id) ?? []).map((r) => ({ ...r, system: false }));
       return { roles: [...sys, ...own].sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0)), catalog: ALL_PERMS.map((key) => ({ key, description: PERM_TEXT[key] })) };

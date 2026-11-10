@@ -80,6 +80,16 @@ function WorkspaceDialogBody() {
           <SettingRow title="Воронки и этапы" hint="Названия, порядок, вероятность, тип этапа.">
             <Button small icon="edit" onClick={() => setEditor("pipelines")}>Открыть</Button>
           </SettingRow>
+          {ws.isCloud && !current.remote && (
+            <SettingRow title="Загрузить в облако" hint="Создаст облачный Workspace с копией записей этого локального. Локальный останется как есть; повторная загрузка не плодит дубли.">
+              <Button small icon="upload" onClick={async () => {
+                if (!(await confirmDialog({ title: `Загрузить «${current.name}» в облако?`, message: "Записи, задачи и заметки станут доступны участникам нового облачного Workspace.", confirm: "Загрузить" }))) return;
+                const r = await attempt(() => api.wsUploadLocal());
+                await refreshWorkspace();
+                if (r) toast(`Загружено записей: ${integer(r.copied)}${r.skipped ? `, пропущено: ${integer(r.skipped)} (см. журнал ошибок)` : ""}`, r.skipped ? "error" : "success");
+              }}>Загрузить</Button>
+            </SettingRow>
+          )}
           <SettingRow title="Свои поля" hint="Дополнительные поля в карточках компаний, контактов, лидов и сделок.">
             <Button small icon="edit" onClick={() => setEditor("fields")}>Открыть</Button>
           </SettingRow>

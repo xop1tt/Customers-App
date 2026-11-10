@@ -180,3 +180,9 @@ describe("свои поля (демо-ядро)", () => {
     expect((await api.wsCard("companies", company.id)).custom_field_values?.[0]?.value).toBeNull();
   });
 });
+
+describe("загрузка локальной CRM (демо-ядро)", () => {
+  it("локальная учётная запись не загружает в облако", async () => {
+    await expect(api.wsUploadLocal()).rejects.toBeDefined();
+  });
+});
