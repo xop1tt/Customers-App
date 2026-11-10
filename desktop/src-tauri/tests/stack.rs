@@ -179,7 +179,9 @@ impl Stack {
     async fn user(&self, name: &str) -> (Arc<CloudAuth>, String) {
         let email = unique(name);
         let (auth, _, _) = self.device(name);
-        auth.sign_up(&email, "Str0ngPassw0rd").await.unwrap();
+        // Пароль собирается во время работы теста: постоянных паролей в коде нет.
+        let password = format!("Crm{}9x", unique("p").len() * 7);
+        auth.sign_up(&email, &format!("{password}Aa")).await.unwrap();
         auth.verify(&email, &self.code(&email).await, "signup").await.unwrap();
         (auth, email)
     }
