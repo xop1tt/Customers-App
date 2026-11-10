@@ -75,7 +75,11 @@ impl Core {
         if c.workspaces.is_empty() {
             c.workspaces.push(WorkspaceInfo {
                 id: uuid::Uuid::new_v4().to_string(),
-                name: if s.is_cloud { "Личное пространство (на этом устройстве)".into() } else { "Личное пространство".into() },
+                name: if s.is_cloud {
+                    "Личное пространство (на этом устройстве)".into()
+                } else {
+                    "Личное пространство".into()
+                },
                 personal: true,
                 role: "owner".into(),
                 role_name: "Владелец".into(),
