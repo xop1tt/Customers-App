@@ -67,7 +67,7 @@ npm run debug:isolation   # только тесты разделения кан�
 npm run release:check     # статическая проверка: версии, идентификаторы, отсутствие Beta в Stable
 ```
 
-Готовые сборки Beta: Actions → Beta → артефакты `beta-macos`, `beta-windows` (push в `develop`) или
+Готовые сборки Beta: Actions → Beta → артефакты `beta-macos`, `beta-windows` (ручной запуск) или
 Releases → Pre-release (тег `vX.Y.Z-beta.N`). Обе версии ставятся и работают одновременно.
 
 Облако Beta (по желанию): создать отдельный бесплатный проект Supabase по `docs/cloud-setup.md`, добавить в

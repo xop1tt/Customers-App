@@ -6,7 +6,7 @@ name: Desktop
 # так видно, что приложение собирается так же, как в релизе. Секреты в этом файле не используются.
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     paths: ["desktop/**", "supabase/migrations/**", ".github/workflows/desktop.yml"]
   pull_request:   # без фильтра путей: нужные файлы определяет задача changes
   workflow_dispatch:
