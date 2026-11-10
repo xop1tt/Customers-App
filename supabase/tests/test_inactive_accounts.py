@@ -121,7 +121,7 @@ def test_sign_in_after_warning_cancels_deletion():
 
 def test_members_of_shared_workspaces_are_never_removed():
     owner, member = make_user(), make_user()
-    workspace_with(owner, {member: "editor"})
+    workspace_with(owner, {member: "employee"})
     age(member, 900)
     assert member not in due_ids()
     with db() as c:

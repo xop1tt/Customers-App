@@ -180,6 +180,19 @@ select public.email_quota_status();                          -- сколько �
 
 Новая сборка приложения для этого не нужна.
 
+**Сейчас наши ограничения отключены** (миграция `20261110160000_relax_email_limits.sql`): нет пауз между письмами и лимитов
+на адрес, устройство и IP; остаётся только общий потолок 400 писем в сутки (у Gmail предел около 500). Включить защиту
+обратно:
+
+```sql
+update private.email_limits set signup_resend_cooldown = interval '15 minutes', recovery_cooldown = interval '30 minutes',
+  email_change_cooldown = interval '30 minutes', per_email_daily_max = 5, device_hourly_max = 3, device_daily_max = 5,
+  ip_hourly_max = 10, ip_daily_max = 30, global_daily_max = 50 where id = 1;
+```
+
+Собственные ограничения Supabase Auth (письма в час, попытки ввода кода) настраиваются в панели **Authentication → Rate Limits**
+и этой миграцией не затрагиваются.
+
 ## Шаг 11. Резервная копия облака (раз в месяц)
 
 На бесплатном тарифе автоматических копий нет, но у каждого пользователя полная копия на его Mac
