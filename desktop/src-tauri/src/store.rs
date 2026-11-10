@@ -225,6 +225,10 @@ impl LeadStore {
             if let Some(d) = discovered.as_deref().and_then(parse_date) {
                 data.discovered_at = Some(d);
             }
+            // Отметка о переносе в CRM (Customers 2.0) сохраняется, даже если поиск нашёл лид заново.
+            if data.crm.is_none() {
+                data.crm = serde_json::from_str::<Value>(&old_json).ok().and_then(|v| v.get("crm").cloned()).filter(|v| !v.is_null());
+            }
             let new_value = data.to_value();
             let same = serde_json::from_str::<Value>(&old_json).map(|old| json_equal(&old, &new_value)).unwrap_or(false);
             if same {
@@ -494,6 +498,21 @@ impl LeadStore {
             rows.collect::<Result<_, _>>()?
         };
         self.mark_seen(&ids)
+    }
+
+    /// Отметка о переносе лида в CRM: поле `data.crm` (синхронизируется вместе с данными лида).
+    pub fn set_crm_mark(&self, id: &str, mark: &Value) -> AppResult<()> {
+        let old: String = self
+            .conn
+            .query_row("SELECT data_json FROM leads WHERE lead_id=?1", [id], |r| r.get(0))
+            .optional()?
+            .ok_or_else(|| AppError::msg("Лид не найден."))?;
+        let mut v: Value = serde_json::from_str(&old)?;
+        if let Some(obj) = v.as_object_mut() {
+            obj.insert("crm".into(), mark.clone());
+        }
+        self.conn.execute("UPDATE leads SET data_json=?1, updated_at=?2 WHERE lead_id=?3", params![canonical_json(&v), util::now_string(), id])?;
+        self.mark_dirty("lead", id, &["data"], None)
     }
 
     pub fn set_note(&self, id: &str, note: &str) -> AppResult<()> {

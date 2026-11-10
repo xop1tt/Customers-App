@@ -9,6 +9,7 @@ pub mod session;
 pub mod sync;
 pub mod system;
 pub mod update;
+pub mod workspace;
 
 use crate::accounts::LocalAccounts;
 use crate::channel::{Channel, Isolation};

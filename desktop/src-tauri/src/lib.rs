@@ -25,6 +25,8 @@ pub mod store;
 pub mod updates;
 pub mod util;
 pub mod whatsnew;
+// Customers 2.0: базы Workspace и данные CRM (этапы 3–7).
+pub mod workspace;
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     let app = app_handler();
@@ -69,6 +71,31 @@ fn debug_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + S
 fn app_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         commands::account_prefs,
+        commands::ws_state,
+        commands::ws_switch,
+        commands::ws_list,
+        commands::ws_card,
+        commands::ws_save,
+        commands::ws_delete,
+        commands::ws_restore,
+        commands::ws_duplicates,
+        commands::ws_convert_lead,
+        commands::ws_collections,
+        commands::ws_collection_items,
+        commands::ws_reorder_collections,
+        commands::ws_hide_collection,
+        commands::ws_conflicts,
+        commands::ws_resolve_conflict,
+        commands::ws_dismiss_rejected,
+        commands::ws_create_workspace,
+        commands::ws_refresh,
+        commands::ws_sync_now,
+        commands::ws_invite,
+        commands::ws_accept_invitation,
+        commands::ws_set_member_role,
+        commands::ws_remove_member,
+        commands::ws_leave,
+        commands::ws_rename_workspace,
         commands::backup_now,
         commands::boot_info,
         commands::call_phone,

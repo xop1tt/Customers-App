@@ -412,3 +412,64 @@ pub fn set_zoom(app: tauri::AppHandle, scale: f64) -> CmdResult<()> {
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------- Customers 2.0: Workspace и CRM
+
+use crate::workspace::convert::ConvertOptions;
+use crate::workspace::query::Query;
+
+sync_cmds! {
+    ws_state() -> Value = |c: &Arc<Core>| c.ws_state();
+    ws_switch(id: String) -> Value = |c: &Arc<Core>, id: String| c.ws_switch(&id);
+    ws_list(entity: String, query: Option<Query>) -> Value = |c: &Arc<Core>, e: String, q: Option<Query>| c.ws_list(&e, q.unwrap_or_default());
+    ws_card(entity: String, id: String) -> Value = |c: &Arc<Core>, e: String, id: String| c.ws_card(&e, &id);
+    ws_save(entity: String, id: Option<String>, fields: serde_json::Map<String, Value>) -> Value = |c: &Arc<Core>, e: String, id: Option<String>, f| c.ws_save(&e, id.as_deref(), f);
+    ws_delete(entity: String, id: String) -> Value = |c: &Arc<Core>, e: String, id: String| c.ws_delete(&e, &id);
+    ws_restore(entity: String, id: String) -> Value = |c: &Arc<Core>, e: String, id: String| c.ws_restore(&e, &id);
+    ws_duplicates(entity: String, fields: serde_json::Map<String, Value>, except: Option<String>) -> Value = |c: &Arc<Core>, e: String, f, x: Option<String>| c.ws_duplicates(&e, f, x.as_deref());
+    ws_convert_lead(lead_id: String, options: Option<ConvertOptions>) -> Value = |c: &Arc<Core>, id: String, o: Option<ConvertOptions>| c.ws_convert_lead(&id, o.unwrap_or_default());
+    ws_collections() -> Value = |c: &Arc<Core>| c.ws_collections();
+    ws_collection_items(id: String, query: Option<Query>) -> Value = |c: &Arc<Core>, id: String, q: Option<Query>| c.ws_collection_items(&id, q.unwrap_or_default());
+    ws_reorder_collections(ids: Vec<String>) -> () = |c: &Arc<Core>, ids: Vec<String>| c.ws_reorder_collections(ids);
+    ws_hide_collection(id: String, hidden: bool) -> () = |c: &Arc<Core>, id: String, h: bool| c.ws_hide_collection(&id, h);
+    ws_conflicts() -> Value = |c: &Arc<Core>| c.ws_conflicts();
+    ws_resolve_conflict(id: String, take_lost: bool) -> () = |c: &Arc<Core>, id: String, t: bool| c.ws_resolve_conflict(&id, t);
+    ws_dismiss_rejected() -> usize = |c: &Arc<Core>| c.ws_dismiss_rejected();
+}
+
+#[tauri::command]
+pub async fn ws_create_workspace(core: C<'_>, name: String) -> CmdResult<Value> {
+    core.inner().ws_create_workspace(&name).await
+}
+#[tauri::command]
+pub async fn ws_refresh(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_refresh().await
+}
+#[tauri::command]
+pub async fn ws_sync_now(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_sync_now().await
+}
+#[tauri::command]
+pub async fn ws_invite(core: C<'_>, email: String, role: String) -> CmdResult<Value> {
+    core.inner().ws_invite(&email, &role).await
+}
+#[tauri::command]
+pub async fn ws_accept_invitation(core: C<'_>, token: String) -> CmdResult<Value> {
+    core.inner().ws_accept_invitation(&token).await
+}
+#[tauri::command]
+pub async fn ws_set_member_role(core: C<'_>, user: String, role: String) -> CmdResult<Value> {
+    core.inner().ws_set_member_role(&user, &role).await
+}
+#[tauri::command]
+pub async fn ws_remove_member(core: C<'_>, user: String) -> CmdResult<Value> {
+    core.inner().ws_remove_member(&user).await
+}
+#[tauri::command]
+pub async fn ws_leave(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_leave().await
+}
+#[tauri::command]
+pub async fn ws_rename_workspace(core: C<'_>, name: String) -> CmdResult<Value> {
+    core.inner().ws_rename_workspace(&name).await
+}

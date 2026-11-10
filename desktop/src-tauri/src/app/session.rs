@@ -31,6 +31,8 @@ pub struct Session {
     pub settings: Mutex<SearchSettings>,
     pub search: Mutex<SearchState>,
     pub sync: Mutex<SyncState>,
+    /// Customers 2.0: выбранный Workspace и его база.
+    pub workspace: Mutex<super::workspace::CrmState>,
     pub(crate) tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -316,6 +318,7 @@ impl Core {
             settings: Mutex::new(settings),
             search: Mutex::new(SearchState::default()),
             sync: Mutex::new(SyncState::new()),
+            workspace: Mutex::default(),
             tasks: Mutex::new(vec![]),
         });
         *self.current.lock().unwrap() = Some(session.clone());
