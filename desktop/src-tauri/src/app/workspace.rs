@@ -70,10 +70,12 @@ impl Core {
         let dir = self.ws_dir(s);
         self.env.guard_path(&dir)?;
         let mut c = Catalog::load(&dir);
-        if !s.is_cloud && c.workspaces.is_empty() {
+        // В облачной записи без единого Workspace (облако без миграций CRM, нет связи, первый запуск)
+        // тоже создаётся локальный: CRM остаётся доступной, а серверные Workspace добавляются рядом.
+        if c.workspaces.is_empty() {
             c.workspaces.push(WorkspaceInfo {
                 id: uuid::Uuid::new_v4().to_string(),
-                name: "Личное пространство".into(),
+                name: if s.is_cloud { "Личное пространство (на этом устройстве)".into() } else { "Личное пространство".into() },
                 personal: true,
                 role: "owner".into(),
                 role_name: "Владелец".into(),
@@ -528,6 +530,9 @@ impl Core {
 
     fn ws_sync_soon(self: &Arc<Self>, s: &Arc<Session>) {
         let Some(cloud) = self.env.cloud.clone().filter(|_| s.is_cloud) else { return };
+        if !self.ws_catalog(s).ok().and_then(|c| c.active_info().map(|w| w.remote)).unwrap_or(false) {
+            return;
+        }
         let Ok(store) = self.ws_store(s) else { return };
         {
             let mut st = s.workspace.lock().unwrap();
