@@ -47,7 +47,7 @@
 ## Шаг 3. Подготовить почту Gmail
 
 1. В аккаунте Google включите двухэтапную аутентификацию: [myaccount.google.com/security](https://myaccount.google.com/security).
-2. Откройте [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), имя — `Lead Generator`,
+2. Откройте [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), имя — `Customers`,
    нажмите **Create**. Появится пароль из 16 букв — это **пароль приложения**. Сохраните его в менеджере паролей.
 
 Gmail бесплатно отправляет около 500 писем в сутки; приложение само ограничивает отправку 50 письмами.
@@ -64,7 +64,7 @@ Gmail бесплатно отправляет около 500 писем в су�
 | `SMTP_MODE` | `tls` |
 | `SMTP_USER` | ваш адрес Gmail |
 | `SMTP_PASS` | пароль приложения из шага 3 (без пробелов) |
-| `SMTP_FROM` | `Lead Generator <ваш адрес Gmail>` |
+| `SMTP_FROM` | `Customers <ваш адрес Gmail>` |
 
 `SEND_EMAIL_HOOK_SECRET` добавите на шаге 6. `SUPABASE_URL` и `SUPABASE_SERVICE_ROLE_KEY` Supabase
 передаёт функциям сам — их добавлять не нужно.

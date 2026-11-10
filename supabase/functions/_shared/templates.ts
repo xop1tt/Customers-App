@@ -3,7 +3,9 @@
 // Код работает всегда; ссылка открывает страницу Supabase, которая проверяет её и
 // возвращает пользователя в приложение (leadgenerator://auth/callback).
 
-export const APP_NAME = "Lead Generator";
+import { BANNER_CID } from "./banner.ts";
+
+export const APP_NAME = "Customers";
 
 export type Kind = "signup" | "recovery" | "email_change_current" | "email_change_new" | "other";
 
@@ -28,23 +30,23 @@ function copy(i: TemplateInput): Copy {
       return {
         subject: `${APP_NAME}: подтвердите адрес почты`,
         title: "Подтвердите адрес почты",
-        lead: `Вы создаёте учётную запись ${APP_NAME} для адреса ${i.email}. Введите код в приложении или нажмите кнопку.`,
+        lead: `Вы (или кто-то по ошибке) указали адрес ${i.email} при создании учётной записи ${APP_NAME}. Чтобы завершить регистрацию, введите код в приложении или нажмите кнопку.`,
         button: "Подтвердить адрес",
         ignore: "Если вы не регистрировались, просто удалите это письмо: без подтверждения учётная запись не заработает.",
       };
     case "recovery":
       return {
         subject: `${APP_NAME}: восстановление пароля`,
-        title: "Восстановление пароля",
-        lead: `Кто-то (возможно, вы) запросил смену пароля для ${i.email}. Введите код в приложении или нажмите кнопку, затем задайте новый пароль.`,
+        title: "Кто-то пытался сбросить пароль",
+        lead: `Мы получили запрос на сброс пароля учётной записи ${i.email}. Если это вы, введите код в приложении или нажмите кнопку и задайте новый пароль.`,
         button: "Задать новый пароль",
-        ignore: "Если вы не запрашивали восстановление, ничего не делайте: пароль останется прежним.",
+        ignore: "Если это были не вы, ничего не делайте: пароль останется прежним и войти без этого кода нельзя.",
       };
     case "email_change_current":
       return {
         subject: `${APP_NAME}: подтвердите смену адреса почты`,
         title: "Смена адреса почты",
-        lead: `Для учётной записи ${i.email} запрошена смена адреса на ${i.newEmail ?? "новый"}. Подтвердите, что это вы: введите код в приложении или нажмите кнопку.`,
+        lead: `Кто-то запросил смену адреса учётной записи ${i.email} на ${i.newEmail ?? "новый"}. Если это вы, введите код в приложении или нажмите кнопку.`,
         button: "Подтвердить смену адреса",
         ignore: "Если это были не вы, не подтверждайте смену и смените пароль в приложении: «Настройки → Учётная запись».",
       };
@@ -52,7 +54,7 @@ function copy(i: TemplateInput): Copy {
       return {
         subject: `${APP_NAME}: подтвердите новый адрес почты`,
         title: "Подтвердите новый адрес",
-        lead: `Этот адрес (${i.email}) указан как новый для учётной записи ${APP_NAME}. Введите код в приложении или нажмите кнопку.`,
+        lead: `Адрес ${i.email} указан как новый для учётной записи ${APP_NAME}. Чтобы подтвердить его, введите код в приложении или нажмите кнопку.`,
         button: "Подтвердить новый адрес",
         ignore: "Если вы не меняли адрес, просто удалите это письмо.",
       };
@@ -88,14 +90,16 @@ export function render(i: TemplateInput): { subject: string; text: string; html:
 <title>${esc(c.subject)}</title></head>
 <body style="margin:0;padding:24px;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1d1d1f">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#ffffff;border-radius:14px;padding:32px">
-<tr><td style="font-size:13px;color:#6e6e73;font-weight:600;letter-spacing:.02em">${esc(APP_NAME)}</td></tr>
-<tr><td style="padding-top:8px;font-size:22px;font-weight:700">${esc(c.title)}</td></tr>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#ffffff;border-radius:14px;overflow:hidden">
+<tr><td style="background:#000000;padding:0"><img src="cid:${BANNER_CID}" width="520" alt="${esc(APP_NAME)}" style="display:block;width:100%;max-width:520px;height:auto;border:0;background:#000000"></td></tr>
+<tr><td style="padding:8px 32px 32px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+<tr><td style="padding-top:20px;font-size:22px;font-weight:700">${esc(c.title)}</td></tr>
 <tr><td style="padding-top:12px;font-size:15px;line-height:1.5">${esc(c.lead)}</td></tr>
 <tr><td style="padding-top:20px"><div style="font-size:30px;font-weight:700;letter-spacing:.3em;font-family:ui-monospace,Menlo,monospace;background:#f5f5f7;border-radius:10px;padding:14px 18px;text-align:center">${esc(i.code)}</div></td></tr>
-<tr><td style="padding-top:20px" align="center"><a href="${esc(i.link)}" style="display:inline-block;background:#29b354;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:22px">${esc(c.button)}</a></td></tr>
+<tr><td style="padding-top:20px" align="center"><a href="${esc(i.link)}" style="display:inline-block;background:#2f7df6;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:22px">${esc(c.button)}</a></td></tr>
 <tr><td style="padding-top:20px;font-size:13px;line-height:1.5;color:#6e6e73">${esc(valid)}<br>${esc(c.ignore)}</td></tr>
 <tr><td style="padding-top:20px;font-size:12px;color:#86868b">Письмо отправлено автоматически, отвечать на него не нужно.</td></tr>
+</table></td></tr>
 </table></td></tr></table></body></html>`;
   return { subject: c.subject, text, html };
 }
