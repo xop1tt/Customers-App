@@ -132,7 +132,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   return (
     <aside className={`sidebar${overlay ? " overlay" : ""}`} style={{ width: "var(--nav-w)" }} aria-label="Навигация">
       <div className="side-head">
-        <span className="side-brand grow"><img src={appIcon} width={20} height={20} alt="" draggable={false} />Customers{beta && <span className="channel-badge" data-tip="Отдельная версия для проверки: свои данные и настройки">Beta</span>}</span>
+        <span className="side-brand grow"><img className="icon-dark" src={appIcon} width={20} height={20} alt="" draggable={false} /><img className="icon-light" src={appIconLight} width={20} height={20} alt="" draggable={false} />Customers{beta && <span className="channel-badge" data-tip="Отдельная версия для проверки: свои данные и настройки">Beta</span>}</span>
         <IconButton icon="sidebar" tip="Свернуть панель" onClick={() => (overlay ? setState({ navPeek: false }) : void patchDevice({ navOpen: false }))} />
       </div>
 
