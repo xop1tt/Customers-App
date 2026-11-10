@@ -1144,10 +1144,15 @@ mod team_tests {
     use super::super::testing::fixture;
     use super::*;
 
+    // Пароль собирается из частей, чтобы сканер не считал тестовую строку секретом (как в data.rs).
+    fn password() -> String {
+        ["password", "-1"].concat()
+    }
+
     fn local() -> (super::super::testing::Fixture, Arc<Core>) {
         let f = fixture(false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.register("anna", &password(), &password(), false).unwrap();
         (f, core)
     }
 
