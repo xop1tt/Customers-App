@@ -10,11 +10,13 @@ export type SmtpConfig = {
   mode: "tls" | "starttls" | "plain";
   user?: string;
   pass?: string;
-  from: string; // "Lead Generator <app@example.com>"
+  from: string; // "Customers <app@example.com>"
   timeoutMs: number;
 };
 
-export type Mail = { to: string; subject: string; text: string; html: string };
+export type Inline = { cid: string; type: string; base64: string };
+/** `inline` — картинки, на которые HTML ссылается как на cid:… (вложены в письмо, грузить из сети не нужно). */
+export type Mail = { to: string; subject: string; text: string; html: string; inline?: Inline[] };
 
 export class SmtpError extends Error {}
 
@@ -47,11 +49,21 @@ function encodeFrom(from: string): string {
   return `${encodeHeader(m[1].replace(/^"|"$/g, ""))} <${m[2]}>`;
 }
 
-/** Письмо в формате MIME: multipart/alternative (текст + HTML), UTF-8, base64. */
+/** Письмо в формате MIME: текст и HTML (multipart/alternative), HTML с вложенными картинками (multipart/related), UTF-8, base64. */
 export function buildMessage(cfg: Pick<SmtpConfig, "from">, mail: Mail, now = new Date()): string {
   if (/[\r\n]/.test(mail.to + mail.subject + cfg.from)) throw new SmtpError("header injection");
-  const boundary = `lg-${crypto.randomUUID()}`;
+  const id = crypto.randomUUID();
+  const alt = `lg-alt-${id}`;
+  const rel = `lg-rel-${id}`;
+  const inline = mail.inline ?? [];
+  if (inline.some((p) => /[^\w.@-]/.test(p.cid) || /[^\w/+.-]/.test(p.type))) throw new SmtpError("bad inline part");
   const domain = addressOf(cfg.from).split("@")[1] ?? "localhost";
+  const htmlPart = [
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrap76(b64(mail.html)),
+  ];
   const lines = [
     `From: ${encodeFrom(cfg.from)}`,
     `To: <${mail.to}>`,
@@ -60,19 +72,31 @@ export function buildMessage(cfg: Pick<SmtpConfig, "from">, mail: Mail, now = ne
     `Message-ID: <${crypto.randomUUID()}@${domain}>`,
     "MIME-Version: 1.0",
     "Auto-Submitted: auto-generated",
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    `Content-Type: multipart/alternative; boundary="${alt}"`,
     "",
-    `--${boundary}`,
+    `--${alt}`,
     "Content-Type: text/plain; charset=utf-8",
     "Content-Transfer-Encoding: base64",
     "",
     wrap76(b64(mail.text)),
-    `--${boundary}`,
-    "Content-Type: text/html; charset=utf-8",
-    "Content-Transfer-Encoding: base64",
-    "",
-    wrap76(b64(mail.html)),
-    `--${boundary}--`,
+    `--${alt}`,
+    ...(inline.length === 0 ? htmlPart : [
+      `Content-Type: multipart/related; boundary="${rel}"`,
+      "",
+      `--${rel}`,
+      ...htmlPart,
+      ...inline.flatMap((p) => [
+        `--${rel}`,
+        `Content-Type: ${p.type}`,
+        "Content-Transfer-Encoding: base64",
+        `Content-ID: <${p.cid}>`,
+        "Content-Disposition: inline",
+        "",
+        wrap76(p.base64),
+      ]),
+      `--${rel}--`,
+    ]),
+    `--${alt}--`,
     "",
   ];
   return lines.join("\r\n");
@@ -144,7 +168,7 @@ export async function sendMail(cfg: SmtpConfig, mails: Mail[], sent: string[] = 
     let c = new Conn(raw);
     const greet = await c.read();
     if (greet.code !== 220) throw new SmtpError(`greeting: ${greet.code}`);
-    const helo = "lead-generator";
+    const helo = "customers";
     let caps = await c.cmd(`EHLO ${helo}`, [250]);
     if (cfg.mode === "starttls") {
       await c.cmd("STARTTLS", [220]);
