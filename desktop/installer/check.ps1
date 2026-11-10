@@ -75,4 +75,4 @@ if ($Channel -eq 'beta') {
     if ((Get-Content $stableProbe -ErrorAction SilentlyContinue) -ne 'stable') { throw 'Установка или удаление Beta изменили данные Stable' }
     Remove-Item $stableData -Recurse -Force
 }
-Write-Host "Установка, обновление поверх и удаление работают ($Channel).
+Write-Host "Установка, обновление поверх и удаление работают ($Channel)."
