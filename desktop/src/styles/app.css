@@ -329,6 +329,8 @@ button.kpi:not(:disabled):hover { background: var(--bg-hover); }
 .ws-avatar + .ws-avatar { margin-left: -6px; }
 .ws-more { align-items: center; justify-content: center; background: var(--bg-raised); color: var(--text-2); font-size: var(--fs-xs); font-weight: 600; }
 .ws-members { min-width: 240px; }
+.presence-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--green, #34c759); vertical-align: middle; }
+.presence-note { font-size: var(--fs-sm); }
 .ws-member { display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
 .ws-member-list { display: flex; flex-direction: column; }
 .ws-member-list .ws-member { padding: 6px 0; border-bottom: 1px solid var(--line); }

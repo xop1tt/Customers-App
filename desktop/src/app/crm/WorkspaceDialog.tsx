@@ -10,6 +10,7 @@ import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, refreshWorkspace, setState, toast, useStore } from "../../state/store";
 import { useWsQuery } from "./useCrm";
 import { PipelineEditor, RolesEditor } from "./Editors";
+import { usePresence } from "./Presence";
 import { CustomFieldsEditor } from "./CustomFields";
 
 const ROLES = [
@@ -126,6 +127,7 @@ function Members() {
   const roleOptions = rolesData?.roles.length ? rolesData.roles.filter((r) => r.key !== "owner").map((r) => ({ value: r.key, label: r.name })) : ROLES;
   const rankOf = (key: string) => rolesData?.roles.find((r) => r.key === key)?.rank ?? ({ admin: 80, manager: 60, employee: 40, viewer: 20 } as Record<string, number>)[key] ?? 0;
   const manage = ws.permissions.includes("members.manage");
+  const online = new Set(usePresence().map((p) => p.user_id));
   const myRank = ws.workspaces.find((w) => w.id === ws.active)?.rank ?? 0;
   return (
     <Group title={`Участники · ${integer(ws.members.length)}`}>
@@ -136,7 +138,7 @@ function Members() {
             <li key={m.userId} className="ws-member">
               <Avatar name={m.displayName} src={m.avatarPath} size={28} />
               <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
-                <span className="ellipsis">{m.displayName}{m.userId === ws.me ? <span className="faint"> · вы</span> : null}</span>
+                <span className="ellipsis">{(m.userId === ws.me || online.has(m.userId)) && <span className="presence-dot" title="Онлайн" />}{m.displayName}{m.userId === ws.me ? <span className="faint"> · вы</span> : null}</span>
                 {m.email && <span className="faint ellipsis" style={{ fontSize: "var(--fs-sm)" }}>{m.email}</span>}
               </span>
               {editable ? (

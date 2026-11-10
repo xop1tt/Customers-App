@@ -448,6 +448,10 @@ pub async fn ws_upload_local(core: C<'_>) -> CmdResult<Value> {
     core.inner().ws_upload_local().await
 }
 #[tauri::command]
+pub async fn ws_presence(core: C<'_>, entity_type: Option<String>, entity_id: Option<String>) -> CmdResult<Value> {
+    core.inner().ws_presence(entity_type, entity_id).await
+}
+#[tauri::command]
 pub async fn ws_roles(core: C<'_>) -> CmdResult<Value> {
     core.inner().ws_roles().await
 }

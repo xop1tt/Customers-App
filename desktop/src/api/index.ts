@@ -5,7 +5,7 @@ import type {
   AccountPrefs, AuthCallback, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
-  CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsRoles, WsState,
+  CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -133,6 +133,7 @@ export const api = {
   wsSetMemberRole: (user: string, role: string) => call<WsState>("ws_set_member_role", { user, role }),
   wsRemoveMember: (user: string) => call<WsState>("ws_remove_member", { user }),
   wsUploadLocal: () => call<{ workspace: string; copied: number; skipped: number; state: WsState }>("ws_upload_local"),
+  wsPresence: (entityType?: string, entityId?: string) => call<WsPresence[]>("ws_presence", { entityType: entityType ?? null, entityId: entityId ?? null }),
   wsRoles: () => call<WsRoles>("ws_roles"),
   wsSaveRole: (key: string, name: string, rank: number, permissions: string[]) => call<WsRoles>("ws_save_role", { key, name, rank, permissions }),
   wsDeleteRole: (key: string) => call<WsRoles>("ws_delete_role", { key }),

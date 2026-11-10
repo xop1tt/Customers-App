@@ -457,6 +457,7 @@ export interface WsMember {
   email: string | null;
 }
 
+export interface WsPresence { user_id: string; entity_type: string | null; entity_id: string | null; seen_at: string }
 export interface WsRole { key: string; name: string; rank: number; system: boolean; permissions: string[] }
 export interface WsRoles { roles: WsRole[]; catalog: { key: string; description: string }[] }
 
