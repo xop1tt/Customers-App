@@ -52,6 +52,8 @@ url = "2"
 percent-encoding = "2"
 quick-xml = "0.37"
 tokio-rustls = "0.26"
+# Realtime (WebSocket) для чата; TLS поверх своего tokio-rustls, без лишних TLS-стеков.
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 rustls = "0.23"
 rustls-pki-types = "1"
 webpki-roots = "1"

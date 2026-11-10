@@ -4,9 +4,11 @@
 import catalog from "../../src-tauri/data/osm_catalog.json";
 import type {
   AccountPrefs, BootInfo, DevicePrefs, DrivesState, Exclusion, ExclusionKind, Lead, OsmCategory, SearchSettings, SearchStatus, SessionInfo, Snapshot, SourceReport,
-  SyncStatus, UpdateInfo,
+  SyncStatus, UpdateInfo, WsState,
 } from "./types";
 import { wsCall } from "./wsMock";
+import { teamCall } from "./chatMock";
+import { marketCall } from "./marketMock";
 
 type Handler = (p: unknown) => void;
 const listeners = new Map<string, Set<Handler>>();
@@ -118,7 +120,7 @@ let eventId = 1;
 
 const baseDevice: DevicePrefs = {
   accent: null, theme: "system", language: "system", uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
-  sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true,
+  sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true, sidebarCollapsed: [],
   lightModeAuto: true, lightModeThreshold: 20, checkUpdates: true, updateCheckHours: 24, lastUpdateCheck: ago(3), backgroundDownload: true,
   lastSeenVersion: "1.1.0", closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: true, rememberedUser: null, lastSection: "home",
   listSort: "score", listSortDescending: true, reportsOfferAfterCrash: true, reportsLogErrors: true, reportsIncludeLog: true, reportsLastSeen: null, legacyImported: true,
@@ -127,7 +129,7 @@ let device: DevicePrefs = { ...baseDevice };
 
 let account: AccountPrefs = {
   autoSearchMinutes: 60, signature: "", backupDirectory: "~/Documents/Customers Backups/anna", autoBackup: true, keepBackups: 14, dataPath: null,
-  notifyNewLeads: true, notifyErrors: true, notifySync: false, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1, callApp: "system",
+  notifyNewLeads: true, notifyErrors: true, notifySync: false, notifyMessages: true, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1, callApp: "system",
   welcomeDone: !demo.has("welcome"), exportLastTab: "file",
 };
 
@@ -232,6 +234,34 @@ const DEBUG_SCENARIOS = [
 ];
 
 export async function call(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+  if (cmd === "ws_market") {
+    const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
+    const remote = ws.workspaces.find((w) => w.id === ws.active)?.remote ?? false;
+    // В демо облачной команды (?team) вы — ещё и модератор маркетплейса.
+    return marketCall(String(args.action), (args.args ?? {}) as Record<string, unknown>,
+      { cloud: ws.isCloud, me: ws.me, wsId: remote ? ws.active : null, perms: ws.permissions, moderator: ws.isCloud });
+  }
+  if (["ws_team", "ws_update_member", "ws_chat", "ws_chat_poll"].includes(cmd)) {
+    const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
+    const me = session();
+    if (cmd === "ws_chat" && args.action === "chat_post") {
+      // Как сервер: название и подпись карточки берутся из CRM этого Workspace.
+      const a = (args.args ?? {}) as Record<string, unknown>;
+      const refs = (a.attachments as { type: string; id: string }[] | undefined) ?? [];
+      const cards = [];
+      for (const r of refs) {
+        const table = ({ company: "companies", contact: "contacts", crm_lead: "crm_leads", deal: "deals" } as Record<string, string>)[r.type];
+        const rows = table ? ((await wsCall("ws_list", { entity: table, query: { limit: 10000 } }, () => leads)) as { items: Record<string, unknown>[] }).items : [];
+        const row = rows.find((x) => x.id === r.id);
+        if (!row) throw { code: "error", message: "Карточка не найдена в этом Workspace." };
+        const title = String(row.name ?? row.full_name ?? row.title ?? "");
+        const subtitle = String(r.type === "deal" ? `${row.amount ?? 0} ${row.currency ?? "RUB"}` : r.type === "contact" ? row.position ?? "" : r.type === "crm_lead" ? row.company_name ?? "" : row.legal_name ?? "");
+        cards.push({ type: r.type, id: r.id, title, subtitle, available: true });
+      }
+      args = { ...args, args: { ...a, attachments: cards } };
+    }
+    return teamCall(cmd, args, { team: ws.isCloud, me: ws.me, myName: me.displayName, myAvatar: me.avatar ?? null, wsId: ws.active ?? "", members: ws.members, perms: ws.permissions });
+  }
   if (cmd.startsWith("ws_")) {
     const out = await wsCall(cmd, args, () => leads);
     if (["ws_save", "ws_delete", "ws_restore", "ws_convert_lead", "ws_switch", "ws_create_workspace", "ws_rename_workspace", "ws_reorder_collections", "ws_hide_collection", "ws_resolve_conflict"].includes(cmd)) {

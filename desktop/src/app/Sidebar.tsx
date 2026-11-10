@@ -10,9 +10,12 @@ import { api } from "../api";
 import { Icon } from "../ui/icons";
 import { type MenuItem, Popover, showMenu } from "../ui/overlay";
 import type { SyncStatus, UpdateInfo } from "../api/types";
-import { attempt, leaveSession, openCollection, openDebug, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
+import { attempt, leaveSession, openCollection, openDebug, openProfile, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
 import { CollectionsGroup } from "./crm/Collections";
 import { openLink } from "../state/actions";
+import { GroupTitle, useCollapsed } from "./SideGroup";
+import { unreadNotifications, unreadTotal } from "../state/team";
+import { openMarket } from "../state/market";
 
 const SCORE_STEPS = [90, 70, 50, 30];
 
@@ -65,6 +68,11 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const sourceFilter = useStore((s) => s.filter.source);
   const minScore = useStore((s) => s.filter.minScore);
   const beta = useStore((s) => s.boot?.channel === "beta");
+  const sourcesShut = useCollapsed("sources");
+  const scoresShut = useCollapsed("scores");
+  const workShut = useCollapsed("work");
+  const teamShut = useCollapsed("team");
+  const chat = useStore((s) => s.chat);
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
@@ -143,10 +151,12 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
         {(device.sidebarSources || customize) && (
           <div className="nav-group">
-            <div className="nav-title">По источнику</div>
+            <GroupTitle id="sources" title="По источнику" />
             {sourceKeys.map((key, i) => {
               const meta = SOURCES.find((s) => s.key === key);
               if (!meta) return null;
+              // В свёрнутой группе остаётся только открытый сейчас пункт.
+              if (sourcesShut && !(section === "all" && sourceFilter === key)) return null;
               const n = perSource.get(key) ?? 0;
               if (customize) return row(key, i, SOURCES.map((s) => s.key), "sidebarSourceOrder", <><Icon name={meta.icon} size={16} /><span className="ellipsis">{meta.title}</span></>, "sidebarHiddenSources");
               return (
@@ -162,8 +172,8 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
         {!customize && (
           <div className="nav-group">
-            <div className="nav-title">По оценке</div>
-            {SCORE_STEPS.map((n) => (
+            <GroupTitle id="scores" title="По оценке" />
+            {SCORE_STEPS.filter((n) => !scoresShut || (section === "all" && !sourceFilter && minScore === n)).map((n) => (
               <button key={n} type="button" className={`nav-item${section === "all" && !sourceFilter && minScore === n ? " active" : ""}`} onClick={() => openScore(n)}>
                 <Icon name="star" size={16} />
                 <span className="ellipsis grow">Оценка {n}+</span>
@@ -173,9 +183,26 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </div>
         )}
 
+        {!customize && (
+          <div className="nav-group">
+            <GroupTitle id="team" title="Команда" />
+            {(["chat", "people", "notifications"] as const).filter((id) => !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
+              const n = id === "chat" ? unreadTotal(chat) : id === "notifications" ? unreadNotifications(chat) : 0;
+              const active = section === id || (id === "people" && section === "profile");
+              return (
+                <button key={id} type="button" className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => setSection(id)}>
+                  <Icon name={SECTIONS[id].icon} size={16} />
+                  <span className="ellipsis grow">{SECTIONS[id].title}</span>
+                  {n > 0 && <span className="nav-count accent num" aria-label={`Непрочитанных: ${n}`}>{integer(n)}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="nav-group">
-          <div className="nav-title">Работа</div>
-          {groupFor(work, WORK_GROUP)}
+          <GroupTitle id="work" title="Работа" />
+          {groupFor(workShut ? work.filter((id) => id === section) : work, WORK_GROUP)}
         </div>
 
         {customize && (
@@ -210,10 +237,10 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
       {accountRect && (
         <Popover anchor={accountRect} onClose={() => setAccountRect(null)} ignore={accountBtn.current} minWidth={Math.max(accountRect.width, 220)} className="popover-menu" placement="top-start">
           <ul className="menu">
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); openProfile(null); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Профиль</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("appearance"); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Настройки</button></li>
-            <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("account"); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Аккаунт и синхронизация</button></li>
-            <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("data"); }}><span className="menu-icon"><Icon name="database" size={14} /></span>Данные и копии</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство</button></li>
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); openMarket(); }}><span className="menu-icon"><Icon name="store" size={14} /></span>Маркетплейс</button></li>
             {beta && <li><button className="menu-item" onClick={() => { setAccountRect(null); openDebug(true); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Debug Menu</button></li>}
             <li className="menu-sep" />
             <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>

@@ -34,6 +34,7 @@ export function NotificationsSection() {
         <SettingRow title="О новых лидах"><Switch checked={a.notifyNewLeads} onChange={(v) => void patchAccount({ notifyNewLeads: v })} /></SettingRow>
         <SettingRow title="Об ошибках поиска"><Switch checked={a.notifyErrors} onChange={(v) => void patchAccount({ notifyErrors: v })} /></SettingRow>
         <SettingRow title="О синхронизации"><Switch checked={a.notifySync} onChange={(v) => void patchAccount({ notifySync: v })} /></SettingRow>
+        <SettingRow title="О сообщениях и упоминаниях" hint="Личные сообщения, @упоминания в обсуждениях, заметках и комментариях, добавление в обсуждение."><Switch checked={a.notifyMessages} onChange={(v) => void patchAccount({ notifyMessages: v })} /></SettingRow>
       </Group>
     </>
   );

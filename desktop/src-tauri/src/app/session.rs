@@ -129,7 +129,7 @@ pub enum CallbackOutcome {
 pub struct Core {
     pub env: Arc<Env>,
     pub(crate) current: Mutex<Option<Arc<Session>>>,
-    cloud_user: Mutex<Option<CloudUser>>,
+    pub(crate) cloud_user: Mutex<Option<CloudUser>>,
     existing_install: bool,
     pub(crate) updates: Mutex<super::update::UpdateState>,
     pub(crate) integ: Mutex<super::integrations::IntegrationState>,
@@ -376,20 +376,30 @@ impl Core {
         }
         self.sync_soon(&s);
         let info = self.info().ok_or_else(|| CmdError::new("noSession", "Войдите в учётную запись."))?;
-        if name.is_some() {
-            self.publish_profile_name(&s, &info.display_name);
+        if name.is_some() || avatar.is_some() {
+            self.publish_profile(&s, name.map(|_| info.display_name.as_str()), avatar.map(|_| info.avatar.as_deref().unwrap_or("")));
         }
         self.env.emit("session-changed", serde_json::to_value(&info).unwrap_or(Value::Null));
         Ok(info)
     }
 
-    /// Имя профиля видят и другие участники Workspace: оно хранится ещё и в `user_profiles` (остальное синхронизируется настройками).
-    pub(crate) fn publish_profile_name(&self, s: &Session, name: &str) {
+    /// Имя и фото профиля видят и другие участники Workspace: они хранятся ещё и в `user_profiles`
+    /// (остальное синхронизируется настройками). Фото — отдельным запросом: на сервере без миграции
+    /// 20261110170000 столбца `avatar_data` нет, и это не должно мешать имени.
+    pub(crate) fn publish_profile(&self, s: &Session, name: Option<&str>, avatar: Option<&str>) {
         let (Some(cloud), true) = (self.env.cloud.clone(), s.is_cloud) else { return };
         let Some(uid) = self.cloud_user.lock().unwrap().as_ref().map(|u| u.id.clone()) else { return };
-        let body = json!({"display_name": name.chars().take(120).collect::<String>()});
+        let mut bodies = vec![];
+        if let Some(n) = name {
+            bodies.push(json!({"display_name": n.chars().take(120).collect::<String>()}));
+        }
+        if let Some(a) = avatar {
+            bodies.push(json!({"avatar_data": if a.is_empty() { Value::Null } else { json!(a) }}));
+        }
         tokio::spawn(async move {
-            let _ = cloud.authorized("PATCH", &format!("/rest/v1/user_profiles?user_id=eq.{uid}"), Some(&body), &[("Prefer", "return=minimal")]).await;
+            for body in bodies {
+                let _ = cloud.authorized("PATCH", &format!("/rest/v1/user_profiles?user_id=eq.{uid}"), Some(&body), &[("Prefer", "return=minimal")]).await;
+            }
         });
     }
 

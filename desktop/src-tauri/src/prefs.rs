@@ -15,6 +15,9 @@ use std::path::{Path, PathBuf};
 pub const DEFAULT_CHECK_HOURS: u32 = 24;
 pub const DEFAULT_LIGHT_THRESHOLD: u32 = 20;
 
+/// Группы боковой панели, которые можно свернуть.
+pub const SIDEBAR_GROUPS: [&str; 5] = ["collections", "sources", "scores", "work", "team"];
+
 /// Цвет вида #RRGGBB (в верхнем регистре) или None.
 pub fn normalize_color(raw: &str) -> Option<String> {
     let s = raw.trim().trim_start_matches('#');
@@ -48,6 +51,8 @@ pub struct DevicePrefs {
     pub sidebar_counts: bool,
     pub sidebar_sources: bool,
     pub sidebar_hover: bool,
+    /// Свёрнутые группы боковой панели (`collections`, `sources`, `scores`, `work`, `team`). Только на этом устройстве.
+    pub sidebar_collapsed: Vec<String>,
     /// Автоматический облегчённый режим: при режиме экономии системы или низком заряде батареи.
     pub light_mode_auto: bool,
     pub light_mode_threshold: u32,
@@ -98,6 +103,7 @@ impl Default for DevicePrefs {
             sidebar_counts: true,
             sidebar_sources: true,
             sidebar_hover: true,
+            sidebar_collapsed: vec![],
             light_mode_auto: true,
             light_mode_threshold: DEFAULT_LIGHT_THRESHOLD,
             check_updates: true,
@@ -138,6 +144,9 @@ impl DevicePrefs {
         self.ui_scale = if self.ui_scale.is_finite() { self.ui_scale.clamp(0.8, 1.6) } else { 1.0 };
         self.nav_width = self.nav_width.clamp(180.0, 420.0);
         self.inspector_width = self.inspector_width.clamp(280.0, 640.0);
+        // Только известные группы, без повторов.
+        let mut seen = std::collections::BTreeSet::new();
+        self.sidebar_collapsed.retain(|g| SIDEBAR_GROUPS.contains(&g.as_str()) && seen.insert(g.clone()));
         self.light_mode_threshold = self.light_mode_threshold.clamp(5, 50);
         self.update_check_hours = normalized_hours(self.update_check_hours);
         if !["score", "date", "title", "source"].contains(&self.list_sort.as_str()) {
@@ -176,6 +185,8 @@ pub struct AccountPrefs {
     pub notify_new_leads: bool,
     pub notify_errors: bool,
     pub notify_sync: bool,
+    /// Уведомления о сообщениях, упоминаниях и добавлении в обсуждения (облачный Workspace).
+    pub notify_messages: bool,
     /// Настройки почтового ящика (JSON без пароля; пароль — в защищённом хранилище).
     pub mail_account: String,
     pub mail_delivery: String,
@@ -201,6 +212,7 @@ impl Default for AccountPrefs {
             notify_new_leads: true,
             notify_errors: true,
             notify_sync: false,
+            notify_messages: true,
             mail_account: String::new(),
             mail_delivery: "mailApp".into(),
             confirm_calls: true,
@@ -461,6 +473,18 @@ mod tests {
         assert_eq!(again.value, p.value, "сохранено на диск");
         assert!(!path.with_extension("json.tmp").exists());
         assert_eq!(p.to_json()["navWidth"], 420.0);
+    }
+
+    #[test]
+    fn sidebar_collapsed_keeps_known_groups_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut p = PrefsFile::<DevicePrefs>::load(&dir.path().join("device.json"));
+        assert!(p.value.sidebar_collapsed.is_empty(), "по умолчанию всё развёрнуто");
+        assert!(p.patch(&json!({"sidebarCollapsed": ["work", "unknown", "work", "sources"]})));
+        assert_eq!(p.value.sidebar_collapsed, vec!["work".to_string(), "sources".to_string()]);
+        assert!(!p.patch(&json!({"sidebarCollapsed": "work"})), "не список — не меняется");
+        assert!(p.patch(&json!({"sidebarCollapsed": []})));
+        assert!(p.value.sidebar_collapsed.is_empty());
     }
 
     #[test]
