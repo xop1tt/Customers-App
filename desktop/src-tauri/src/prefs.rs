@@ -27,6 +27,10 @@ pub fn normalize_color(raw: &str) -> Option<String> {
 pub struct DevicePrefs {
     /// Свой акцентный цвет (#RRGGBB) или None — цвет по умолчанию.
     pub accent: Option<String>,
+    /// Тема: "system" (как в системе), "dark" или "light".
+    pub theme: String,
+    /// Язык интерфейса: "system", "ru" или "en".
+    pub language: String,
     /// Масштаб интерфейса, 0.8–1.6.
     pub ui_scale: f64,
     pub nav_width: f64,
@@ -77,6 +81,8 @@ impl Default for DevicePrefs {
     fn default() -> Self {
         Self {
             accent: None,
+            theme: "system".into(),
+            language: "system".into(),
             ui_scale: 1.0,
             nav_width: 260.0,
             nav_open: true,
@@ -120,6 +126,15 @@ impl DevicePrefs {
     /// Приводит значения к допустимым границам.
     pub fn normalize(&mut self) {
         self.accent = self.accent.as_deref().and_then(normalize_color);
+        // Windows-версия писала «Dark»/«Light» с заглавной буквы.
+        self.theme = self.theme.to_lowercase();
+        if !["system", "dark", "light"].contains(&self.theme.as_str()) {
+            self.theme = "system".into();
+        }
+        self.language = self.language.to_lowercase();
+        if !["system", "ru", "en"].contains(&self.language.as_str()) {
+            self.language = "system".into();
+        }
         self.ui_scale = if self.ui_scale.is_finite() { self.ui_scale.clamp(0.8, 1.6) } else { 1.0 };
         self.nav_width = self.nav_width.clamp(180.0, 420.0);
         self.inspector_width = self.inspector_width.clamp(280.0, 640.0);

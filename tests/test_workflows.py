@@ -253,7 +253,7 @@ def test_beta_publishes_only_prereleases_from_beta_tags():
     wf = load("beta.yml")
     on = wf[True]
     assert "pull_request" not in on and "pull_request_target" not in on, "Beta не публикуется из PR"
-    assert on["push"]["tags"] == ["v*-beta.*"] and on["push"]["branches"] == ["develop"]
+    assert on["push"]["tags"] == ["v*-beta.*"] and "branches" not in on["push"]
     publish = wf["jobs"]["publish"]
     assert publish["if"] == "github.ref_type == 'tag'", "Pre-release только по тегу"
     assert publish["environment"] == "beta"
@@ -286,4 +286,4 @@ def test_ci_runs_beta_channel_tests_and_release_check():
     desktop = load("desktop.yml")
     steps = " ".join(s.get("run", "") for j in desktop["jobs"].values() for s in j.get("steps", []))
     assert "--features beta" in steps and "npm run release:check" in steps
-    assert desktop[True]["push"]["branches"] == ["main", "develop"]
+    assert desktop[True]["push"]["branches"] == ["main"]

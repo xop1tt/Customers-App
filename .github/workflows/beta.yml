@@ -3,13 +3,12 @@ name: Beta
 # Канал Debug/Beta (docs/DEBUG_BUILD.md, docs/RELEASE_PROCESS.md). Отдельное приложение «Customers Beta»:
 # свой идентификатор, папки данных, секреты, ссылки и облако; ставится рядом со Stable и не трогает её.
 #
-# * push в develop — проверки и сборка Beta для macOS и Windows; файлы остаются артефактами запуска (14 дней).
-# * тег vX.Y.Z-beta.N — то же, затем GitHub Pre-release (после подтверждения в окружении beta, если оно защищено).
-# * вручную — сборка выбранной ветки без публикации.
+# * тег vX.Y.Z-beta.N — проверки и сборка Beta для macOS и Windows, затем GitHub Pre-release (после подтверждения
+#   в окружении beta, если оно защищено).
+# * вручную — сборка выбранной ветки без публикации; файлы остаются артефактами запуска (14 дней).
 # Stable-релизы делает только release.yml; Stable не получает Pre-release (приложение берёт releases/latest).
 on:
   push:
-    branches: [develop]
     tags: ["v*-beta.*"]
   workflow_dispatch:
 
@@ -44,7 +43,7 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      # Тег задаёт версию (1.3.0-beta.1); у сборки из develop — версия из файлов с номером запуска для имени файлов.
+      # Тег задаёт версию (1.3.0-beta.1); у ручной сборки — версия из файлов с номером запуска для имени файлов.
       - name: Version
         id: version
         env:

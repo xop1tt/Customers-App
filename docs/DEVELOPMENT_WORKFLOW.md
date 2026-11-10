@@ -4,23 +4,23 @@
 
 | Ветка | Что в ней | Как попадает |
 |---|---|---|
-| `main` | Stable: проверенный код, из него собираются стабильные релизы | только PR из `develop` (или hotfix-PR) после зелёных обязательных проверок; без прямого push |
-| `develop` | следующая версия; из неё собирается Beta | PR из `feature/*` |
-| `feature/<задача>` | крупная задача (например, `feature/workspaces`) | ветвится от `develop` |
-| `hotfix/<задача>` | срочное исправление Stable | от `main`, PR в `main`, затем слияние `main` → `develop` |
+| `main` | единственная постоянная ветка: Stable, из неё собираются релизы и Beta | только PR (из `feature/*` или `hotfix/*`) после зелёных обязательных проверок; без прямого push |
+| `feature/<задача>` | крупная задача (например, `feature/workspaces`) | ветвится от `main`, PR в `main` |
+| `hotfix/<задача>` | срочное исправление Stable | от `main`, PR в `main` |
+
+Ветка `develop` закрыта 2026-11-10: всё из неё перенесено в `main`.
 
 Защиту веток (Rulesets) настраивает владелец репозитория — см. RELEASE_PROCESS.md §4; автоматическое слияние
 непроверенного кода в `main` запрещено.
 
 ## 2. Цикл
 
-1. Изменение в `feature/*` → PR в `develop` (CI: Desktop gate, Cloud gate, тесты, release-check).
-2. Слияние в `develop` → `beta.yml` собирает Beta для macOS и Windows (артефакты запуска).
-3. Тег `vX.Y.Z-beta.N` на `develop` → Pre-release (Beta-канал).
-4. Ручная проверка Beta (RELEASE_CHECKLIST.md), ошибки исправляются в `develop`, новая Beta `-beta.N+1`.
-5. PR `develop` → `main` с полным набором проверок.
-6. После слияния — тег `vX.Y.Z` → `release.yml` собирает Stable, проверяет установщики, ждёт подтверждения в
-   окружении `production` и публикует релиз.
+1. Изменение в `feature/*` → PR в `main` (CI: Desktop gate, Cloud gate, тесты, release-check).
+2. Для проверки — тег `vX.Y.Z-beta.N` на коммите `main` (или ручной запуск `beta.yml` на ветке) → Beta для macOS и
+   Windows, по тегу — Pre-release (Beta-канал).
+3. Ручная проверка Beta (RELEASE_CHECKLIST.md), ошибки исправляются через PR в `main`, новая Beta `-beta.N+1`.
+4. Тег `vX.Y.Z` → `release.yml` собирает Stable, проверяет установщики, ждёт подтверждения в окружении
+   `production` и публикует релиз.
 
 ## 3. Версии
 

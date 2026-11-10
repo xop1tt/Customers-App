@@ -11,6 +11,7 @@ use crate::prefs::PrefsFile;
 use crate::reports::{self, ErrorLog};
 use crate::search::http::{real_sleeper, ReqwestTransport};
 use crate::secrets::{self, DatabaseKeys};
+use crate::tray_text::{self, Lang};
 use crate::util::AppVersion;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -42,6 +43,9 @@ impl Events for TauriEvents {
             _ => {}
         }
         let _ = self.0.emit(name, payload);
+        if matches!(name, "search-state" | "data-changed" | "session-changed" | "session-ended") {
+            refresh_tray(&self.0);
+        }
     }
 }
 
@@ -152,13 +156,89 @@ pub fn apply_device_changes(app: &AppHandle, _core: &Core, changes: &Value) {
     }
 }
 
+// ------------------------------------------------------------------ значок в строке меню / трее
+
+static UI_LANG: Mutex<Lang> = Mutex::new(Lang::Ru);
+/// Что показано в меню сейчас: меню пересобирается, только когда это меняется.
+static TRAY_KEY: Mutex<String> = Mutex::new(String::new());
+
+fn ui_lang() -> Lang {
+    *UI_LANG.lock().unwrap()
+}
+
+/// Язык, который интерфейс определил сам (язык системы) или выбрал пользователь. Меню значка подстраивается.
+pub fn set_ui_language(app: &AppHandle, code: &str) {
+    *UI_LANG.lock().unwrap() = Lang::parse(code);
+    refresh_tray(app);
+}
+
+fn build_tray_menu(app: &AppHandle, lang: Lang, status: &str, searching: bool, cloud: bool) -> tauri::Result<Menu<tauri::Wry>> {
+    let t = tray_text::text(lang);
+    let status_item = MenuItem::with_id(app, "status", status, false, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", t.open, true, None::<&str>)?;
+    let search =
+        if searching { MenuItem::with_id(app, "stop", t.stop, true, None::<&str>)? } else { MenuItem::with_id(app, "search", t.search, true, None::<&str>)? };
+    let new = MenuItem::with_id(app, "new", t.new_leads, true, None::<&str>)?;
+    let updates = MenuItem::with_id(app, "updates", t.updates, true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", t.settings, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", t.quit, true, None::<&str>)?;
+    let sep = || PredefinedMenuItem::separator(app);
+    let (s1, s2, s3) = (sep()?, sep()?, sep()?);
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&status_item, &s1, &open, &search, &new];
+    let sync = MenuItem::with_id(app, "sync", t.sync, true, None::<&str>)?;
+    if cloud {
+        items.push(&sync);
+    }
+    items.extend([&s2 as &dyn tauri::menu::IsMenuItem<tauri::Wry>, &updates, &settings, &s3, &quit]);
+    Menu::with_items(app, &items)
+}
+
+/// Пересобирает меню и подсказку по состоянию: идёт ли поиск, сколько новых лидов, облачный ли аккаунт.
+pub fn refresh_tray(app: &AppHandle) {
+    let app = app.clone();
+    // Вызывается из обработчиков событий, где могут быть заняты замки: работаем в отдельном потоке.
+    std::thread::spawn(move || {
+        let Some(core) = app.try_state::<Arc<Core>>() else { return };
+        let lang = ui_lang();
+        let (searching, new_leads, cloud) = match core.session() {
+            Some(s) => (s.search_status().running, s.with_store(|st| st.new_lead_count()), s.is_cloud),
+            None => (false, 0, false),
+        };
+        let status = tray_text::status(lang, searching, new_leads);
+        let key = format!("{lang:?}|{status}|{cloud}");
+        {
+            let mut last = TRAY_KEY.lock().unwrap();
+            if *last == key {
+                return;
+            }
+            *last = key;
+        }
+        if let Some(tray) = app.tray_by_id("tray") {
+            if let Ok(menu) = build_tray_menu(&app, lang, &status, searching, cloud) {
+                let _ = tray.set_menu(Some(menu));
+            }
+            let _ = tray.set_tooltip(Some(tray_text::tooltip(lang, new_leads)));
+        }
+    });
+}
+
 fn setup_tray(app: &AppHandle, core: Arc<Core>) -> tauri::Result<()> {
-    let product = Channel::current().identity().product_name;
-    let open = MenuItem::with_id(app, "open", format!("Открыть {product}"), true, None::<&str>)?;
-    let search = MenuItem::with_id(app, "search", "Найти лидов сейчас", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Выйти", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &search, &PredefinedMenuItem::separator(app)?, &quit])?;
-    let mut builder = TrayIconBuilder::with_id("tray").tooltip(product).menu(&menu).show_menu_on_left_click(false);
+    // Язык меню до первого сообщения интерфейса: явный выбор пользователя, иначе русский, как раньше.
+    let pref = core.env.device_prefs().language;
+    if pref != "system" {
+        *UI_LANG.lock().unwrap() = Lang::parse(&pref);
+    }
+    let lang = ui_lang();
+    let menu = build_tray_menu(app, lang, &tray_text::status(lang, false, 0), false, false)?;
+    let mut builder = TrayIconBuilder::with_id("tray").tooltip(tray_text::text(lang).tooltip).menu(&menu).show_menu_on_left_click(false);
+    // macOS: прозрачный «шаблонный» значок, система сама делает его светлым или тёмным под строку меню.
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-template.png")) {
+            builder = builder.icon(icon).icon_as_template(true);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
@@ -167,6 +247,26 @@ fn setup_tray(app: &AppHandle, core: Arc<Core>) -> tauri::Result<()> {
             "open" => show_main(app),
             "search" => {
                 let _ = core.run_search(true, None, false);
+            }
+            "stop" => {
+                let _ = core.stop_search();
+            }
+            "new" => {
+                show_main(app);
+                let _ = app.emit("tray-action", json!({"action": "new"}));
+            }
+            "settings" => {
+                show_main(app);
+                let _ = app.emit("tray-action", json!({"action": "settings"}));
+            }
+            "sync" => {
+                let _ = core.sync_now_command();
+            }
+            "updates" => {
+                let core = core.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = core.check_updates(true).await;
+                });
             }
             "quit" => app.exit(0),
             _ => {}
@@ -177,7 +277,42 @@ fn setup_tray(app: &AppHandle, core: Arc<Core>) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    refresh_tray(app);
     Ok(())
+}
+
+// ------------------------------------------------------------------ значок в Dock (macOS)
+
+/// Значок приложения в Dock: чёрная плитка в тёмной теме системы, белая в светлой.
+#[cfg(target_os = "macos")]
+pub fn set_dock_icon(dark: bool) {
+    use objc2::AnyThread;
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::NSData;
+    let png: &[u8] = if dark { include_bytes!("../icons/dock-dark.png") } else { include_bytes!("../icons/dock-light.png") };
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    let data = NSData::with_bytes(png);
+    if let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) {
+        // SAFETY: вызывается в главном потоке (проверено выше), изображение живёт до конца вызова.
+        unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&image)) };
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn follow_system_theme(app: &AppHandle) {
+    // Первый раз сразу, потом при каждой смене темы системы. Окно запрашивает тему у системы, пока её не задали явно.
+    if let Some(w) = app.get_webview_window(MAIN) {
+        let dark = !matches!(w.theme(), Ok(tauri::Theme::Light));
+        let app2 = app.clone();
+        let _ = app.run_on_main_thread(move || set_dock_icon(dark));
+        w.on_window_event(move |event| {
+            if let WindowEvent::ThemeChanged(theme) = event {
+                let dark = !matches!(theme, tauri::Theme::Light);
+                let _ = app2.run_on_main_thread(move || set_dock_icon(dark));
+            }
+        });
+    }
 }
 
 /// Ссылка возврата из браузера (подтверждение почты, восстановление пароля).
@@ -226,6 +361,8 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(core.clone());
 
     setup_tray(&handle, core.clone())?;
+    #[cfg(target_os = "macos")]
+    follow_system_theme(&handle);
 
     // Ссылки возврата: приложение уже открыто (macOS) или запущено второй копией (Windows, через single-instance).
     {
