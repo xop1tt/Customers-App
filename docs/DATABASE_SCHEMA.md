@@ -2,7 +2,8 @@
 
 Две базы: локальная SQLite (SQLCipher) на устройстве и PostgreSQL в Supabase (источник истины для общей базы
 Workspace). Разделы «Текущая» описывают то, что работает сейчас (проверено по коду 2026-11-09), «Целевая» — план
-этапов 3–8 (статус: **запланировано**).
+этапов 3–8 (статус: таблицы этапов 3–7 **реализованы** миграциями `20261110120000`–`20261110120400`;
+вложения, пользовательские поля и аналитика — **запланировано**).
 
 ## 1. Текущая локальная схема (генератор лидов)
 
@@ -178,3 +179,14 @@ create unique index invitations_one_open on public.workspace_invitations(workspa
 База генератора лидов (`leads.db`) **не меняет схему**: отметка о преобразовании хранится в JSON-поле лида
 `data.crm = {workspace_id, company_id, contact_id, converted_at}` — это поле уже синхронизируется между устройствами
 (CRM_ARCHITECTURE.md §4).
+
+## 5. Отличия реализации (этапы 3–7)
+
+* `workspaces.created_by` и `sync_conflicts.lost_by` допускают `null` (удалённый пользователь, неизвестный автор поля).
+* У всех CRM-таблиц, кроме общих столбцов §3.2, есть `field_ver jsonb` — версия записи, в которой менялось поле
+  (для определения конфликтов, см. SYNC_ARCHITECTURE.md §5).
+* `workspace_invitations.token_hash` клиентам не выдаётся (нет права `select` на столбец).
+* `attachments` и `custom_fields` / `custom_field_values` не созданы: на стенде CI нет Storage, а поля — этап 8.
+* Локальная база Workspace: `workspaces/<id>.db` (SQLCipher, ключ учётной записи) с теми же таблицами и столбцами,
+  плюс `sync_outbox`, `sync_cursors`, `members`, `local_meta`, `collection_user_prefs`; список Workspace и активный —
+  `workspaces/catalog.json`.
