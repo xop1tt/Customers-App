@@ -4,6 +4,7 @@ import { integer } from "../lib/format";
 import { CONFIGURABLE, MAIN_GROUP, WORK_GROUP, move, ordered, toggled } from "../lib/sidebarPrefs";
 import { SOURCES } from "../lib/sources";
 import appIcon from "../assets/app-icon.png";
+import appIconLight from "../assets/app-icon-light.png";
 import { Avatar, Button, IconButton } from "../ui/kit";
 import { api } from "../api";
 import { Icon } from "../ui/icons";

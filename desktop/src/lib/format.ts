@@ -1,7 +1,16 @@
-// Даты и числа в русском формате. Часовой пояс — местный, как в прежних версиях.
+// Даты и числа по языку интерфейса. Часовой пояс — местный, как в прежних версиях.
+
+import { getLanguage } from "./i18n";
 
 const MONTHS_SHORT = ["янв.", "февр.", "мар.", "апр.", "мая", "июн.", "июл.", "авг.", "сент.", "окт.", "нояб.", "дек."];
 const MONTHS_FULL = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+
+const MONTHS_SHORT_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS_FULL_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const en = () => getLanguage() === "en";
+/** «3 нояб.» / «Nov 3». */
+export const dayShort = (d: Date) => (en() ? `${MONTHS_SHORT_EN[d.getMonth()]} ${d.getDate()}` : `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`);
+const dayFull = (d: Date) => (en() ? `${MONTHS_FULL_EN[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : `${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`);
 
 const two = (n: number) => String(n).padStart(2, "0");
 
@@ -24,7 +33,7 @@ export function shortRelative(iso: string | null | undefined, now: Date = new Da
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (sameDay(d, yesterday)) return `Вчера, ${time}`;
-  const base = `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+  const base = dayShort(d);
   return d.getFullYear() === now.getFullYear() ? base : `${base} ${d.getFullYear()}`;
 }
 
@@ -32,29 +41,29 @@ export function shortRelative(iso: string | null | undefined, now: Date = new Da
 export function fullRu(iso: string | null | undefined): string {
   const d = parseDate(iso);
   if (!d) return "—";
-  return `${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}, ${two(d.getHours())}:${two(d.getMinutes())}`;
+  return `${dayFull(d)}, ${two(d.getHours())}:${two(d.getMinutes())}`;
 }
 
 export function dateOnly(iso: string | null | undefined): string {
   const d = parseDate(iso);
   if (!d) return "—";
-  return `${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`;
+  return dayFull(d);
 }
 
 export function bytes(n: number): string {
-  if (n < 1024) return `${n} Б`;
-  const units = ["КБ", "МБ", "ГБ", "ТБ"];
+  if (n < 1024) return `${n} ${en() ? "B" : "Б"}`;
+  const units = en() ? ["KB", "MB", "GB", "TB"] : ["КБ", "МБ", "ГБ", "ТБ"];
   let v = n / 1024;
   let i = 0;
   while (v >= 1024 && i < units.length - 1) {
     v /= 1024;
     i++;
   }
-  return `${v >= 100 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, "")} ${units[i]}`.replace(".", ",");
+  return `${v >= 100 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, "")} ${units[i]}`.replace(".", en() ? "." : ",");
 }
 
 export function integer(n: number): string {
-  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, en() ? "," : " ");
 }
 
 export function money(amount: number, currency?: string): string {

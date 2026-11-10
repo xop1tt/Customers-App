@@ -58,7 +58,7 @@ export interface AppState {
 }
 
 export const DEFAULT_DEVICE: DevicePrefs = {
-  accent: null, uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
+  accent: null, theme: "system", language: "system", uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
   sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true,
   lightModeAuto: true, lightModeThreshold: 20, checkUpdates: true, updateCheckHours: 24, lastUpdateCheck: null, backgroundDownload: true, lastSeenVersion: null,
   closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: false, rememberedUser: null, lastSection: "home", listSort: "score",
@@ -231,6 +231,10 @@ function wireEvents() {
     if (r?.reason) toast(r.reason, "error");
   });
   void on<DevicePrefs>("device-prefs", (device) => { setState({ device }); void checkPower(); });
+  void on<{ action: string }>("tray-action", (a) => {
+    if (a.action === "new") setSection("new");
+    else if (a.action === "settings") openSettings("account");
+  });
   void on<AccountPrefs>("account-prefs", (account) => setState({ account }));
   void on("search-settings", () => { void refreshOverview(); });
   void on<UpdateInfo>("update-state", (update) => setState({ update }));

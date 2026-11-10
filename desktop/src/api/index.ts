@@ -63,6 +63,7 @@ export const api = {
   devicePrefs: () => call<DevicePrefs>("device_prefs"),
   patchDevicePrefs: (changes: Partial<DevicePrefs>) => call<DevicePrefs>("patch_device_prefs", { changes }),
   setZoom: (scale: number) => call("set_zoom", { scale }),
+  setUiLanguage: (language: string) => call("set_ui_language", { language }),
   powerState: () => call<PowerState>("power_state"),
 
   // поиск и синхронизация

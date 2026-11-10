@@ -33,6 +33,25 @@
   --purple: #a283e0;
   --purple-soft: #2f2640;
 
+  --line-hover: #4a4c57;
+  --line-btn-hover: #484a55;
+  --line-danger: #5a2f31;
+  --line-warn: #54421f;
+  --line-ok: #2c5340;
+  --switch-off: #3a3c45;
+  --switch-off-hover: #474954;
+  --knob: #ffffff;
+  --scroll: #34353d;
+  --scroll-hover: #4a4c57;
+  --selection: #2f4d86;
+  --track: #2d2e35;
+  --fill-muted: #6a6c78;
+  --fill-org: #6e7180;
+  --score-low: #2a2b32;
+  --tooltip-bg: #0e0f12;
+  --tooltip-text: #ececef;
+  --accent-base: #1b1c20;
+
   --r-xs: 3px;
   --r-sm: 5px;
   --r-md: 7px;
@@ -65,4 +84,58 @@
   animation-delay: 0s !important;
   transition-duration: 0.001ms !important;
   transition-delay: 0s !important;
+}
+
+/* Светлая тема: те же уровни, но от белого к серому. Включается атрибутом data-theme на <html>. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f5f6f8;
+  --bg-side: #ebedf1;
+  --bg-raised: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: #e4e6ec;
+  --bg-active: #d9dce5;
+  --bg-select: #dce7fb;
+  --bg-overlay: #ffffff;
+  --scrim: rgba(24, 26, 34, 0.38);
+
+  --line: #dcdfe6;
+  --line-strong: #c4c8d3;
+
+  --text: #1b1c20;
+  --text-2: #4f525c;
+  --text-3: #7a7d89;
+
+  --accent-hover: #3a78e8;
+  --accent-soft: #dbe7ff;
+
+  --red: #d23f3a;
+  --red-soft: #fbe3e1;
+  --orange: #b36b10;
+  --orange-soft: #fbefd9;
+  --green: #2a8750;
+  --green-soft: #dff2e6;
+  --purple: #7653c2;
+  --purple-soft: #ebe5f7;
+
+  --line-hover: #aab0bd;
+  --line-btn-hover: #aeb3c0;
+  --line-danger: #efb9b6;
+  --line-warn: #ecce9a;
+  --line-ok: #a9d9bb;
+  --switch-off: #c4c8d3;
+  --switch-off-hover: #b5bac7;
+  --scroll: #c4c8d3;
+  --scroll-hover: #a9aebb;
+  --selection: #b7d0ff;
+  --track: #dcdfe6;
+  --fill-muted: #9a9eab;
+  --fill-org: #9a9eab;
+  --score-low: #e4e6ec;
+  --tooltip-bg: #2a2c33;
+  --tooltip-text: #f2f2f5;
+  --accent-base: #f5f6f8;
+
+  --shadow-pop: 0 6px 20px rgba(24, 26, 34, 0.18);
 }
