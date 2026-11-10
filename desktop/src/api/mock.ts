@@ -6,6 +6,7 @@ import type {
   AccountPrefs, BootInfo, DevicePrefs, DrivesState, Exclusion, ExclusionKind, Lead, OsmCategory, SearchSettings, SearchStatus, SessionInfo, Snapshot, SourceReport,
   SyncStatus, UpdateInfo,
 } from "./types";
+import { wsCall } from "./wsMock";
 
 type Handler = (p: unknown) => void;
 const listeners = new Map<string, Set<Handler>>();
@@ -221,12 +222,32 @@ const drives: DrivesState = {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const debugLog: { seq: number; at: string; level: string; module: string; message: string }[] = [
+  { seq: 1, at: new Date().toISOString(), level: "INFO", module: "app", message: "Запуск Customers Beta (демо)" },
+];
+let debugTest = false;
+const DEBUG_SCENARIOS = [
+  { id: "app.first_run", group: "Запуск", title: "Первый запуск и создание базы", description: "Демо" },
+  { id: "leads.statuses", group: "Лиды", title: "Избранное, архив, просмотр", description: "Демо" },
+];
+
 export async function call(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+  if (cmd.startsWith("ws_")) {
+    const out = await wsCall(cmd, args, () => leads);
+    if (["ws_save", "ws_delete", "ws_restore", "ws_convert_lead", "ws_switch", "ws_create_workspace", "ws_rename_workspace", "ws_reorder_collections", "ws_hide_collection", "ws_resolve_conflict"].includes(cmd)) {
+      setTimeout(() => emit("workspace-changed", null), 0);
+      if (cmd === "ws_convert_lead") {
+        const c = out as { workspaceId: string; companyId: string; contactId: string | null; dealId: string | null };
+        patchLeads([String(args.leadId)], (l) => { l.data.crm = { workspace_id: c.workspaceId, company_id: c.companyId, contact_id: c.contactId, deal_id: c.dealId, converted_at: new Date().toISOString() }; });
+      }
+    }
+    return out;
+  }
   switch (cmd) {
     case "boot_info":
       return {
         version: "1.1.0", platform: demo.get("platform") === "windows" ? "windows" : "macos", cloudAvailable: true, hasUsers: true, existingInstall: true,
-        session: signedIn ? session() : null, device, error: null,
+        session: signedIn ? session() : null, device, error: null, channel: demo.has("beta") ? "beta" : "stable",
       } satisfies BootInfo;
     case "local_accounts":
       return ["anna", "boris"];
@@ -435,6 +456,56 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
       return [[1, "Каждый час"], [3, "Каждые 3 часа"], [6, "Каждые 6 часов"], [12, "Каждые 12 часов"], [24, "Раз в сутки"], [168, "Раз в неделю"]].map(([hours, title]) => ({ hours, title }));
     case "cloud_stats":
       return { leads_active: leads.length, leads: leads.length + 3, exclusions: exclusions.length, settings: 2 };
+    // Debug Menu (демо в браузере при ?beta; в приложении отвечает ядро)
+    case "debug_dashboard":
+      return {
+        version: "1.1.0", channel: "beta", identifier: "local.customers.beta", gitCommit: "demo", gitBranch: "develop", buildProfile: "debug",
+        os: "Demo OS", osVersion: "1.0", kernel: null, arch: "aarch64", tauri: "2.x", webview: null,
+        window: { scaleFactor: window.devicePixelRatio, physicalWidth: null, physicalHeight: null, logicalWidth: window.innerWidth, logicalHeight: window.innerHeight },
+        uptimeSecs: Math.round(performance.now() / 1000), pid: null, memoryBytes: null, cpuPercent: null, dataDir: "~/.local/share/customers-beta", logsDir: "~/.local/share/customers-beta/logs",
+        components: [{ name: "База данных", state: signedIn ? "ok" : "off", detail: signedIn ? `${leads.length} лидов` : "не открыта: нет входа" }],
+      };
+    case "debug_logs":
+      return debugLog.filter((e) => {
+        const q = args.query as { levels: string[]; text: string };
+        return (!q.levels.length || q.levels.includes(e.level)) && (!q.text || e.message.toLowerCase().includes(q.text.toLowerCase()));
+      });
+    case "debug_log":
+      debugLog.push({ seq: debugLog.length + 1, at: new Date().toISOString(), level: args.level as string, module: `ui:${String(args.module)}`, message: String(args.message) });
+      return null;
+    case "debug_clear_logs":
+      debugLog.length = 0;
+      return null;
+    case "debug_export_logs":
+      return `Сохранено записей: ${debugLog.length}`;
+    case "debug_diagnostics":
+      await wait(50);
+      return [
+        { id: "isolation", title: "Разделение Stable и Beta", status: "pass", detail: "папки каналов не пересекаются", hint: null },
+        { id: "cloud.reachable", title: "Доступность Supabase", status: "skipped", detail: "демо без сети", hint: null },
+      ];
+    case "debug_export_diagnostics":
+      return String(args.path);
+    case "debug_test_data_state":
+      return { hasSession: signedIn, isTest: debugTest, canMark: signedIn, reason: null, testLeads: 0, totalLeads: leads.length };
+    case "debug_mark_test_account":
+      debugTest = Boolean(args.on);
+      return { hasSession: signedIn, isTest: debugTest, canMark: true, reason: null, testLeads: 0, totalLeads: leads.length };
+    case "debug_generate_test_data":
+      return { added: Number(args.count), skipped: 0, durationMs: 1, totalLeads: leads.length };
+    case "debug_clear_test_data":
+      return 0;
+    case "debug_reset_test_account":
+    case "debug_set_window_size":
+      return null;
+    case "debug_scenarios":
+      return DEBUG_SCENARIOS;
+    case "debug_run_scenarios": {
+      await wait(30);
+      const ids = (args.ids as string[]).length ? (args.ids as string[]) : DEBUG_SCENARIOS.map((x) => x.id);
+      const results = ids.map((id) => ({ id, title: DEBUG_SCENARIOS.find((x) => x.id === id)?.title ?? id, status: "PASS", durationMs: 5, error: null, details: [] }));
+      return { runId: "demo", startedAt: new Date().toISOString(), durationMs: 5 * ids.length, passed: results.length, failed: 0, skipped: 0, results };
+    }
     default:
       return null;
   }

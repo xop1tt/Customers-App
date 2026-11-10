@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import { api } from "../api";
 import { on } from "../api/backend";
 import type {
-  AccountPrefs, AuthCallback, BootInfo, DevicePrefs, SearchOverview, SearchStatus, SessionInfo, Snapshot, SyncStatus, UpdateInfo,
+  AccountPrefs, AuthCallback, BootInfo, DevicePrefs, SearchOverview, SearchStatus, SessionInfo, Snapshot, SyncStatus, UpdateInfo, WsCollection, WsState,
 } from "../api/types";
 import { type LeadFilter, type SectionId, emptyFilter, isLeadList } from "../lib/leads";
 import { type LightModeReason, evaluate } from "../lib/powerPolicy";
@@ -43,6 +43,18 @@ export interface AppState {
   customizeNav: boolean;
   navPeek: boolean;
   sourceKey: string;
+  /** Debug Menu (только Beta). */
+  debugOpen: boolean;
+  /** Customers 2.0: активный Workspace, его коллекции и открытая карточка. */
+  ws: WsState | null;
+  collections: WsCollection[];
+  collectionId: string | null;
+  record: { table: string; id: string } | null;
+  workspaceOpen: boolean;
+  /** Диалог коллекции: новая (`id: null`) или изменение существующей. */
+  collectionEdit: { id: string | null } | null;
+  /** Растёт при каждом изменении данных Workspace: открытые списки и карточки перечитываются. */
+  wsVersion: number;
 }
 
 export const DEFAULT_DEVICE: DevicePrefs = {
@@ -58,7 +70,8 @@ const EMPTY_SNAP: Snapshot = { leads: [], sources: [], pipelineErrors: [], exclu
 const initial: AppState = {
   phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
-  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru",
+  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru", debugOpen: false,
+  ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0,
 };
 
 let state = initial;
@@ -132,6 +145,7 @@ async function loadSession(boot: BootInfo) {
     phase: account.welcomeDone ? "ready" : "welcome",
   });
   void checkPower();
+  void refreshWorkspace();
 }
 
 export async function boot() {
@@ -165,8 +179,36 @@ export function enterSession(): Promise<void> {
 
 export async function leaveSession() {
   await attempt(() => api.logout());
-  setState({ phase: "auth", session: null, snap: EMPTY_SNAP, account: null, overview: null, settings: null, exportOpen: false, selection: [] });
+  setState({ phase: "auth", session: null, snap: EMPTY_SNAP, account: null, overview: null, settings: null, exportOpen: false, selection: [], ...NO_WORKSPACE });
 }
+
+const NO_WORKSPACE: Partial<AppState> = { ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null };
+
+// ---------------------------------------------------------------- Workspace и коллекции
+
+let wsTimer: ReturnType<typeof setTimeout> | null = null;
+/** Состояние Workspace и список коллекций. Ошибка (нет сессии, база недоступна) не ломает генератор лидов. */
+export async function refreshWorkspace() {
+  try {
+    const [ws, collections] = await Promise.all([api.wsState(), api.wsCollections()]);
+    setState((s) => {
+      const known = s.collectionId && collections.some((c) => c.id === s.collectionId);
+      const lost = s.section === "collection" && !known;
+      return { ws, collections, ...(lost ? { section: "home" as SectionId, collectionId: null, record: null } : {}), wsVersion: s.wsVersion + 1 };
+    });
+  } catch {
+    setState({ ws: null, collections: [] });
+  }
+}
+const scheduleWorkspace = () => {
+  if (wsTimer) return;
+  wsTimer = setTimeout(() => { wsTimer = null; void refreshWorkspace(); }, 150);
+};
+
+export function openCollection(id: string) {
+  setState({ section: "collection", collectionId: id, record: null, selection: [], anchor: null, navPeek: false });
+}
+export const openRecord = (table: string, id: string | null) => setState({ record: id ? { table, id } : null });
 
 export async function checkPower() {
   try {
@@ -185,7 +227,7 @@ function wireEvents() {
   void on<SyncStatus>("sync-state", (sync) => setState({ sync }));
   void on<SessionInfo | null>("session-changed", (s) => { if (s && state.phase !== "auth") setState({ session: s }); else void enterSession(); });
   void on<{ reason: string }>("session-ended", (r) => {
-    setState({ phase: "auth", session: null, snap: EMPTY_SNAP, settings: null, exportOpen: false });
+    setState({ phase: "auth", session: null, snap: EMPTY_SNAP, settings: null, exportOpen: false, ...NO_WORKSPACE });
     if (r?.reason) toast(r.reason, "error");
   });
   void on<DevicePrefs>("device-prefs", (device) => { setState({ device }); void checkPower(); });
@@ -204,12 +246,13 @@ function wireEvents() {
     else setState({ authCallback });
   });
   void on("exit-requested", () => {});
+  void on("workspace-changed", scheduleWorkspace);
 }
 
 // ---------------------------------------------------------------- действия интерфейса
 
 export function setSection(section: SectionId) {
-  setState({ section, selection: [], anchor: null, navPeek: false });
+  setState({ section, selection: [], anchor: null, navPeek: false, collectionId: null, record: null });
   void api.patchDevicePrefs({ lastSection: section }).catch(() => {});
 }
 /** Открыть список лидов с готовым фильтром, например по источнику. */
@@ -221,6 +264,8 @@ export function openScore(minScore: number) {
   setState({ section: "all", selection: [], anchor: null, navPeek: false, filter: { ...emptyFilter(), minScore } });
 }
 export const setFilter = (f: Partial<LeadFilter>) => setState((s) => ({ filter: { ...s.filter, ...f } }));
+/** Debug Menu открывается только в Beta: в Stable в ядре нет его команд. */
+export const openDebug = (on: boolean) => setState({ debugOpen: on && getState().boot?.channel === "beta" });
 export const openSettings = (settings: SettingsSection | null, settingsSub: string | null = null) => setState({ settings, settingsSub });
 
 export function select(ids: string[], anchor?: string | null) {

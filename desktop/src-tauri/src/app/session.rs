@@ -31,6 +31,8 @@ pub struct Session {
     pub settings: Mutex<SearchSettings>,
     pub search: Mutex<SearchState>,
     pub sync: Mutex<SyncState>,
+    /// Customers 2.0: выбранный Workspace и его база.
+    pub workspace: Mutex<super::workspace::CrmState>,
     pub(crate) tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -113,6 +115,8 @@ pub struct BootInfo {
     pub session: Option<SessionInfo>,
     pub device: Value,
     pub error: Option<String>,
+    /// Канал сборки: "stable" или "beta" (интерфейс показывает метку Beta).
+    pub channel: &'static str,
 }
 
 pub enum CallbackOutcome {
@@ -181,6 +185,7 @@ impl Core {
             session: self.info(),
             device: self.env.device.lock().unwrap().to_json(),
             error: self.startup_error.lock().unwrap().clone(),
+            channel: self.env.channel.name(),
         }
     }
 
@@ -280,6 +285,12 @@ impl Core {
             }
         }
         let db_path = Session::database_path(dir, &prefs.value);
+        env.guard_path(&db_path)?;
+        // Beta никогда не создавала незашифрованных баз: такой файл — чужая база (например, Stable 1.0),
+        // и открытие переписало бы её в зашифрованную ключом Beta. Отказываемся, ничего не меняя.
+        if env.channel.is_beta() && crate::db::file_state(&db_path) == crate::db::FileState::Plaintext {
+            return Err(CmdError::msg(format!("{} — незашифрованная база другой версии Customers. Beta её не открывает.", db_path.display())));
+        }
         let key: DbKey = env.keys.key_for(id).map_err(|e| CmdError::msg(format!("Не удалось открыть базу: {e}")))?;
         let mut store = LeadStore::open(&db_path, Some(key)).map_err(|e| CmdError::msg(format!("Не удалось открыть базу: {e}")))?;
         if is_cloud && !store.sync_tracking() {
@@ -307,6 +318,7 @@ impl Core {
             settings: Mutex::new(settings),
             search: Mutex::new(SearchState::default()),
             sync: Mutex::new(SyncState::new()),
+            workspace: Mutex::default(),
             tasks: Mutex::new(vec![]),
         });
         *self.current.lock().unwrap() = Some(session.clone());
@@ -538,7 +550,7 @@ impl Core {
 
     /// Ссылка из письма: leadgenerator://auth/callback#…
     pub async fn handle_auth_url(self: &Arc<Self>, url: &str) -> CmdResult<CallbackOutcome> {
-        if !url.starts_with("leadgenerator:") {
+        if !url.starts_with(&format!("{}:", self.env.channel.identity().url_scheme)) {
             return Err(CmdError::msg("Неизвестная ссылка."));
         }
         let cloud = self.cloud()?;

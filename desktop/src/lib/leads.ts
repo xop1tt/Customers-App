@@ -3,17 +3,19 @@
 import type { Lead, LeadKind } from "../api/types";
 import { integer, money } from "./format";
 
-export type SectionId = "home" | "all" | "new" | "favorites" | "archive" | "excluded" | "sources" | "runs";
+export type SectionId = "home" | "all" | "new" | "favorites" | "archive" | "excluded" | "sources" | "runs" | "collection";
 
-export const SECTIONS: Record<SectionId, { title: string; icon: string }> = {
-  home: { title: "Главная", icon: "home" },
-  all: { title: "Все лиды", icon: "inbox" },
-  new: { title: "Новые", icon: "sparkles" },
-  favorites: { title: "Избранное", icon: "star" },
-  archive: { title: "Архив", icon: "archive" },
-  excluded: { title: "Исключённые", icon: "ban" },
-  sources: { title: "Источники", icon: "database" },
-  runs: { title: "Журнал поиска", icon: "history" },
+/** `emoji` — крупная иконка раздела в заголовке верхней панели (docs/CRM_ARCHITECTURE.md §8.2). */
+export const SECTIONS: Record<SectionId, { title: string; icon: string; emoji: string }> = {
+  home: { title: "Главная", icon: "home", emoji: "🏠" },
+  all: { title: "Все лиды", icon: "inbox", emoji: "🔎" },
+  new: { title: "Новые", icon: "sparkles", emoji: "✨" },
+  favorites: { title: "Избранное", icon: "star", emoji: "⭐" },
+  archive: { title: "Архив", icon: "archive", emoji: "🗄️" },
+  excluded: { title: "Исключённые", icon: "ban", emoji: "🚫" },
+  sources: { title: "Источники", icon: "database", emoji: "🧭" },
+  runs: { title: "Журнал поиска", icon: "history", emoji: "📜" },
+  collection: { title: "Коллекция", icon: "list", emoji: "🗂️" },
 };
 
 export const isLeadList = (s: SectionId) => ["all", "new", "favorites", "archive", "excluded"].includes(s);

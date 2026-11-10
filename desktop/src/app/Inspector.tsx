@@ -5,7 +5,7 @@ import { KIND_TITLE, RELEVANCE_TITLE, isNegativeReason, scoreTone } from "../lib
 import { t } from "../lib/i18n";
 import { fullRu, integer, money, plural } from "../lib/format";
 import { sourceTitle } from "../lib/sources";
-import { Button, EmptyState, Field, IconButton, Notice, Score, Select, Tabs, Tag, TextArea, TextInput } from "../ui/kit";
+import { Button, Checkbox, EmptyState, Field, IconButton, Notice, Score, Select, Tabs, Tag, TextArea, TextInput } from "../ui/kit";
 import { Icon } from "../ui/icons";
 import { confirmDialog } from "../ui/overlay";
 import { attempt, openSettings, select, setState, toast, useStore } from "../state/store";
@@ -95,6 +95,7 @@ function Overview({ lead, onWrite }: { lead: Lead; onWrite: () => void }) {
 
   return (
     <div className="insp-sections">
+      <ToCrm lead={lead} />
       <div className="insp-score">
         <Score value={d.score} big />
         <div className="col grow" style={{ gap: 2 }}>
@@ -266,5 +267,40 @@ function History({ lead }: { lead: Lead }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** «Перенести в CRM»: компания, контакт и (по желанию) сделка в активном Workspace. Повторно не дублирует. */
+function ToCrm({ lead }: { lead: Lead }) {
+  const ws = useStore((s) => s.ws);
+  const collections = useStore((s) => s.collections);
+  const [deal, setDeal] = useState(true);
+  const [busy, setBusy] = useState(false);
+  if (!ws?.active) return null;
+  const mark = lead.data.crm;
+  const open = (companyId: string) => {
+    const c = collections.find((x) => x.entity_type === "company" && x.builtin === "all_clients") ?? collections.find((x) => x.entity_type === "company");
+    if (c) setState({ section: "collection", collectionId: c.id, record: { table: "companies", id: companyId }, selection: [], anchor: null });
+  };
+  if (mark && mark.workspace_id === ws.active) {
+    return (
+      <Notice tone="ok" action={<Button small onClick={() => open(mark.company_id)}>Открыть</Button>}>
+        В CRM с {fullRu(mark.converted_at)}{mark.deal_id ? ", есть сделка" : ""}.
+      </Notice>
+    );
+  }
+  if (!ws.permissions.includes("records.create")) return null;
+  const go = async () => {
+    setBusy(true);
+    const r = await attempt(() => api.wsConvertLead(lead.id, { createDeal: deal }));
+    setBusy(false);
+    if (!r) return;
+    toast(r.reusedCompany ? "Компания уже была в CRM: лид связан с ней" : `Перенесено в CRM: компания${r.contactId ? ", контакт" : ""}${r.dealId ? " и сделка" : ""}`, "success");
+  };
+  return (
+    <div className="row crm-convert">
+      <Button icon="upload" busy={busy} onClick={() => void go()}>Перенести в CRM</Button>
+      <Checkbox checked={deal} onChange={setDeal} label="со сделкой" />
+    </div>
   );
 }

@@ -13,6 +13,8 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 pub const REPOSITORY: &str = "xop1tt/CLIENTS";
+/// Начало имён файлов Beta-сборок: Customers-Beta-v1.3.0-beta.1-macOS.dmg.
+pub const BETA_ASSET_PREFIX: &str = "Customers-Beta-";
 pub const RELEASES_PAGE: &str = "https://github.com/xop1tt/CLIENTS/releases";
 pub const WIKI_PAGE: &str = "https://github.com/xop1tt/CLIENTS/wiki";
 
@@ -146,10 +148,14 @@ impl ReleaseInfo {
     pub fn installer(&self, platform: Platform) -> Option<&ReleaseAsset> {
         match platform {
             Platform::MacOs => {
-                let dmgs: Vec<&ReleaseAsset> = self.assets.iter().filter(|a| a.name.to_lowercase().ends_with(".dmg")).collect();
+                // Файлы Beta (Customers-Beta-…) Stable не устанавливает, даже если они оказались в обычном релизе.
+                let dmgs: Vec<&ReleaseAsset> =
+                    self.assets.iter().filter(|a| a.name.to_lowercase().ends_with(".dmg") && !a.name.starts_with(BETA_ASSET_PREFIX)).collect();
                 dmgs.iter().find(|a| a.name.contains("macOS")).or(dmgs.first()).copied()
             }
-            Platform::Windows => self.assets.iter().find(|a| a.name.starts_with("Customers-") && a.name.to_lowercase().ends_with("-windows-x64-setup.exe")),
+            Platform::Windows => self.assets.iter().find(|a| {
+                a.name.starts_with("Customers-") && !a.name.starts_with(BETA_ASSET_PREFIX) && a.name.to_lowercase().ends_with("-windows-x64-setup.exe")
+            }),
         }
     }
 }
@@ -661,6 +667,15 @@ mod tests {
         ]
         .join(",");
         ReleaseInfo::parse(release_json(tag, &assets).as_bytes()).unwrap()
+    }
+
+    #[test]
+    fn stable_never_picks_beta_installers() {
+        let assets = [asset("Customers-Beta-v1.3.0-beta.1-macOS.dmg", None), asset("Customers-Beta-v1.3.0-beta.1-Windows-x64-Setup.exe", None)].join(",");
+        let r = ReleaseInfo::parse(release_json("v1.3.0", &assets).as_bytes()).unwrap();
+        assert!(r.installer(Platform::MacOs).is_none());
+        assert!(r.installer(Platform::Windows).is_none());
+        assert!(update_from(&r, &v("1.2.0"), Platform::MacOs).is_none());
     }
 
     #[test]
