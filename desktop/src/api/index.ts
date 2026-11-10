@@ -132,6 +132,7 @@ export const api = {
   wsAcceptInvitation: (token: string) => call<WsState>("ws_accept_invitation", { token }),
   wsSetMemberRole: (user: string, role: string) => call<WsState>("ws_set_member_role", { user, role }),
   wsRemoveMember: (user: string) => call<WsState>("ws_remove_member", { user }),
+  wsUploadLocal: () => call<{ workspace: string; copied: number; skipped: number; state: WsState }>("ws_upload_local"),
   wsRoles: () => call<WsRoles>("ws_roles"),
   wsSaveRole: (key: string, name: string, rank: number, permissions: string[]) => call<WsRoles>("ws_save_role", { key, name, rank, permissions }),
   wsDeleteRole: (key: string) => call<WsRoles>("ws_delete_role", { key }),
