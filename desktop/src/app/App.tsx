@@ -20,6 +20,8 @@ import { LeadsPage } from "./pages/LeadsPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { RunsPage } from "./pages/RunsPage";
 import { Settings } from "./settings/Settings";
+import { Marketplace } from "./market/Marketplace";
+import { useMarketInstalled } from "../state/market";
 import { ReportDialog } from "./settings/SystemSections";
 import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
@@ -121,6 +123,7 @@ export function App() {
       {phase === "welcome" && <Welcome />}
       {phase === "ready" && <Shell />}
       <Settings />
+      <Marketplace />
       {debugOpen && <Suspense fallback={null}><DebugMenu /></Suspense>}
       <MenuHost />
       <ConfirmHost />
@@ -237,6 +240,7 @@ function Shell() {
   const collectionId = useStore((st) => st.collectionId);
   const profileId = useStore((st) => st.profileId);
   useChatPolling();
+  useMarketInstalled();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
   const crm = section === "collection";
   const showInsp = (lead && device.inspectorShown && (!floatInsp || selected === 1)) || (crm && !!crmRecord);

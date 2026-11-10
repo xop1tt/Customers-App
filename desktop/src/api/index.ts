@@ -146,6 +146,7 @@ export const api = {
   /** Действие чата: имя функции сервера (chat_list, chat_send…) и её аргументы без префикса `p_`. */
   wsChat: <T = unknown>(action: string, args: Record<string, unknown> = {}) => call<T>("ws_chat", { action, args }),
   wsChatPoll: () => call<ChatPoll>("ws_chat_poll"),
+  wsMarket: <T = unknown>(action: string, args: Record<string, unknown> = {}) => call<T>("ws_market", { action, args }),
 
   // обновления
   updateInfo: () => call<UpdateInfo>("update_info"),

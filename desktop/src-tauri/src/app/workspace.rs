@@ -980,6 +980,51 @@ impl Core {
         Ok(out)
     }
 
+    /// Маркетплейс: действие — функция сервера из списка ниже, аргументы — как у неё (без `p_`).
+    /// Каталог и подача интеграций нужны облачной учётной записи; установка — в облачный Workspace.
+    pub async fn ws_market(self: &Arc<Self>, action: &str, args: Map<String, Value>) -> CmdResult<Value> {
+        // Действия, которым нужен активный облачный Workspace (подставляется сам).
+        const WITH_WORKSPACE: [&str; 4] = ["market_installed", "market_install", "market_uninstall", "market_set_enabled"];
+        const OTHERS: [&str; 7] =
+            ["market_catalog", "market_my_apps", "market_submit", "market_is_moderator", "market_review_queue", "market_review", "market_suspend"];
+        let with_ws = WITH_WORKSPACE.contains(&action);
+        if !with_ws && !OTHERS.contains(&action) {
+            return Err(CmdError::msg("Неизвестное действие маркетплейса."));
+        }
+        let s = self.require()?;
+        let cloud = match (&self.env.cloud, s.is_cloud) {
+            (Some(c), true) => c.clone(),
+            _ => return Err(CmdError::new("cloudOnly", "Маркетплейс доступен в облачной учётной записи.")),
+        };
+        let mut body = Map::new();
+        for (k, v) in args {
+            if !k.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                return Err(CmdError::msg("Неверный аргумент."));
+            }
+            body.insert(format!("p_{k}"), v);
+        }
+        let active = self.remote_active(&s)?;
+        if with_ws {
+            let Some(ws) = &active else {
+                if action == "market_installed" {
+                    return Ok(json!([]));
+                }
+                return Err(CmdError::new("localWorkspace", "Интеграции устанавливаются в облачный Workspace: выберите общий Workspace."));
+            };
+            body.insert("p_workspace".into(), json!(ws.id));
+        } else if action == "market_catalog" {
+            body.insert("p_workspace".into(), json!(active.as_ref().map(|w| w.id.clone())));
+        }
+        match sync::rpc(&cloud, action, Value::Object(body)).await {
+            Ok(v) => Ok(v),
+            Err(CloudError::Server(m)) if m.contains("market_") && (m.contains("schema cache") || m.contains("Could not find")) => Err(CmdError::new(
+                "marketMissing",
+                "Маркетплейс появится после обновления сервера: владельцу проекта Supabase нужно применить миграцию 20261111100000_marketplace.sql.",
+            )),
+            Err(e) => Err(cloud_err(e)),
+        }
+    }
+
     /// Опрос раз в ~15 с: «в сети», непрочитанное, новые сообщения и уведомления. Новое (после прошлого опроса)
     /// уходит системным уведомлением, если окно не в фокусе и уведомления о сообщениях включены.
     pub async fn ws_chat_poll(self: &Arc<Self>) -> CmdResult<Value> {
@@ -1256,6 +1301,17 @@ mod team_tests {
         let mut hired = Map::new();
         hired.insert("hiredOn".into(), json!("10.11.2026"));
         assert!(core.ws_update_member("u", hired).await.unwrap_err().message.contains("ГГГГ-ММ-ДД"));
+    }
+
+    #[tokio::test]
+    async fn market_actions_are_whitelisted_and_need_cloud() {
+        let (_f, core) = local();
+        for bad in ["crm_push", "market_deliver", "", "market_catalog; drop"] {
+            let e = core.ws_market(bad, Map::new()).await.unwrap_err();
+            assert_eq!(e.message, "Неизвестное действие маркетплейса.", "{bad}");
+        }
+        let e = core.ws_market("market_catalog", Map::new()).await.unwrap_err();
+        assert_eq!(e.code, "cloudOnly");
     }
 
     #[test]

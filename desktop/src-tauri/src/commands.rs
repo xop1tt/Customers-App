@@ -527,3 +527,7 @@ pub async fn ws_chat(core: C<'_>, action: String, args: Option<serde_json::Map<S
 pub async fn ws_chat_poll(core: C<'_>) -> CmdResult<Value> {
     core.inner().ws_chat_poll().await
 }
+#[tauri::command]
+pub async fn ws_market(core: C<'_>, action: String, args: Option<serde_json::Map<String, Value>>) -> CmdResult<Value> {
+    core.inner().ws_market(&action, args.unwrap_or_default()).await
+}

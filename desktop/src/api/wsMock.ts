@@ -118,6 +118,14 @@ export function resetWsMock() {
   active = null;
 }
 
+/** Сменить свою роль в активном Workspace (тесты): например, чтобы стать владельцем. */
+export function setWsMockRole(role: string) {
+  const ws = ensure();
+  Object.assign(ws.info, { role, roleName: ROLE_NAME[role] ?? role, rank: RANK[role] ?? 0, permissions: ROLE_PERMS[role] ?? [] });
+  const me = ws.members.find((m) => m.userId === ME);
+  if (me) me.role = role;
+}
+
 function state(): WsState {
   const ws = ensure();
   return {

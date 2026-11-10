@@ -90,6 +90,7 @@ fn app_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::ws_update_member,
         commands::ws_chat,
         commands::ws_chat_poll,
+        commands::ws_market,
         commands::ws_upload_local,
         commands::ws_save_role,
         commands::ws_delete_role,

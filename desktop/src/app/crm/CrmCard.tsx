@@ -13,6 +13,8 @@ import { Button, EmptyState, Field, IconButton, Notice, Select, Spinner, Tabs, T
 import { Icon } from "../../ui/icons";
 import { confirmDialog } from "../../ui/overlay";
 import { attempt, openRecord, toast, useStore } from "../../state/store";
+import { actionsFor, actionUrl } from "../../state/market";
+import { openLink } from "../../state/actions";
 import { defaultStage, stagesOf, useLookup, useWsQuery } from "./useCrm";
 
 type Tab = "overview" | "feed" | "tasks" | "history";
@@ -150,6 +152,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
   const lk = useLookup();
   const { data, error } = useWsQuery(() => api.wsCard(e.table, id), [e.table, id]);
   const [tab, setTab] = useState<Tab>("overview");
+  const market = useStore((st) => st.marketInstalled);
   if (error) return <div className="inspector-body"><EmptyState icon="alert" title="Запись не открылась">{error}</EmptyState></div>;
   if (!data) return <div className="inspector-body"><div className="boot"><Spinner size={18} /></div></div>;
   const r = data.record;
@@ -185,6 +188,12 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
             <IconButton icon="check" tip={r.status === "done" ? "Вернуть в работу" : "Выполнено"} active={r.status === "done"} onClick={() => save({ status: r.status === "done" ? "todo" : "done" })} />
           )}
           {"archived_at" in r && editable && <IconButton icon="archive" tip={r.archived_at ? "Вернуть из архива" : "В архив"} active={!!r.archived_at} onClick={() => save({ archived_at: r.archived_at ? null : new Date().toISOString() })} />}
+          {!r.deleted_at && actionsFor(market, e.type).map(({ app, action }) => (
+            <Button key={`${app.app_id}:${action.id}`} small variant="ghost" title={`${app.name}: ${action.label}`} onClick={() => {
+              const url = actionUrl(action, app.scopes, { id, type: e.type, title: e.title(r) });
+              if (url) void openLink(url); else toast("Адрес кнопки интеграции некорректен.", "error");
+            }}><span aria-hidden>{app.icon}</span> {action.label}</Button>
+          ))}
           <span className="grow" />
           {deletable && (r.deleted_at
             ? <Button small icon="refresh" onClick={() => void attempt(() => api.wsRestore(e.table, id))}>Восстановить</Button>

@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { wsCall } from "./wsMock";
 import { teamCall } from "./chatMock";
+import { marketCall } from "./marketMock";
 
 type Handler = (p: unknown) => void;
 const listeners = new Map<string, Set<Handler>>();
@@ -233,6 +234,13 @@ const DEBUG_SCENARIOS = [
 ];
 
 export async function call(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+  if (cmd === "ws_market") {
+    const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
+    const remote = ws.workspaces.find((w) => w.id === ws.active)?.remote ?? false;
+    // В демо облачной команды (?team) вы — ещё и модератор маркетплейса.
+    return marketCall(String(args.action), (args.args ?? {}) as Record<string, unknown>,
+      { cloud: ws.isCloud, me: ws.me, wsId: remote ? ws.active : null, perms: ws.permissions, moderator: ws.isCloud });
+  }
   if (["ws_team", "ws_update_member", "ws_chat", "ws_chat_poll"].includes(cmd)) {
     const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
     const me = session();

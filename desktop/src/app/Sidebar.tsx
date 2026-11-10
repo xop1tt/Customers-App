@@ -15,6 +15,7 @@ import { CollectionsGroup } from "./crm/Collections";
 import { openLink } from "../state/actions";
 import { GroupTitle, useCollapsed } from "./SideGroup";
 import { unreadNotifications, unreadTotal } from "../state/team";
+import { openMarket } from "../state/market";
 
 const SCORE_STEPS = [90, 70, 50, 30];
 
@@ -239,6 +240,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openProfile(null); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Профиль</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("appearance"); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Настройки</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство</button></li>
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); openMarket(); }}><span className="menu-icon"><Icon name="store" size={14} /></span>Маркетплейс</button></li>
             {beta && <li><button className="menu-item" onClick={() => { setAccountRect(null); openDebug(true); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Debug Menu</button></li>}
             <li className="menu-sep" />
             <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>

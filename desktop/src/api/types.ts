@@ -667,3 +667,56 @@ export interface ChatPoll {
   /** Открыт канал Realtime: новое приходит сразу, без ожидания опроса. */
   live?: boolean;
 }
+
+// ---------------------------------------------------------------- маркетплейс
+
+export type MarketCategory = "crm" | "telephony" | "messaging" | "email" | "documents" | "analytics" | "marketing" | "other";
+export type MarketEntity = "company" | "contact" | "crm_lead" | "deal";
+export interface MarketAction { id: string; label: string; entity: MarketEntity; url: string }
+/** Манифест интеграции: кнопки в карточках, события на сервер разработчика, права; окно — на будущее. */
+export interface MarketManifest {
+  schema: 1;
+  scopes?: string[];
+  webhooks?: { url: string; events: string[] };
+  actions?: MarketAction[];
+  window?: { url: string };
+}
+export interface MarketInstall { version: string; manifest: MarketManifest; enabled: boolean; installed_at: string; update_available: boolean }
+export interface MarketVersion { id: string; version: string; status: "pending" | "approved" | "rejected" | "superseded"; review_note: string | null; created_at: string; manifest: MarketManifest }
+export interface MarketApp {
+  id: string;
+  slug: string;
+  name: string;
+  tagline: string;
+  description: string;
+  category: MarketCategory;
+  icon: string;
+  website: string | null;
+  support_email: string | null;
+  developer_name: string;
+  status: "draft" | "listed" | "suspended";
+  version: string | null;
+  manifest: MarketManifest | null;
+  updated_at: string;
+  installs: number;
+  installed: MarketInstall | null;
+  /** Только в «Моих интеграциях». */
+  versions?: MarketVersion[];
+  status_note?: string | null;
+}
+export interface MarketReview { version_id: string; version: string; manifest: MarketManifest; created_at: string; live_manifest: MarketManifest | null; developer_email: string | null; app: MarketApp }
+export interface MarketInstalled { app_id: string; name: string; icon: string; actions: MarketAction[]; scopes: string[] }
+export interface MarketSubmission {
+  id?: string;
+  slug: string;
+  name: string;
+  developer_name: string;
+  tagline: string;
+  description: string;
+  category: MarketCategory;
+  icon: string;
+  website: string;
+  support_email: string;
+  version: string;
+  manifest: MarketManifest;
+}
