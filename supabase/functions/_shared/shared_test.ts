@@ -100,3 +100,15 @@ Deno.test("limit messages are human readable", () => {
   assert(limitMessage({ allowed: false, reason: "cooldown", retry_after: 600 }).includes("10 мин"));
   assert(limitMessage({ allowed: false, reason: "global_daily", retry_after: 7200 }).includes("2 ч"));
 });
+
+Deno.test("templates: inactive warning has keep link, dates, no code", () => {
+  const r = render({
+    kind: "inactive_warning", code: "", link: "https://x.test/keep?token=abc", email: "a@b.c", minutesValid: 0,
+    lastActive: "1 января 2025 г.", deleteOn: "1 января 2027 г.",
+  });
+  assert(r.subject.includes("неактивности"));
+  assert(r.text.includes("https://x.test/keep?token=abc"));
+  assert(r.text.includes("1 января 2027"));
+  assert(!r.text.includes("Код:"));
+  assert(r.html.includes("Сохранить аккаунт"));
+});

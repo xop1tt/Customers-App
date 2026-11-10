@@ -13,6 +13,7 @@ export SUPABASE_ANON_KEY="$(python3 "$STACK_DIR/jwt.py" "$JWT_SECRET" anon)"
 export SUPABASE_SERVICE_ROLE_KEY="$(python3 "$STACK_DIR/jwt.py" "$JWT_SECRET" service_role)"
 export STACK_MAIL_DIR="${STACK_MAIL_DIR:-/tmp/lg-mail}"
 export SMTP_HOST=127.0.0.1 SMTP_PORT=2525 SMTP_MODE=plain SMTP_USER=sink-user SMTP_PASS=sink-pass
+export CRON_SECRET="local-test-cron-secret-0123456789"
 export SMTP_FROM="Lead Generator <no-reply@leadgen.test>"
 export GOTRUE_IMAGE="${GOTRUE_IMAGE:-supabase/gotrue:v2.180.0}"
 export POSTGREST_IMAGE="${POSTGREST_IMAGE:-postgrest/postgrest:v13.0.7}"

@@ -73,6 +73,17 @@ Gmail бесплатно отправляет около 500 писем в су�
 `20261110140000_purge_unconfirmed.sql`). Срок меняется в SQL Editor: `update private.email_limits set unconfirmed_ttl = interval '6 hours';`
 (от 1 часа до 30 суток).
 
+**Неактивные аккаунты.** Аккаунт без входа более 2 лет удаляется только после письма «Ваш аккаунт скоро будет удалён»
+со ссылкой «Сохранить аккаунт» (миграция `20261110150000_inactive_accounts.sql`). Письмо уходит за 30 дней до срока;
+если за это время человек не вошёл и не нажал ссылку, аккаунт удаляется. Если письмо не отправилось (почта недоступна),
+аккаунт не удаляется. Участники общих Workspace не удаляются никогда. Проверку раз в неделю запускает GitHub Actions
+(`.github/workflows/inactive-accounts.yml`), для этого нужен секрет `CRON_SECRET` (любая случайная строка от 16 символов)
+в двух местах: в Supabase (**Edge Functions → Secrets**) и в GitHub (**Settings → Secrets and variables → Actions →
+Secrets**), а также переменная GitHub **Variables** `SUPABASE_URL` (адрес проекта, `https://REF.supabase.co`). Без них
+workflow ничего не делает. Запустить вручную: **Actions → Inactive accounts → Run workflow**. Сроки меняются в SQL Editor:
+`update private.email_limits set inactive_after = interval '3 years', inactive_warn_before = interval '45 days';`
+(неактивность от 90 суток до 10 лет, предупреждение за 7–180 суток).
+
 `SEND_EMAIL_HOOK_SECRET` добавите на шаге 6. `SUPABASE_URL` и `SUPABASE_SERVICE_ROLE_KEY` Supabase
 передаёт функциям сам — их добавлять не нужно.
 
@@ -89,10 +100,12 @@ npx supabase login
 npx supabase functions deploy send-email --project-ref REF --no-verify-jwt
 npx supabase functions deploy email-gate --project-ref REF --no-verify-jwt
 npx supabase functions deploy delete-account --project-ref REF --no-verify-jwt
+npx supabase functions deploy inactive-accounts --project-ref REF --no-verify-jwt
+npx supabase functions deploy keep-account --project-ref REF --no-verify-jwt
 ```
 
 `login` откроет браузер — подтвердите вход. После каждой команды должно быть `Deployed Functions … send-email`
-(и т. д.). В панели Supabase в **Edge Functions** появятся три функции.
+(и т. д.). В панели Supabase в **Edge Functions** появятся пять функций.
 
 ## Шаг 6. Настроить вход по почте
 

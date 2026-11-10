@@ -7,7 +7,7 @@ import { BANNER_CID } from "./banner.ts";
 
 export const APP_NAME = "Customers";
 
-export type Kind = "signup" | "recovery" | "email_change_current" | "email_change_new" | "other";
+export type Kind = "signup" | "recovery" | "email_change_current" | "email_change_new" | "inactive_warning" | "other";
 
 export type TemplateInput = {
   kind: Kind;
@@ -16,6 +16,9 @@ export type TemplateInput = {
   email: string;
   newEmail?: string;
   minutesValid: number;
+  /** Только для inactive_warning: дата последней активности и дата удаления, уже в виде текста. */
+  lastActive?: string;
+  deleteOn?: string;
 };
 
 function esc(s: string): string {
@@ -58,6 +61,14 @@ function copy(i: TemplateInput): Copy {
         button: "Подтвердить новый адрес",
         ignore: "Если вы не меняли адрес, просто удалите это письмо.",
       };
+    case "inactive_warning":
+      return {
+        subject: `${APP_NAME}: аккаунт будет удалён из-за неактивности`,
+        title: "Ваш аккаунт скоро будет удалён",
+        lead: `Вы давно не заходили в ${APP_NAME} (последний раз ${i.lastActive ?? "очень давно"}). Если ничего не делать, облачная учётная запись ${i.email} и её данные в облаке будут удалены ${i.deleteOn ?? "в ближайшее время"}. Данные на вашем компьютере останутся.`,
+        button: "Сохранить аккаунт",
+        ignore: "Чтобы сохранить аккаунт, нажмите кнопку или просто войдите в приложение. Если аккаунт вам больше не нужен, ничего делать не нужно.",
+      };
     default:
       return {
         subject: `${APP_NAME}: код подтверждения`,
@@ -71,14 +82,14 @@ function copy(i: TemplateInput): Copy {
 
 export function render(i: TemplateInput): { subject: string; text: string; html: string } {
   const c = copy(i);
-  const valid = `Код и ссылка действуют ${i.minutesValid} мин и срабатывают один раз.`;
+  const notice = i.kind === "inactive_warning";
+  const valid = notice ? "Ссылка действует, пока аккаунт не удалён." : `Код и ссылка действуют ${i.minutesValid} мин и срабатывают один раз.`;
   const text = [
     c.title,
     "",
     c.lead,
     "",
-    `Код: ${i.code}`,
-    "",
+    ...(notice ? [] : [`Код: ${i.code}`, ""]),
     `Ссылка: ${i.link}`,
     "",
     valid,
@@ -95,7 +106,7 @@ export function render(i: TemplateInput): { subject: string; text: string; html:
 <tr><td style="padding:8px 32px 32px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">
 <tr><td style="padding-top:20px;font-size:22px;font-weight:700">${esc(c.title)}</td></tr>
 <tr><td style="padding-top:12px;font-size:15px;line-height:1.5">${esc(c.lead)}</td></tr>
-<tr><td style="padding-top:20px"><div style="font-size:30px;font-weight:700;letter-spacing:.3em;font-family:ui-monospace,Menlo,monospace;background:#f5f5f7;border-radius:10px;padding:14px 18px;text-align:center">${esc(i.code)}</div></td></tr>
+${notice ? "" : `<tr><td style="padding-top:20px"><div style="font-size:30px;font-weight:700;letter-spacing:.3em;font-family:ui-monospace,Menlo,monospace;background:#f5f5f7;border-radius:10px;padding:14px 18px;text-align:center">${esc(i.code)}</div></td></tr>`}
 <tr><td style="padding-top:20px" align="center"><a href="${esc(i.link)}" style="display:inline-block;background:#2f7df6;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:22px">${esc(c.button)}</a></td></tr>
 <tr><td style="padding-top:20px;font-size:13px;line-height:1.5;color:#6e6e73">${esc(valid)}<br>${esc(c.ignore)}</td></tr>
 <tr><td style="padding-top:20px;font-size:12px;color:#86868b">Письмо отправлено автоматически, отвечать на него не нужно.</td></tr>
