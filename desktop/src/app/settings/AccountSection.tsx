@@ -5,11 +5,13 @@ import { avatarFromFile } from "../../lib/avatar";
 import { Avatar, Button, Field, Group, Notice, PasswordInput, SettingRow, Sub, Switch, Tag, TextInput } from "../../ui/kit";
 import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, leaveSession, toast, useStore } from "../../state/store";
+import { syncView } from "../Sidebar";
 
 const PASSWORD_RULES = "Пароль: не короче 8 символов, строчные и заглавные буквы и цифры.";
 
 export function AccountSection() {
   const session = useStore((s) => s.session);
+  const sync = useStore((s) => s.sync);
   if (!session) return null;
   return (
     <>
@@ -17,11 +19,13 @@ export function AccountSection() {
         <Avatar name={session.displayName} src={session.avatar} size={56} />
         <div className="col grow" style={{ gap: 2 }}>
           <h3 className="ellipsis">{session.displayName}</h3>
-          <span className="muted">{session.isCloud ? "Облачный аккаунт: данные синхронизируются между устройствами" : "Локальный аккаунт: данные хранятся только на этом компьютере"}</span>
+          <span className="muted">{session.isCloud ? (syncView(sync)?.label ?? "Синхронизировано") : "Локальная учётная запись"}</span>
         </div>
+        {session.isCloud && <Button icon="refresh" busy={sync?.kind === "syncing"} onClick={() => void attempt(() => api.syncNow())}>Синхронизировать</Button>}
         <Button icon="logout" onClick={() => void leaveSession()}>Выйти</Button>
       </div>
       <ProfileGroup />
+      {session.isCloud && <CloudAccountActions />}
       {session.isCloud ? <CloudAccount /> : <LocalAccount />}
     </>
   );
@@ -101,9 +105,7 @@ function CloudAccount() {
   const session = useStore((s) => s.session);
   const sync = useStore((s) => s.sync);
   const user = session?.cloudUser;
-  const [stats, setStats] = useState<Record<string, number> | null>(null);
-  const [dialog, setDialog] = useState<"email" | "import" | "delete" | null>(null);
-  useEffect(() => { void api.cloudStats().then(setStats).catch(() => {}); }, [sync?.lastSync]);
+  const [dialog, setDialog] = useState<"email" | null>(null);
   if (!user) return null;
   return (
     <>
@@ -114,17 +116,23 @@ function CloudAccount() {
       </Group>
       <Group title="Синхронизация" sub="cloud">
         <SettingRow title={sync?.kind === "syncing" ? "Синхронизация…" : sync?.kind === "offline" ? "Нет связи с сервером" : sync?.kind === "failed" ? "Последняя синхронизация не удалась" : "Данные синхронизированы"}
-          hint={`${sync?.lastSync ? `Последний раз: ${fullRu(sync.lastSync)}. ` : ""}${sync?.message ?? ""}${sync?.pending ? ` Ждут отправки: ${sync.pending}.` : ""}`}>
-          <Button icon="refresh" busy={sync?.kind === "syncing"} onClick={() => void attempt(() => api.syncNow())}>Синхронизировать</Button>
-        </SettingRow>
-        {stats && <SettingRow title="В облаке" hint={`Лидов: ${stats.leads_active ?? 0}, исключений: ${stats.exclusions ?? 0}`} />}
+          hint={`${sync?.lastSync ? `Последний раз: ${fullRu(sync.lastSync)}. ` : ""}${sync?.message ?? ""}${sync?.pending ? ` Ждут отправки: ${sync.pending}.` : ""}`} />
       </Group>
       <Group title="Пароль" sub="security"><div style={{ paddingTop: 14 }}><PasswordForm labels={["Текущий пароль", "Новый пароль", "Повторите новый пароль"]} onSubmit={(o, n, c) => api.changeCloudPassword(o, n, c)} /></div></Group>
-      <Group title="Данные" sub="cloud">
+      {dialog === "email" && <EmailDialog onClose={() => setDialog(null)} />}
+    </>
+  );
+}
+
+/** Перенос локального аккаунта и удаление облачного: подраздел «Профиль». */
+function CloudAccountActions() {
+  const [dialog, setDialog] = useState<"import" | "delete" | null>(null);
+  return (
+    <>
+      <Group title="Облачный аккаунт" sub="profile">
         <SettingRow title="Перенести локальный аккаунт" hint="Добавит лиды и настройки локального аккаунта в облачный. Локальный аккаунт останется на месте."><Button onClick={() => setDialog("import")}>Перенести…</Button></SettingRow>
         <SettingRow title="Удалить облачный аккаунт" hint="Все облачные данные будут стёрты без возможности восстановления. Данные на этом компьютере останутся."><Button variant="danger" onClick={() => setDialog("delete")}>Удалить…</Button></SettingRow>
       </Group>
-      {dialog === "email" && <EmailDialog onClose={() => setDialog(null)} />}
       {dialog === "import" && <ImportDialog onClose={() => setDialog(null)} />}
       {dialog === "delete" && <DeleteDialog onClose={() => setDialog(null)} />}
     </>

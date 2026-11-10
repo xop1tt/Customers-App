@@ -16,11 +16,11 @@ import { openLink } from "../state/actions";
 
 const SCORE_STEPS = [90, 70, 50, 30];
 
-/** Кнопка «Обновить» нужна, пока есть найденная или скачанная версия. Проверка и ошибка не должны её прятать. */
+/** Кнопка «Обновить» появляется, когда обновление уже загружено и его можно установить. Пока оно скачивается, её нет. */
 export function updateVisible(u: UpdateInfo | null): boolean {
   if (!u || u.phase === "upToDate") return false;
-  if (["available", "downloading", "ready", "installing"].includes(u.phase)) return true;
-  return !!(u.available || u.stagedVersion);
+  if (u.phase === "ready" || u.phase === "installing") return true;
+  return !!u.stagedVersion && u.phase !== "downloading";
 }
 
 /** Облачко рядом с именем: показывает, что сейчас с синхронизацией. */
@@ -236,17 +236,17 @@ function SwitchMini({ on, onChange }: { on: boolean; onChange: (v: boolean) => v
 function UpdateButton() {
   const update = useStore((s) => s.update);
   if (!update) return null;
-  const busy = update.phase === "downloading" || update.phase === "installing";
+  const busy = update.phase === "installing";
   const click = () => {
     if (!update.canUpdate) return void openLink(update.releasesPage);
-    if (update.phase === "ready" || (update.stagedVersion && update.phase !== "checking")) void attempt(() => api.installUpdate());
-    else if (update.phase === "available" || update.phase === "failed" || update.phase === "checking") void attempt(() => api.prepareUpdate());
+    void attempt(() => api.installUpdate());
   };
-  const tip = update.phase === "failed" ? `Не удалось скачать. Нажмите, чтобы повторить` : update.available ? `Версия ${update.available.version}` : "Обновить приложение";
+  const version = update.stagedVersion ?? update.available?.version;
+  const tip = version ? `Установить версию ${version} и перезапустить` : "Обновить приложение";
   return (
     <button type="button" className="update-btn" disabled={busy} onClick={click} data-tip={tip} aria-label={`Обновить. ${tip}`}>
       <Icon name={busy ? "refresh" : "download"} size={14} className={busy ? "pulse" : undefined} />
-      <span>{busy ? "Загрузка…" : "Обновить"}</span>
+      <span>{busy ? "Установка…" : "Обновить"}</span>
     </button>
   );
 }

@@ -117,6 +117,7 @@ export function UpdatesSection() {
         <SettingRow title={`Customers ${u.current}`} hint={<>{status}{status && u.lastCheck ? " · " : ""}{u.lastCheck ? `Проверено: ${fullRu(u.lastCheck)}` : ""}</>}>
           {busy && <Spinner />}
           <Button icon="refresh" disabled={busy} onClick={() => void attempt(() => api.checkUpdates())}>Проверить</Button>
+          {u.canUpdate && (u.phase === "ready" || (u.stagedVersion && !busy)) && <Button variant="primary" icon="download" onClick={() => void attempt(() => api.installUpdate())}>Обновить</Button>}
         </SettingRow>
         {u.phase === "failed" && <div style={{ paddingTop: 10 }}><Notice tone="error">{u.message ?? "Не удалось обновить приложение."}</Notice></div>}
         {u.available && (
@@ -125,15 +126,11 @@ export function UpdatesSection() {
             {u.available.notes && <p className="muted selectable update-notes">{u.available.notes}</p>}
             <div className="row">
               {u.canUpdate && u.phase === "available" && <Button variant="primary" icon="download" onClick={() => void attempt(() => api.prepareUpdate())}>Скачать</Button>}
-              {u.canUpdate && u.phase === "ready" && <Button variant="primary" icon="refresh" onClick={() => void attempt(() => api.installUpdate())}>Установить и перезапустить</Button>}
               {u.available.page && <Button variant="ghost" icon="external" onClick={() => void openLink(u.available?.page as string)}>Страница релиза</Button>}
             </div>
           </div>
         )}
         {!u.canUpdate && <div style={{ paddingTop: 10 }}><Notice tone="info" action={<Button small onClick={() => void openLink(u.releasesPage)}>Релизы</Button>}>Установка обновлений из приложения здесь недоступна. Скачайте новую версию со страницы релизов.</Notice></div>}
-      </Group>
-
-      <Group title="Параметры" sub="params">
         <SettingRow title="Проверять обновления автоматически"><Switch checked={d.checkUpdates} onChange={(v) => void patchDevice({ checkUpdates: v })} /></SettingRow>
         <SettingRow title="Как часто проверять"><Select width={180} disabled={!d.checkUpdates} value={d.updateCheckHours} options={(intervals.length ? intervals : [{ hours: d.updateCheckHours, title: `${d.updateCheckHours} ч` }]).map((i) => ({ value: i.hours, label: i.title }))} onChange={(v) => void patchDevice({ updateCheckHours: v })} /></SettingRow>
         <SettingRow title="Скачивать в фоне" hint="Загрузка начинается сразу, установка только по вашей команде."><Switch checked={d.backgroundDownload} disabled={!d.checkUpdates} onChange={(v) => void patchDevice({ backgroundDownload: v })} /></SettingRow>

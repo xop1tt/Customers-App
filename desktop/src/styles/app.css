@@ -152,7 +152,9 @@ button.th:hover { color: var(--text); }
 }
 .bulkbar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 8px 16px; background: var(--bg-raised); border-top: 1px solid var(--line-strong); animation: fade-in 120ms; }
 .bulk-count { font-weight: 600; margin-right: 6px; }
-.statusbar { flex: none; display: flex; align-items: center; gap: 16px; height: 28px; padding: 0 16px; border-top: 1px solid var(--line); font-size: var(--fs-sm); color: var(--text-2); }
+.statusbar { flex: none; display: flex; align-items: center; gap: 16px; height: 28px; min-height: 28px; max-height: 28px; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; padding: 0 16px; border-top: 1px solid var(--line); font-size: var(--fs-sm); color: var(--text-2); }
+.statusbar > * { flex: none; min-width: 0; }
+.statusbar > .grow { flex: 1 1 0; }
 @container (max-width: 600px) { .hide-narrow { display: none; } }
 @media (max-width: 980px) { .hide-narrow { display: none; } }
 
