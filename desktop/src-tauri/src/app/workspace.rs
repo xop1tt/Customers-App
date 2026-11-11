@@ -16,7 +16,7 @@ use crate::workspace::sync::{self, CrmSync};
 use crate::workspace::{dedupe, schema};
 use chrono::Utc;
 use serde_json::{json, Map, Value};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -63,6 +63,23 @@ pub fn user_id(s: &Session) -> String {
     let mut bytes = [0u8; 16];
     bytes.copy_from_slice(&hash[..16]);
     uuid::Builder::from_bytes(bytes).with_version(uuid::Version::Sha1).with_variant(uuid::Variant::RFC4122).into_uuid().to_string()
+}
+
+/// Базы Workspace в папке: `<id>.db`, без служебных копий (`before-restore`, `restore-…`).
+fn workspace_files(dir: &Path) -> Vec<(String, PathBuf)> {
+    let mut out: Vec<(String, PathBuf)> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().into_owned();
+                    let id = name.strip_suffix(".db")?;
+                    (uuid::Uuid::parse_str(id).is_ok() && e.path().is_file()).then(|| (id.to_string(), e.path()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort();
+    out
 }
 
 fn cmd(e: impl std::fmt::Display) -> CmdError {
@@ -298,6 +315,82 @@ impl Core {
         }
         crate::db::remove_database_files(&path);
         self.env.emit("notify", json!({"kind": "error", "title": "Доступ к Workspace закрыт", "body": "Локальная копия удалена. Неотправленные изменения сохранены в файл в папке учётной записи."}));
+    }
+
+    // ------------------------------------------------------------ резервные копии баз CRM (пакет A1)
+
+    /// Копирует базы всех Workspace учётной записи (`workspaces/<id>.db`) и `catalog.json` в папку `to`.
+    /// Копия снимается `VACUUM INTO` и остаётся зашифрованной ключом учётной записи; незашифрованная копия
+    /// удаляется с ошибкой. Возвращает число скопированных баз (0 — у учётной записи ещё нет CRM).
+    pub(crate) fn backup_workspaces(&self, s: &Session, to: &Path) -> CmdResult<usize> {
+        let src = self.ws_dir(s);
+        let files = workspace_files(&src);
+        if files.is_empty() {
+            return Ok(0);
+        }
+        let key = self.env.keys.key_for(&s.id).map_err(cmd)?;
+        std::fs::create_dir_all(to).map_err(cmd)?;
+        for (id, path) in &files {
+            let target = database_file(to, id);
+            let _ = std::fs::remove_file(&target);
+            let conn = crate::db::open_connection(path, false, Some(&key)).map_err(cmd)?;
+            conn.execute("VACUUM INTO ?1", [target.to_string_lossy().as_ref()]).map_err(cmd)?;
+            drop(conn);
+            if crate::db::file_state(&target) != crate::db::FileState::Encrypted {
+                let _ = std::fs::remove_file(&target);
+                return Err(CmdError::msg("Резервная копия CRM получилась незашифрованной и удалена."));
+            }
+        }
+        if Catalog::file(&src).exists() {
+            std::fs::copy(Catalog::file(&src), Catalog::file(to)).map_err(cmd)?;
+        }
+        Ok(files.len())
+    }
+
+    /// Восстанавливает из папки копии базы локальных Workspace (только на этом устройстве). Облачные Workspace
+    /// не восстанавливаются: источник истины для них — сервер, они загружаются заново. Текущая база каждого
+    /// восстановленного Workspace сохраняется рядом как `<id>.before-restore.db`. Возвращает число баз.
+    pub(crate) fn restore_workspaces(&self, s: &Session, from: &Path) -> CmdResult<usize> {
+        let saved = Catalog::load(from);
+        let local: Vec<WorkspaceInfo> = saved.workspaces.iter().filter(|w| !w.remote && database_file(from, &w.id).exists()).cloned().collect();
+        if local.is_empty() {
+            return Ok(0);
+        }
+        let key = self.env.keys.key_for(&s.id).map_err(cmd)?;
+        // Сначала проверяем все копии: файл открывается ключом учётной записи и принадлежит своему Workspace.
+        for w in &local {
+            let conn =
+                crate::db::open_connection(&database_file(from, &w.id), true, Some(&key)).map_err(|e| CmdError::msg(format!("Копия CRM не читается: {e}")))?;
+            let owner: Option<String> = conn.query_row("SELECT value FROM local_meta WHERE key = 'workspace_id'", [], |r| r.get(0)).ok();
+            if owner.as_deref() != Some(w.id.as_str()) {
+                return Err(CmdError::msg("Копия CRM принадлежит другому Workspace."));
+            }
+        }
+        // Открытая база закрывается до замены файла (Windows не даёт заменить открытый файл).
+        s.workspace.lock().unwrap().store = None;
+        let dir = self.ws_dir(s);
+        std::fs::create_dir_all(&dir).map_err(cmd)?;
+        let mut catalog = self.ws_catalog(s)?;
+        for w in &local {
+            let current = database_file(&dir, &w.id);
+            if current.exists() {
+                let safety = dir.join(format!("{}.before-restore.db", w.id));
+                let _ = std::fs::remove_file(&safety);
+                let conn = crate::db::open_connection(&current, false, Some(&key)).map_err(cmd)?;
+                conn.execute("VACUUM INTO ?1", [safety.to_string_lossy().as_ref()]).map_err(cmd)?;
+            }
+            let staged = dir.join(format!("{}.restore-{}.db", w.id, uuid::Uuid::new_v4()));
+            std::fs::copy(database_file(from, &w.id), &staged).map_err(cmd)?;
+            crate::db::remove_database_files(&current);
+            std::fs::rename(&staged, &current).map_err(cmd)?;
+            if !catalog.workspaces.iter().any(|c| c.id == w.id) {
+                catalog.workspaces.push(w.clone());
+            }
+        }
+        catalog.fix_active();
+        self.set_catalog(s, catalog)?;
+        self.env.emit("workspace-changed", Value::Null);
+        Ok(local.len())
     }
 
     // ------------------------------------------------------------ записи

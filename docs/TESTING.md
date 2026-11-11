@@ -36,6 +36,16 @@
 | `tests/test_release_check.py` (25) | `release-check.cjs` проходит на проекте и ловит 20 видов порчи (идентичность, конфигурация Beta, признак `beta`, модуль `debug`, команды `debug_*`, devtools, AppId и вариант Beta установщика, облако Beta, ключи сервера); тег с суффиксом отклоняется; `set-version.cjs` принимает только X.Y.Z |
 | `tests/test_workflows.py::test_no_beta_channel_workflows` | ни один workflow не собирает и не публикует Beta и Pre-release |
 
+## 2a. Резервные копии (пакет A1)
+
+| Тест | Проверяет |
+|---|---|
+| `app::data::tests::backup_includes_crm_databases_and_restores_them` | в копии есть зашифрованная база Workspace и `catalog.json`; восстановление возвращает CRM к состоянию копии, текущая база сохраняется как `before-restore` |
+| `app::data::tests::old_backups_without_crm_leave_workspaces_untouched_and_pruning_removes_crm_copies` | копия прежней версии не трогает CRM; старые копии удаляются вместе с папкой `.crm` |
+| `app::data::tests::crm_copy_of_another_workspace_is_refused` | чужая база в копии отклоняется, CRM не меняется |
+| `supabase/tests/test_backup.py` (3) | на стенде: снимок содержит `auth.users` и таблицы CRM, счёт строк из того же снимка; восстановление в пустую базу проходит; недостающие строки проваливают проверку |
+| `tests/test_workflows.py::test_cloud_backup_is_daily_read_only_and_encrypts_before_storing` | расписание, права только на чтение, проверка восстановления до шифрования, в артефакт идёт только `.gpg` |
+
 ## 3a. Тесты этапов 3–7 (Workspace и CRM)
 
 | Тест | Проверяет |

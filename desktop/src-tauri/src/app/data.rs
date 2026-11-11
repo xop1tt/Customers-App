@@ -137,7 +137,10 @@ impl Core {
         Ok(self
             .backups_in(&self.backup_directory(&s))
             .into_iter()
-            .map(|(path, name, size, at)| json!({"path": path.display().to_string(), "name": name, "size": size, "modifiedAt": at}))
+            .map(|(path, name, size, at)| {
+                let crm = crm_copy_dir(&path).is_dir();
+                json!({"path": path.display().to_string(), "name": name, "size": size, "modifiedAt": at, "crm": crm})
+            })
             .collect())
     }
 
@@ -160,7 +163,9 @@ impl Core {
         files
     }
 
-    /// Создаёт копию базы и удаляет самые старые сверх лимита. Возвращает путь к копии.
+    /// Создаёт копию базы генератора и рядом копию баз CRM (`leadgen-….crm/`), удаляет самые старые сверх
+    /// лимита. Копия либо полная, либо её нет: если базы CRM скопировать не удалось, удаляется и копия лидов.
+    /// Возвращает путь к копии базы генератора.
     pub fn backup_now(&self, s: &Session) -> CmdResult<PathBuf> {
         let dir = self.backup_directory(s);
         let prefs = s.account_prefs();
@@ -170,8 +175,15 @@ impl Core {
             self.env.log_error(&format!("Резервная копия: {e}"));
             CmdError::msg(format!("Резервная копия не создана: {e}"))
         })?;
+        if let Err(e) = self.backup_workspaces(s, &crm_copy_dir(&path)) {
+            self.env.log_error(&format!("Резервная копия CRM: {}", e.message));
+            let _ = std::fs::remove_file(&path);
+            let _ = std::fs::remove_dir_all(crm_copy_dir(&path));
+            return Err(CmdError::msg(format!("Резервная копия не создана: {}", e.message)));
+        }
         for old in self.backups_in(&dir).into_iter().skip(prefs.keep_backups.max(1) as usize) {
-            let _ = std::fs::remove_file(old.0);
+            let _ = std::fs::remove_file(&old.0);
+            let _ = std::fs::remove_dir_all(crm_copy_dir(&old.0));
         }
         let _ = s.with_store(|st| st.set_value("last_backup_at", &crate::util::now_string()));
         Ok(path)
@@ -206,7 +218,18 @@ impl Core {
         self.reload_synced_settings(&s);
         self.env.emit("data-changed", Value::Null);
         self.sync_soon(&s);
-        Ok("База восстановлена из копии. Предыдущая версия сохранена как before-restore.db".into())
+        // Копии до пакета A1 не содержат CRM: тогда базы Workspace не трогаются.
+        let crm = crm_copy_dir(path);
+        let restored = if crm.is_dir() {
+            self.restore_workspaces(&s, &crm).map_err(|e| CmdError::msg(format!("Лиды восстановлены, а CRM — нет: {}", e.message)))?
+        } else {
+            0
+        };
+        let mut msg = String::from("База восстановлена из копии. Предыдущая версия сохранена как before-restore.db");
+        if restored > 0 {
+            msg.push_str(&format!(". Восстановлено баз CRM: {restored}"));
+        }
+        Ok(msg)
     }
 
     pub fn move_database(self: &Arc<Self>, dir: &Path) -> CmdResult<String> {
@@ -250,6 +273,11 @@ impl Core {
         }
         Ok(json)
     }
+}
+
+/// Папка копии баз CRM рядом с копией базы генератора: `leadgen-2026-11-11_10-00-00.db` → `leadgen-2026-11-11_10-00-00.crm`.
+fn crm_copy_dir(leads_copy: &Path) -> PathBuf {
+    leads_copy.with_extension("crm")
 }
 
 #[cfg(test)]
@@ -409,5 +437,76 @@ mod tests {
         std::fs::create_dir_all(f.env.paths.legacy_backups("anna")).unwrap();
         let path = core.backup_now(&s).unwrap();
         assert!(path.starts_with(f.env.paths.legacy_backups("anna")), "{}", path.display());
+    }
+
+    fn company(core: &Arc<Core>, name: &str) {
+        let mut m = serde_json::Map::new();
+        m.insert("name".into(), json!(name));
+        core.ws_save("companies", None, m).unwrap();
+    }
+
+    fn companies(core: &Arc<Core>) -> i64 {
+        core.ws_list("companies", Default::default()).unwrap()["total"].as_i64().unwrap()
+    }
+
+    #[tokio::test]
+    async fn backup_includes_crm_databases_and_restores_them() {
+        let (f, core, _) = seeded();
+        let s = core.session().unwrap();
+        company(&core, "Ромашка");
+        let copy = core.backup_now(&s).unwrap();
+        let crm = crm_copy_dir(&copy);
+        let dbs: Vec<_> = std::fs::read_dir(&crm).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().ends_with(".db")).collect();
+        assert_eq!(dbs.len(), 1, "база локального Workspace в копии");
+        assert_eq!(crate::db::file_state(&dbs[0].path()), crate::db::FileState::Encrypted);
+        assert!(crm.join("catalog.json").exists());
+        assert_eq!(core.list_backups().unwrap()[0]["crm"], true);
+
+        company(&core, "Лютик");
+        assert_eq!(companies(&core), 2);
+        let msg = core.restore(&copy).unwrap();
+        assert!(msg.contains("Восстановлено баз CRM: 1"), "{msg}");
+        assert_eq!(companies(&core), 1, "CRM вернулась к состоянию копии");
+        let ws_dir = s.dir.join("workspaces");
+        assert!(std::fs::read_dir(&ws_dir).unwrap().flatten().any(|e| e.file_name().to_string_lossy().ends_with(".before-restore.db")));
+        assert!(f.events.count("workspace-changed") >= 1);
+    }
+
+    #[tokio::test]
+    async fn old_backups_without_crm_leave_workspaces_untouched_and_pruning_removes_crm_copies() {
+        let (_f, core, _) = seeded();
+        let s = core.session().unwrap();
+        core.patch_account_prefs(&json!({"keepBackups": 1})).unwrap();
+        company(&core, "Ромашка");
+        let first = core.backup_now(&s).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        let second = core.backup_now(&s).unwrap();
+        assert!(!first.exists() && !crm_copy_dir(&first).exists(), "старая копия удалена вместе с CRM");
+        assert!(second.exists() && crm_copy_dir(&second).is_dir());
+
+        // Копия прежней версии: только база лидов.
+        std::fs::remove_dir_all(crm_copy_dir(&second)).unwrap();
+        company(&core, "Лютик");
+        let msg = core.restore(&second).unwrap();
+        assert!(!msg.contains("CRM"), "{msg}");
+        assert_eq!(companies(&core), 2);
+    }
+
+    #[tokio::test]
+    async fn crm_copy_of_another_workspace_is_refused() {
+        let (_f, core, _) = seeded();
+        let s = core.session().unwrap();
+        company(&core, "Ромашка");
+        let copy = core.backup_now(&s).unwrap();
+        let crm = crm_copy_dir(&copy);
+        let db = std::fs::read_dir(&crm).unwrap().flatten().find(|e| e.file_name().to_string_lossy().ends_with(".db")).unwrap().path();
+        let other = crm.join(format!("{}.db", uuid::Uuid::new_v4()));
+        std::fs::rename(&db, &other).unwrap();
+        let mut catalog = crate::workspace::catalog::Catalog::load(&crm);
+        catalog.workspaces[0].id = other.file_stem().unwrap().to_string_lossy().into_owned();
+        catalog.save(&crm).unwrap();
+        let e = core.restore(&copy).unwrap_err();
+        assert!(e.message.contains("другому Workspace"), "{}", e.message);
+        assert_eq!(companies(&core), 1);
     }
 }
