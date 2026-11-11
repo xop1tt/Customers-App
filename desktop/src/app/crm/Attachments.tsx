@@ -8,7 +8,7 @@ import { can } from "../../lib/crm";
 import { bytes } from "../../lib/format";
 import { pickSavePath } from "../../lib/platform";
 import { Button, IconButton } from "../../ui/kit";
-import { attempt, toast, useStore } from "../../state/store";
+import { attempt, toast, useStore, NONE } from "../../state/store";
 
 export const MAX_ATTACHMENT = 5 * 1024 * 1024;
 
@@ -22,7 +22,7 @@ function readBase64(file: File): Promise<string> {
 }
 
 export function AttachmentsSection({ e, data }: { e: EntityMeta; data: WsCard }) {
-  const perms = useStore((s) => s.ws?.permissions ?? []);
+  const perms = useStore((s) => s.ws?.permissions ?? NONE);
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   if (e.type === "task") return null;

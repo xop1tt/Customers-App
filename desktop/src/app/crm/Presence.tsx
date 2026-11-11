@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { WsPresence } from "../../api/types";
-import { useStore } from "../../state/store";
+import { useStore, NONE } from "../../state/store";
 
 const EVERY = 25_000;
 
@@ -26,7 +26,7 @@ export function usePresence(entity?: { type: string; id: string }): WsPresence[]
 }
 
 export function WatchingNow({ type, id }: { type: string; id: string }) {
-  const members = useStore((s) => s.ws?.members ?? []);
+  const members = useStore((s) => s.ws?.members ?? NONE);
   const names = usePresence({ type, id }).filter((p) => p.entity_type === type && p.entity_id === id)
     .map((p) => members.find((m) => m.userId === p.user_id)?.displayName ?? "Участник");
   if (!names.length) return null;

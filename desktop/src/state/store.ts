@@ -97,6 +97,9 @@ export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<Ap
   state = { ...state, ...p };
   subs.forEach((f) => f());
 }
+/** Пустой массив с постоянной ссылкой: селектор `s.ws?.x ?? []` без Workspace иначе возвращал бы новый массив при каждом вызове (бесконечная перерисовка, React #185). */
+export const NONE: never[] = [];
+
 export function useStore<T>(selector: (s: AppState) => T): T {
   return useSyncExternalStore(
     (f) => { subs.add(f); return () => { subs.delete(f); }; },

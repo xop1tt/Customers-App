@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { CrmRecord } from "../../api/types";
 import type { Lookup } from "../../lib/crm";
-import { errText, useStore } from "../../state/store";
+import { errText, useStore, NONE } from "../../state/store";
 
 /** Результат запроса к ядру; перечитывается, когда меняются `deps` или данные Workspace (`wsVersion`). */
 export function useWsQuery<T>(load: () => Promise<T>, deps: unknown[]): { data: T | null; error: string | null } {
@@ -22,7 +22,7 @@ export function useWsQuery<T>(load: () => Promise<T>, deps: unknown[]): { data: 
 const byId = (rows: CrmRecord[]) => new Map(rows.map((r) => [r.id, r]));
 
 export function useLookup(): Lookup {
-  const members = useStore((s) => s.ws?.members ?? []);
+  const members = useStore((s) => s.ws?.members ?? NONE);
   const { data } = useWsQuery(async () => {
     const [pipelines, stages, companies] = await Promise.all([
       api.wsList("pipelines", { limit: 5000 }),
