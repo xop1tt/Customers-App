@@ -1,44 +1,35 @@
-# Выпуск Beta и Stable
+# Выпуск релиза
 
-Публикация Stable всегда требует отдельного подтверждения Maksim. Claude не делает push, слияние в `main`,
-публикацию релиза и необратимые операции без его разрешения в треде.
+Канал один (ADR-034): Beta, Preview и Pre-release не выпускаются. Публикация релиза всегда требует отдельного
+подтверждения Maksim. Claude не делает слияние в `main`, публикацию релиза и необратимые операции без его
+разрешения в треде.
 
-## 1. Beta (Pre-release)
+## 1. Релиз
 
-1. `main` (или проверяемая ветка) зелёный (Desktop gate, Cloud gate, test, review, Analyze).
-2. `node desktop/scripts/set-version.cjs 1.3.0-beta.1`, коммит «Версия 1.3.0-beta.1» в `main` через PR
-   (или без коммита: тег берёт версию сам, release-check сверит).
-3. Тег: `git tag v1.3.0-beta.1 && git push origin v1.3.0-beta.1`.
-4. `beta.yml`: проверки (типы, тесты интерфейса, ядро Stable и Beta, release-check с тегом, облако Beta не равно
-   рабочему) → сборки macOS universal и Windows x64 → проверка пакета (идентификатор, ссылки, имя файла) и
-   установщика рядом со Stable (`check.ps1 -Channel beta`) → публикация **Pre-release** (окружение `beta`).
-5. Ручная проверка по RELEASE_CHECKLIST.md §1, ошибки — исправляются через PR в `main`, следующий тег `-beta.2`.
-
-## 2. Stable
-
-1. Beta-версия прошла RELEASE_CHECKLIST.md целиком.
-2. PR в `main`: обязательные проверки зелёные, описание с итогом проверки Beta.
-3. Слияние PR (человеком).
-4. Тег `vX.Y.Z` на коммите слияния (или Actions → Release → Run workflow с тегом).
-5. `release.yml`: release-check с тегом (версии, идентификаторы Stable прежние, Beta не включена, нет devtools,
-   нет секретов) → тесты → сборки → проверка установщика Windows (установка, обновление поверх с сохранением
-   данных, удаление) и пакета macOS → задача `publish` **ждёт подтверждения** в окружении `production` →
-   GitHub Release с файлами `Customers-vX.Y.Z-*` → установленные Stable-версии видят обновление
+1. Исправления и функции слиты в `main`, обязательные проверки зелёные (Desktop gate, Cloud gate, test, review,
+   Analyze); RELEASE_CHECKLIST.md выполнен.
+2. Заметки релиза `.github/release-notes/vX.Y.Z.md` слиты в `main` через PR.
+3. Тег `vX.Y.Z` на коммите `main` (или Actions → Release → Run workflow с тегом). Версия в файлах берётся из
+   тега (`set-version.cjs`), отдельный коммит с версией не нужен.
+4. `release.yml`: release-check с тегом (версии, прежние идентификаторы, нет признака `beta`, модуля `debug` и
+   devtools, нет ключей сервера) → тесты → сборки → проверка установщика Windows (установка, обновление поверх с
+   сохранением данных, удаление) и пакета macOS → задача `publish` **ждёт подтверждения** в окружении
+   `production` → GitHub Release с файлами `Customers-vX.Y.Z-*` → установленные версии видят обновление
    (`releases/latest`).
 
-Теги Beta (`v*-*`) `release.yml` не запускают; Stable-приложение не видит Pre-release и файлы `Customers-Beta-*`.
+Теги с суффиксом (`v*-*`) `release.yml` не запускают, а release-check их отклоняет. Приложение никогда не ставит
+файлы старых Beta-сборок (`Customers-Beta-*`), даже если они окажутся в релизе.
 
-## 3. Отмена
+## 2. Отмена
 
-* Ошибка в Pre-release — новая Beta с исправлением; старый Pre-release можно удалить (Beta не обновляется сама).
-* Ошибка в Stable — hotfix `vX.Y.Z+1`. Релиз не удаляется, если его уже скачали: исправление выпускается поверх.
+* Ошибка в релизе — hotfix `vX.Y.Z+1`. Релиз не удаляется, если его уже скачали: исправление выпускается поверх.
 
-## 4. Что владелец репозитория настраивает в GitHub (из workflow это сделать нельзя)
+## 3. Что владелец репозитория настраивает в GitHub (из workflow это сделать нельзя)
 
-1. **Settings → Environments → New environment `production`**: *Required reviewers* — Maksim;
-   *Deployment branches and tags* — только теги `v*` (Selected tags). Без ревьюера окружение создастся само при
-   первом запуске, но без подтверждения — тогда публикация пойдёт сразу.
-2. **Environment `beta`** — по желанию с ревьюером (Pre-release не попадает к пользователям Stable).
-3. **Rulesets → `main`**: запрет прямого push и force push, обязательный PR, обязательные проверки `Desktop gate`,
-   `Cloud gate`, `test`, `review`, `Analyze (…)` (как в docs/ci.md). Ветка `develop` закрыта, постоянной второй ветки нет.
-4. **Variables** (по желанию): `SUPABASE_BETA_URL`, `SUPABASE_BETA_ANON_KEY` — отдельный проект Supabase для Beta.
+1. **Settings → Environments → `production`**: *Required reviewers* — Maksim; *Deployment branches and tags* —
+   только теги `v*` (Selected tags). Без ревьюера окружение создастся само при первом запуске, но без
+   подтверждения — тогда публикация пойдёт сразу.
+2. **Rulesets → `main`**: запрет прямого push и force push, обязательный PR, обязательные проверки `Desktop gate`,
+   `Cloud gate`, `test`, `review`, `Analyze (…)` (как в docs/ci.md). Постоянной второй ветки нет.
+3. После удаления Beta (ADR-034) можно удалить окружение `beta`, переменные `SUPABASE_BETA_URL` и
+   `SUPABASE_BETA_ANON_KEY`, а также старые Pre-release и теги `v*-beta.*`: workflow их больше не используют.

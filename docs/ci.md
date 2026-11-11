@@ -6,14 +6,13 @@
 
 | Файл | Когда запускается | Что делает |
 | --- | --- | --- |
-| `desktop.yml` | PR в любую ветку, push в `main` по путям `desktop/**` | Интерфейс (типы, тесты, release-check, сборка); Rust на Ubuntu, macOS и Windows (`cargo test --locked` и с признаком `beta`, на Ubuntu ещё `cargo fmt --check`, `cargo clippy -D warnings` и проверка актуальности `Cargo.lock`); сборка macOS (universal .app) и Windows (exe). Итог: проверка **Desktop gate**. |
+| `desktop.yml` | PR в любую ветку, push в `main` по путям `desktop/**` | Интерфейс (типы, тесты, release-check, сборка); Rust на Ubuntu, macOS и Windows (`cargo test --locked`, на Ubuntu ещё `cargo fmt --check`, `cargo clippy -D warnings` и проверка актуальности `Cargo.lock`); сборка macOS (universal .app) и Windows (exe). Итог: проверка **Desktop gate**. |
 | `cloud.yml` | то же для `supabase/**` и облачного модуля | Миграции, функции и клиент на одноразовом стенде. Итог: **Cloud gate**. |
 | `tests.yml` | каждый PR и push в `main` | Python-тесты с порогом покрытия 90 %. Проверка называется `test`. |
 | `codeql.yml` | каждый PR, push в `main`, раз в неделю | Статический анализ: actions, python, javascript-typescript, rust. |
 | `dependency-review.yml` | каждый PR | Блокирует PR с новой зависимостью с известной уязвимостью (high и выше). Проверка называется `review`. |
 | `dependabot-automerge.yml` | PR от Dependabot | Включает автослияние по политике ниже. Сам ничего не сливает. |
 | `release.yml` | вручную или по тегу `v*` (кроме `v*-*`) | Единственный workflow, который публикует Stable-релиз; задача `publish` ждёт подтверждения в окружении `production`. PR и Dependabot его не запускают. |
-| `beta.yml` | тег `vX.Y.Z-beta.N`, вручную | Сборка Customers Beta (macOS, Windows, проверка установки рядом со Stable). Публикует только Pre-release и только по тегу Beta (окружение `beta`). См. DEBUG_BUILD.md. |
 | `search.yml`, `diagnose.yml`, `wiki.yml` | вручную / push в `main` | Прежние процессы, не менялись. |
 
 **Почему «gate».** У `desktop.yml` и `cloud.yml` нет фильтра путей на уровне workflow: его заменяет задача `changes`. Если PR не трогает `desktop/` (например, обновление pip), тяжёлые задачи пропускаются, а `Desktop gate` всё равно сообщает «успех». Иначе обязательная проверка висела бы в ожидании и PR нельзя было бы слить. Пропущенные матричные задачи отображаются с неразвёрнутым именем, поэтому обязательными делают именно gate, а не отдельные задачи матрицы.

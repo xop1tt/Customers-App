@@ -18,26 +18,12 @@
   #define OutputDir "..\artifacts"
 #endif
 
-; Канал Debug/Beta (iscc /DBeta …): отдельное приложение со своим AppId, папкой установки, папкой данных и схемой
-; ссылок. Ставится рядом со Stable и не трогает её файлы, записи реестра и данные (docs/DEBUG_BUILD.md).
-#ifdef Beta
-  #define AppName "Customers Beta"
-  #define AppExe "Customers Beta.exe"
-  #define AppGuid "{{A3E4C2B8-5D71-4F0A-9C36-2B8E7D51F4A9}"
-  #define UrlScheme "customers-beta"
-  #define DataDirName "Customers Beta"
-  #ifndef OutputName
-    ; Полную версию с «-beta.N» передаёт сборка: /DOutputName=Customers-Beta-v1.3.0-beta.1-Windows-x64-Setup.
-    #define OutputName "Customers-Beta-v" + AppVersion + "-Windows-x64-Setup"
-  #endif
-#else
-  #define AppName "Customers"
-  #define AppExe "Customers.exe"
-  #define AppGuid "{{6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30}"
-  #define UrlScheme "leadgenerator"
-  #define DataDirName "Customers"
-  #define OutputName "Customers-v" + AppVersion + "-Windows-x64-Setup"
-#endif
+#define AppName "Customers"
+#define AppExe "Customers.exe"
+#define AppGuid "{{6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30}"
+#define UrlScheme "leadgenerator"
+#define DataDirName "Customers"
+#define OutputName "Customers-v" + AppVersion + "-Windows-x64-Setup"
 
 [Setup]
 AppId={#AppGuid}
@@ -88,7 +74,7 @@ Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Registry]
-; Ссылки leadgenerator://… (Beta: customers-beta://…) из писем (подтверждение адреса, восстановление пароля) открывают это приложение.
+; Ссылки leadgenerator://… из писем (подтверждение адреса, восстановление пароля) открывают это приложение.
 Root: HKA; Subkey: "Software\Classes\{#UrlScheme}"; ValueType: string; ValueName: ""; ValueData: "URL:{#AppName}"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\{#UrlScheme}"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\{#UrlScheme}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"

@@ -43,8 +43,6 @@ export interface AppState {
   customizeNav: boolean;
   navPeek: boolean;
   sourceKey: string;
-  /** Debug Menu (только Beta). */
-  debugOpen: boolean;
   /** Customers 2.0: активный Workspace, его коллекции и открытая карточка. */
   ws: WsState | null;
   collections: WsCollection[];
@@ -82,7 +80,7 @@ const EMPTY_SNAP: Snapshot = { leads: [], sources: [], pipelineErrors: [], exclu
 const initial: AppState = {
   phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
-  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru", debugOpen: false,
+  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru",
   ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0, profileId: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [],
 };
 
@@ -280,8 +278,6 @@ export function openScore(minScore: number) {
   setState({ section: "all", selection: [], anchor: null, navPeek: false, filter: { ...emptyFilter(), minScore } });
 }
 export const setFilter = (f: Partial<LeadFilter>) => setState((s) => ({ filter: { ...s.filter, ...f } }));
-/** Debug Menu открывается только в Beta: в Stable в ядре нет его команд. */
-export const openDebug = (on: boolean) => setState({ debugOpen: on && getState().boot?.channel === "beta" });
 export const openSettings = (settings: SettingsSection | null, settingsSub: string | null = null) => setState({ settings, settingsSub });
 
 export function select(ids: string[], anchor?: string | null) {

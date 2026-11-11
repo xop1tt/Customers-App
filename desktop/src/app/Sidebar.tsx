@@ -10,7 +10,7 @@ import { api } from "../api";
 import { Icon } from "../ui/icons";
 import { type MenuItem, Popover, showMenu } from "../ui/overlay";
 import type { SyncStatus, UpdateInfo } from "../api/types";
-import { attempt, leaveSession, openCollection, openDebug, openProfile, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
+import { attempt, leaveSession, openCollection, openProfile, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
 import { CollectionsGroup } from "./crm/Collections";
 import { openLink } from "../state/actions";
 import { GroupTitle, useCollapsed } from "./SideGroup";
@@ -67,7 +67,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const customize = useStore((s) => s.customizeNav);
   const sourceFilter = useStore((s) => s.filter.source);
   const minScore = useStore((s) => s.filter.minScore);
-  const beta = useStore((s) => s.boot?.channel === "beta");
   const sourcesShut = useCollapsed("sources");
   const scoresShut = useCollapsed("scores");
   const workShut = useCollapsed("work");
@@ -140,7 +139,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   return (
     <aside className={`sidebar${overlay ? " overlay" : ""}`} style={{ width: "var(--nav-w)" }} aria-label="Навигация">
       <div className="side-head">
-        <span className="side-brand grow"><img className="icon-dark" src={appIcon} width={20} height={20} alt="" draggable={false} /><img className="icon-light" src={appIconLight} width={20} height={20} alt="" draggable={false} />Customers{beta && <span className="channel-badge" data-tip="Отдельная версия для проверки: свои данные и настройки">Beta</span>}</span>
+        <span className="side-brand grow"><img className="icon-dark" src={appIcon} width={20} height={20} alt="" draggable={false} /><img className="icon-light" src={appIconLight} width={20} height={20} alt="" draggable={false} />Customers</span>
         <IconButton icon="sidebar" tip="Свернуть панель" onClick={() => (overlay ? setState({ navPeek: false }) : void patchDevice({ navOpen: false }))} />
       </div>
 
@@ -241,7 +240,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("appearance"); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Настройки</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openMarket(); }}><span className="menu-icon"><Icon name="store" size={14} /></span>Маркетплейс</button></li>
-            {beta && <li><button className="menu-item" onClick={() => { setAccountRect(null); openDebug(true); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Debug Menu</button></li>}
             <li className="menu-sep" />
             <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>
           </ul>

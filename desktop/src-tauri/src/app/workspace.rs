@@ -87,7 +87,6 @@ impl Core {
             return Ok(c);
         }
         let dir = self.ws_dir(s);
-        self.env.guard_path(&dir)?;
         let mut c = Catalog::load(&dir);
         // В облачной записи без единого Workspace (облако без миграций CRM, нет связи, первый запуск)
         // тоже создаётся локальный: CRM остаётся доступной, а серверные Workspace добавляются рядом.
@@ -132,13 +131,12 @@ impl Core {
             .cloned()
             .ok_or_else(|| CmdError::new("noWorkspace", if s.is_cloud { "Workspace ещё не загружен: нужна связь с облаком." } else { "Нет Workspace." }))?;
         let path = database_file(&self.ws_dir(s), &info.id);
-        self.env.guard_path(&path)?;
         let key = self.env.keys.key_for(&s.id).map_err(|e| CmdError::msg(format!("Не удалось открыть базу Workspace: {e}")))?;
         let store =
             WorkspaceStore::open(&path, Some(&key), &info.id, &user_id(s)).map_err(|e| CmdError::msg(format!("Не удалось открыть базу Workspace: {e}")))?;
         store.set_permissions(&info.permissions).map_err(cmd)?;
         store.set_meta("member_role", &info.role).map_err(cmd)?;
-        store.set_meta("channel", self.env.channel.name()).map_err(cmd)?;
+        store.set_meta("channel", "stable").map_err(cmd)?;
         if !info.remote {
             store.seed_local().map_err(cmd)?;
             let me = Member {
@@ -507,7 +505,7 @@ impl Core {
         let r = self.ws_rpc("invite_member", json!({"p_email": email, "p_role": role}), true).await?;
         let token = r["token"].as_str().unwrap_or_default();
         Ok(json!({"id": r["id"], "email": r["email"], "role": r["role"], "expiresAt": r["expires_at"], "token": token,
-                  "link": format!("{}://invite?token={token}", self.env.channel.identity().url_scheme)}))
+                  "link": format!("{}://invite?token={token}", crate::identity::APP.url_scheme)}))
     }
 
     pub async fn ws_accept_invitation(self: &Arc<Self>, token: &str) -> CmdResult<Value> {
