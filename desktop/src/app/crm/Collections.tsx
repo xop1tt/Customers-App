@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { api } from "../../api";
 import type { WsCollection, WsFilter } from "../../api/types";
-import { COLLECTION_EMOJI, ENTITIES, ENTITY_TYPES, type EntityType } from "../../lib/crm";
+import { COLLECTION_EMOJI, collectionGlyph, ENTITIES, ENTITY_TYPES, type EntityType } from "../../lib/crm";
 import { integer } from "../../lib/format";
 import { move } from "../../lib/sidebarPrefs";
 import { Button, Field, IconButton, Segmented, Select, TextInput } from "../../ui/kit";
@@ -42,7 +42,7 @@ export function CollectionsGroup({ customize, onOpen }: { customize: boolean; on
   };
 
   const remove = async (c: WsCollection) => {
-    if (!(await confirmDialog({ title: `Удалить коллекцию «${c.name}»?`, message: "Записи не удаляются — пропадёт только подборка. Её можно восстановить из корзины Workspace.", confirm: "Удалить", danger: true }))) return;
+    if (!(await confirmDialog({ title: `Удалить коллекцию «${c.name}»?`, message: "Записи не удаляются — пропадёт только подборка.", confirm: "Удалить", danger: true }))) return;
     await attempt(() => api.wsDelete("collections", c.id));
   };
 
@@ -68,7 +68,7 @@ export function CollectionsGroup({ customize, onOpen }: { customize: boolean; on
             onDragEnd={() => setDrag(null)}
           >
             <span className="nav-grip" data-tip="Перетащить"><Icon name="grip" size={14} /></span>
-            <span className="row grow nav-edit-label"><span className="nav-emoji" aria-hidden="true">{c.emoji || ENTITIES[c.entity_type as EntityType]?.emoji}</span><span className="ellipsis">{c.name}</span></span>
+            <span className="row grow nav-edit-label"><Glyph c={c} /><span className="ellipsis">{c.name}</span></span>
           </div>
         ) : (
           <button
@@ -79,7 +79,7 @@ export function CollectionsGroup({ customize, onOpen }: { customize: boolean; on
             onClick={() => onOpen(c.id)}
             onContextMenu={(e) => { e.preventDefault(); showMenu(menu(c), { x: e.clientX, y: e.clientY }); }}
           >
-            <span className="nav-emoji" aria-hidden="true">{c.emoji || ENTITIES[c.entity_type as EntityType]?.emoji}</span>
+            <Glyph c={c} />
             <span className="ellipsis grow">{c.name}</span>
             {c.visibility === "private" && <Icon name="lock" size={12} className="faint" />}
             {counts && c.count > 0 && <span className="nav-count num">{integer(c.count)}</span>}
@@ -97,6 +97,11 @@ const FILTER_PRESETS: Record<EntityType, { id: string; label: string; filters: W
   deal: [{ id: "all", label: "Все", filters: [] }, { id: "open", label: "Открытые", filters: [{ field: "status", op: "eq", value: "open" }] }, { id: "mine", label: "Мои открытые", filters: [{ field: "status", op: "eq", value: "open" }, { field: "owner_id", op: "eq", value: "$me" }] }],
   task: [{ id: "all", label: "Все", filters: [] }, { id: "mine", label: "Мои", filters: [{ field: "assignee_id", op: "eq", value: "$me" }] }, { id: "today", label: "На сегодня", filters: [{ field: "due_at", op: "today" }] }, { id: "overdue", label: "Просроченные", filters: [{ field: "due_at", op: "overdue" }] }],
 };
+
+function Glyph({ c }: { c: WsCollection }) {
+  const g = collectionGlyph(c);
+  return "icon" in g ? <span className="nav-emoji" aria-hidden="true"><Icon name={g.icon} size={16} /></span> : <span className="nav-emoji" aria-hidden="true">{g.emoji}</span>;
+}
 
 /** Создание и изменение коллекции: название, эмодзи (48 вариантов), что показывает, кому видна. */
 export function CollectionDialog() {
@@ -162,7 +167,7 @@ export function CollectionDialog() {
           </>
         )}
         <Field label="Кому видна" hint={share ? undefined : "Общие коллекции создают владелец, администраторы и менеджеры."}>
-          <Segmented value={visibility} onChange={(v) => share && setVisibility(v)} options={[{ value: "private", label: "Только мне" }, { value: "workspace", label: "Всем в Workspace" }]} small />
+          <Segmented value={visibility} onChange={(v) => share && setVisibility(v)} options={[{ value: "private", label: "Только мне" }, { value: "workspace", label: "Всем в рабочем пространстве" }]} small />
         </Field>
       </div>
     </Dialog>

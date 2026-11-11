@@ -2,7 +2,7 @@
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: var(--ctl-h); padding: 0 12px; border-radius: var(--r-sm);
-  border: 1px solid var(--line-strong); background: var(--bg-raised); color: var(--text);
+  border: 1px solid var(--line-control); background: var(--bg-raised); color: var(--text);
   font-weight: 500; white-space: nowrap; flex: none;
   transition: background var(--t) var(--ease), border-color var(--t) var(--ease), color var(--t) var(--ease);
 }
@@ -42,7 +42,7 @@
 
 .check { display: inline-flex; align-items: center; gap: 8px; cursor: default; }
 .check.disabled { opacity: 0.5; }
-.check-box { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--line-hover); background: var(--bg-input); color: #fff; flex: none; transition: background var(--t), border-color var(--t); }
+.check-box { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--line-control); background: var(--bg-input); color: #fff; flex: none; transition: background var(--t), border-color var(--t); }
 .check:hover .check-box { border-color: var(--text-3); }
 .check-box.on { background: var(--accent); border-color: var(--accent); }
 .check input:focus-visible + .check-box { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -54,8 +54,8 @@
 .segmented.small button { height: 22px; padding: 0 8px; font-size: var(--fs-sm); }
 
 /* ---------- поля ввода ---------- */
-.input { position: relative; display: flex; align-items: center; height: var(--ctl-h); min-width: 0; background: var(--bg-input); border: 1px solid var(--line-strong); border-radius: var(--r-sm); transition: border-color var(--t); }
-.input:hover { border-color: var(--line-hover); }
+.input { position: relative; display: flex; align-items: center; height: var(--ctl-h); min-width: 0; background: var(--bg-input); border: 1px solid var(--line-control); border-radius: var(--r-sm); transition: border-color var(--t); }
+.input:hover { border-color: var(--line-control-hover); }
 .input:focus-within { border-color: var(--accent); }
 .input.invalid { border-color: var(--red); }
 .input input { flex: 1 1 auto; min-width: 0; height: 100%; padding: 0 9px; border: 0; background: transparent; outline: none; }
@@ -65,17 +65,17 @@
 .input-icon + input { padding-left: 7px; }
 .input-clear { display: grid; place-items: center; width: 24px; height: 24px; margin-right: 3px; border: 0; background: transparent; color: var(--text-3); border-radius: 4px; flex: none; }
 .input-clear:hover { color: var(--text); background: var(--bg-hover); }
-.textarea { width: 100%; min-height: 80px; padding: 8px 9px; resize: vertical; background: var(--bg-input); border: 1px solid var(--line-strong); border-radius: var(--r-sm); outline: none; line-height: 1.5; }
+.textarea { width: 100%; min-height: 80px; padding: 8px 9px; resize: vertical; background: var(--bg-input); border: 1px solid var(--line-control); border-radius: var(--r-sm); outline: none; line-height: 1.5; }
 .textarea:focus { border-color: var(--accent); }
 
-.stepper { display: flex; align-items: center; height: var(--ctl-h); background: var(--bg-input); border: 1px solid var(--line-strong); border-radius: var(--r-sm); overflow: hidden; }
+.stepper { display: flex; align-items: center; height: var(--ctl-h); background: var(--bg-input); border: 1px solid var(--line-control); border-radius: var(--r-sm); overflow: hidden; }
 .stepper button { width: 26px; height: 100%; border: 0; background: transparent; color: var(--text-2); display: grid; place-items: center; flex: none; }
 .stepper button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
 .stepper button:disabled { opacity: 0.35; }
 .stepper input { flex: 1; min-width: 0; text-align: center; border: 0; background: transparent; outline: none; font-variant-numeric: tabular-nums; }
 .stepper-suffix { color: var(--text-3); font-size: var(--fs-sm); padding-right: 2px; flex: none; }
 
-.select { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-h); padding: 0 8px 0 10px; background: var(--bg-input); border: 1px solid var(--line-strong); border-radius: var(--r-sm); text-align: left; min-width: 0; transition: border-color var(--t); }
+.select { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-h); padding: 0 8px 0 10px; background: var(--bg-input); border: 1px solid var(--line-control); border-radius: var(--r-sm); text-align: left; min-width: 0; transition: border-color var(--t); }
 .select:hover:not(:disabled) { border-color: var(--line-hover); }
 .select.open { border-color: var(--accent); }
 .select.small { height: 26px; font-size: var(--fs-sm); }

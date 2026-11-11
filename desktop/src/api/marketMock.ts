@@ -87,8 +87,8 @@ export function checkManifest(m: MarketManifest): string | null {
 
 export function marketCall(action: string, a: Record<string, unknown>, ctx: MarketCtx): unknown {
   if (!ctx.cloud) fail("Маркетплейс доступен в облачной учётной записи.", "cloudOnly");
-  const needWs = () => ctx.wsId ?? fail("Интеграции устанавливаются в облачный Workspace: выберите общий Workspace.", "localWorkspace");
-  const manage = () => { if (!ctx.perms.includes("workspace.manage")) fail("Устанавливать интеграции может владелец или администратор Workspace."); };
+  const needWs = () => ctx.wsId ?? fail("Интеграции устанавливаются в облачное рабочее пространство: выберите общее рабочее пространство.", "localWorkspace");
+  const manage = () => { if (!ctx.perms.includes("workspace.manage")) fail("Устанавливать интеграции может владелец или администратор рабочего пространства."); };
   const listed = (id: unknown) => apps.find((x) => x.id === id && x.status === "listed" && x.live) ?? fail("Интеграция не найдена.");
   const mod = () => { if (!ctx.moderator) fail("Нет прав модератора маркетплейса."); };
   switch (action) {

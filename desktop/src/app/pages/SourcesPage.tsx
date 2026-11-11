@@ -60,11 +60,11 @@ export function SourcesPage() {
             <SettingRow title="Проверить сейчас" hint="Запустит поиск только по этому источнику.">
               <Button icon="play" disabled={search.running || !sourceSettings(overview.settings, meta.group).enabled} onClick={() => void startSearch([meta.key])}>Запустить</Button>
             </SettingRow>
-            <SettingRow title="Забыть найденное" hint="Источник снова обработает записи, которые уже видел. Лиды в базе не удаляются.">
+            <SettingRow title="Сбросить историю источника" hint="Источник снова обработает записи, которые уже видел. Лиды в базе не удаляются.">
               <Button variant="danger" onClick={async () => {
-                const ok = await confirmDialog({ title: `Забыть найденное в «${meta.title}»?`, message: "При следующем поиске источник заново пройдёт по доступным записям.", confirm: "Забыть", danger: true });
+                const ok = await confirmDialog({ title: `Сбросить историю источника «${meta.title}»?`, message: "При следующем поиске источник заново пройдёт по доступным записям.", confirm: "Сбросить", danger: true });
                 if (ok) { await attempt(() => api.resetSourceMemory(meta.key)); toast("Память источника очищена"); }
-              }}>Забыть</Button>
+              }}>Сбросить</Button>
             </SettingRow>
           </Group>
         </div>

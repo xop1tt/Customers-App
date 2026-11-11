@@ -134,10 +134,10 @@ export function AuthScreen() {
         <Button variant="primary" type="submit" busy={busy} disabled={!canSubmit} className="auth-submit">{submitLabel}</Button>
 
         <div className="auth-links">
-          {mode === "cloud" && stage === "signIn" && <><a onClick={() => go("signUp")}>Создать аккаунт</a><a onClick={() => go("forgot")}>Забыли пароль?</a></>}
-          {mode === "cloud" && stage !== "signIn" && stage !== "newPassword" && <a onClick={() => go("signIn")}>← Ко входу</a>}
-          {mode === "cloud" && stage === "confirm" && <a onClick={() => void run(async () => { await api.cloudResendConfirmation(email.trim()); setInfo("Код отправлен ещё раз."); })}>Отправить код ещё раз</a>}
-          {mode === "local" && accounts.length > 0 && <a onClick={() => { setLocalMode(localMode === "login" ? "register" : "login"); setError(null); }}>{localMode === "login" ? "Создать новый аккаунт" : "← Войти в существующий"}</a>}
+          {mode === "cloud" && stage === "signIn" && <><button type="button" className="link" onClick={() => go("signUp")}>Создать аккаунт</button><button type="button" className="link" onClick={() => go("forgot")}>Забыли пароль?</button></>}
+          {mode === "cloud" && stage !== "signIn" && stage !== "newPassword" && <button type="button" className="link" onClick={() => go("signIn")}>← Ко входу</button>}
+          {mode === "cloud" && stage === "confirm" && <button type="button" className="link" onClick={() => void run(async () => { await api.cloudResendConfirmation(email.trim()); setInfo("Код отправлен ещё раз."); })}>Отправить код ещё раз</button>}
+          {mode === "local" && accounts.length > 0 && <button type="button" className="link" onClick={() => { setLocalMode(localMode === "login" ? "register" : "login"); setError(null); }}>{localMode === "login" ? "Создать новый аккаунт" : "← Войти в существующий"}</button>}
         </div>
       </form>
     </div>

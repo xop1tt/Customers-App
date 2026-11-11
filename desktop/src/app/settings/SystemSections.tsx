@@ -53,7 +53,7 @@ export function ReportsSection() {
 
 function TextDialog({ title, text, onClose }: { title: string; text: string; onClose: () => void }) {
   return (
-    <Dialog title={title} onClose={onClose} width={640} footer={<><Button onClick={() => void copyToClipboard(text, "Скопировано")}>Копировать</Button><Button onClick={onClose}>Закрыть</Button></>}>
+    <Dialog title={title} onClose={onClose} width={640} footer={<><Button onClick={() => void copyToClipboard(text, "Скопировано")}>Копировать</Button><Button variant="ghost" onClick={onClose}>Закрыть</Button></>}>
       <pre className="logbox selectable" style={{ maxHeight: 360 }}>{text}</pre>
     </Dialog>
   );
@@ -144,7 +144,7 @@ export function UpdatesSection() {
               {r.current && <Tag tone="blue">установлена</Tag>}
               <span className="faint">{dateOnly(r.date)}</span>
             </button>
-            {open === r.tag && <div className="release-body"><p className="muted selectable" style={{ whiteSpace: "pre-wrap" }}>{r.notes || "Описание отсутствует."}</p>{r.page && <a onClick={() => void openLink(r.page as string)}>Открыть на GitHub</a>}</div>}
+            {open === r.tag && <div className="release-body"><p className="muted selectable" style={{ whiteSpace: "pre-wrap" }}>{r.notes || "Описание отсутствует."}</p>{r.page && <button type="button" className="link" onClick={() => void openLink(r.page as string)}>Открыть на GitHub</button>}</div>}
           </div>
         ))}
       </Group>

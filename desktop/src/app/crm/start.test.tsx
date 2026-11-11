@@ -68,7 +68,7 @@ describe("пустые экраны CRM", () => {
     await clear("deals");
     render(<DealBoard />);
     const empty = (await screen.findByText("Сделок пока нет")).closest(".empty") as HTMLElement;
-    fireEvent.click(within(empty).getByRole("button", { name: "Сделка" }));
+    fireEvent.click(within(empty).getByRole("button", { name: "Новая сделка" }));
     expect(getState().record).toEqual({ table: "deals", id: "new" });
     fireEvent.click(screen.getByRole("button", { name: "Настроить этапы" }));
     expect(getState().workspaceOpen).toBe(true);

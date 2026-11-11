@@ -36,8 +36,8 @@ export function ChatPage() {
   if (!cloud) {
     return (
       <div className="page center-fill">
-        <EmptyState icon="chat" title="Сообщения работают в облачном Workspace">
-          Войдите в облачную учётную запись, создайте общий Workspace и пригласите коллег в «Рабочем пространстве» — тогда здесь появятся личные сообщения и обсуждения.
+        <EmptyState icon="chat" title="Сообщения работают в облачном рабочем пространстве">
+          Войдите в облачную учётную запись, создайте общее рабочее пространство и пригласите коллег в «Рабочем пространстве» — тогда здесь появятся личные сообщения и обсуждения.
         </EmptyState>
       </div>
     );
@@ -241,7 +241,7 @@ function Conversation({ c, onChanged }: { c: ChatConversation; onChanged: () => 
         )}
       </div>
       <Composer people={people.filter((p) => p.user_id !== me)} team={team} editing={editing} onCancelEdit={() => setEditing(null)} onSend={send}
-        disabled={view.kind === "direct" && view.participants.some((p) => !p.active) ? "Собеседник больше не участник Workspace." : null} />
+        disabled={view.kind === "direct" && view.participants.some((p) => !p.active) ? "Собеседник больше не участник рабочего пространства." : null} />
       {members && <MembersDialog view={view} team={team} me={me} perms={ws.permissions} onClose={() => setMembers(false)} onChanged={(v) => { if (v) setView(v); void onChanged(); }} />}
     </>
   );
@@ -376,7 +376,7 @@ function CardChip({ card, onRemove }: { card: ChatAttachment; onRemove?: () => v
   const meta = ENTITIES[card.type];
   const body = (
     <>
-      <span className="chat-card-emoji" aria-hidden>{meta.emoji}</span>
+      <span className="chat-card-emoji" aria-hidden><Icon name={meta.icon} size={16} /></span>
       <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
         <span className="ellipsis chat-card-title">{card.available ? card.title || "Без названия" : "Нет доступа к карточке"}</span>
         <span className="ellipsis faint chat-card-sub">{[meta.one, card.available ? card.subtitle : ""].filter(Boolean).join(" · ")}</span>
@@ -403,7 +403,7 @@ function cardSubtitle(type: ChatCardType, r: CrmRecord): string {
   return amount != null ? `${amount} ${v("currency") || "RUB"}` : "";
 }
 
-/** Выбор карточки из CRM этого Workspace: лиды, компании, контакты, сделки. */
+/** Выбор карточки из CRM этого рабочего пространства: лиды, компании, контакты, сделки. */
 function AttachCardDialog({ taken, onClose, onPick }: { taken: ChatAttachment[]; onClose: () => void; onPick: (c: ChatAttachment) => void }) {
   const [type, setType] = useState<ChatCardType>("crm_lead");
   const [q, setQ] = useState("");
@@ -432,7 +432,7 @@ function AttachCardDialog({ taken, onClose, onPick }: { taken: ChatAttachment[];
               return (
                 <li key={r.id}>
                   <button type="button" className="pick-row" disabled={used} onClick={() => onPick({ type, id: r.id, title: meta.title(r), subtitle: sub, available: true })}>
-                    <span aria-hidden>{meta.emoji}</span>
+                    <span aria-hidden><Icon name={meta.icon} size={16} /></span>
                     <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
                       <span className="ellipsis">{meta.title(r)}</span>
                       {sub && <span className="ellipsis faint" style={{ fontSize: "var(--fs-sm)" }}>{sub}</span>}
@@ -540,7 +540,7 @@ function MembersDialog({ view, team, me, perms, onClose, onChanged }: { view: Ch
             return (
               <li key={p.user_id} className="pick-row">
                 {m ? <PersonAvatar m={m} size={26} /> : <Avatar name={name} size={26} />}
-                <span className="ellipsis grow">{name}{!p.active && <span className="faint"> · не в Workspace</span>}</span>
+                <span className="ellipsis grow">{name}{!p.active && <span className="faint"> · не в рабочем пространстве</span>}</span>
                 <Tag tone={p.role === "member" ? "gray" : "blue"}>{roleText[p.role]}</Tag>
                 {canRole && <IconButton icon="shield" tip={p.role === "admin" ? "Сделать участником" : "Сделать администратором"} onClick={() => void run(api.wsChat("chat_set_role", { conversation: view.id, user: p.user_id, role: p.role === "admin" ? "member" : "admin" }))} />}
                 {canRemove && <IconButton icon="x" tip="Удалить из обсуждения" onClick={async () => {

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "../../ui/icons";
 import { IconButton, SubContext } from "../../ui/kit";
 import { subsectionsOf } from "./subsections";
-import { type SettingsSection, openSettings, useStore } from "../../state/store";
+import { type SettingsSection, openSettings, setState, useStore } from "../../state/store";
 import { Appearance, SystemSection } from "./Appearance";
 import { NotificationsSection, SearchSection } from "./SearchSection";
 import { AccountSection } from "./AccountSection";
@@ -15,25 +15,31 @@ interface Item { id: SettingsSection; title: string; icon: string }
 
 /** Разделы по категориям, как в Discord: заголовок категории и страницы под ним. */
 export const CATEGORIES: { title: string; items: Item[] }[] = [
-  { title: "Основные", items: [
+  { title: "Личное", items: [
     { id: "account", title: "Аккаунт", icon: "user" },
-    { id: "data", title: "Данные", icon: "database" },
+    { id: "appearance", title: "Оформление", icon: "palette" },
+    { id: "notifications", title: "Уведомления", icon: "bell" },
   ] },
   { title: "Приложение", items: [
-    { id: "appearance", title: "Оформление", icon: "palette" },
     { id: "system", title: "Система", icon: "settings" },
-    { id: "notifications", title: "Уведомления", icon: "bell" },
     { id: "updates", title: "Обновления", icon: "download" },
   ] },
-  { title: "Работа", items: [
-    { id: "search", title: "Поиск", icon: "search" },
-    { id: "exclusions", title: "Исключения", icon: "ban" },
-    { id: "outreach", title: "Способы связи", icon: "mail" },
+  { title: "Поиск клиентов", items: [
+    { id: "search", title: "Автопоиск", icon: "search" },
+    { id: "exclusions", title: "Исключения из поиска", icon: "ban" },
+    { id: "outreach", title: "Почта и звонки", icon: "mail" },
+  ] },
+  { title: "Данные", items: [
+    { id: "data", title: "Копии и перенос", icon: "database" },
   ] },
   { title: "Поддержка", items: [
-    { id: "reports", title: "Отчёты", icon: "report" },
+    { id: "reports", title: "Диагностика и сбои", icon: "report" },
   ] },
 ];
+/** Администрирование рабочего пространства: видно только тем, у кого есть право управлять им (открывает диалог пространства). */
+export function canAdminister(perms: string[] | undefined): boolean {
+  return !!perms && (perms.includes("workspace.manage") || perms.includes("members.manage"));
+}
 const ALL = CATEGORIES.flatMap((c) => c.items);
 
 export function Settings() {
@@ -41,6 +47,7 @@ export function Settings() {
   const sub = useStore((s) => s.settingsSub);
   const update = useStore((s) => s.update);
   const cloud = useStore((s) => !!s.session?.isCloud);
+  const admin = useStore((s) => canAdminister(s.ws?.active ? s.ws.permissions : undefined));
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !document.querySelector(".popover, .scrim")) openSettings(null);
@@ -81,6 +88,18 @@ export function Settings() {
               ))}
             </div>
           ))}
+          {admin && (
+            <div className="settings-cat">
+              <div className="nav-title">Администрирование</div>
+              <div className="settings-item">
+                <button type="button" className="nav-item" onClick={() => { openSettings(null); setState({ workspaceOpen: true }); }}>
+                  <Icon name="users" size={16} />
+                  <span className="grow ellipsis" style={{ textAlign: "left" }}>Участники, воронки, поля</span>
+                  <Icon name="external" size={12} className="faint" />
+                </button>
+              </div>
+            </div>
+          )}
         </nav>
         <div className="settings-main">
           <header className="settings-head">

@@ -208,7 +208,7 @@ function AppPage({ id, onBack, onChanged }: { id: string; onBack: () => void; on
           <span>{app.tagline}</span>
         </div>
         <div className="col" style={{ gap: 8, alignItems: "flex-end" }}>
-          {!remote ? <Notice>Установка — в облачный Workspace.</Notice> : !inst ? (
+          {!remote ? <Notice>Установка — в облачное рабочее пространство.</Notice> : !inst ? (
             <Button variant="primary" icon="download" busy={busy} disabled={!manage} onClick={() => void install()}>Установить</Button>
           ) : (
             <>
@@ -219,7 +219,7 @@ function AppPage({ id, onBack, onChanged }: { id: string; onBack: () => void; on
               </div>
             </>
           )}
-          {remote && !manage && <span className="faint" style={{ fontSize: "var(--fs-sm)" }}>Устанавливает владелец или администратор Workspace</span>}
+          {remote && !manage && <span className="faint" style={{ fontSize: "var(--fs-sm)" }}>Устанавливает владелец или администратор рабочего пространства</span>}
         </div>
       </header>
 
@@ -253,7 +253,7 @@ function ManifestFacts({ m }: { m: MarketManifest }) {
       </section>
       <section className="market-fact">
         <h4>Кнопки в карточках</h4>
-        {actions.length ? actions.map((a) => <div key={a.id}>{ENTITIES[a.entity].emoji} {a.label} <span className="faint">· {ENTITIES[a.entity].one.toLowerCase()}</span></div>) : <div className="faint">Нет</div>}
+        {actions.length ? actions.map((a) => <div key={a.id}><Icon name={ENTITIES[a.entity].icon} size={13} /> {a.label} <span className="faint">· {ENTITIES[a.entity].one.toLowerCase()}</span></div>) : <div className="faint">Нет</div>}
       </section>
       <section className="market-fact">
         <h4>События</h4>
@@ -268,13 +268,13 @@ function ManifestFacts({ m }: { m: MarketManifest }) {
 function Installed({ onOpen }: { onOpen: (id: string) => void }) {
   const remote = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.remote ?? false);
   const { apps, error } = useCatalog(null, "");
-  if (!remote) return <EmptyState icon="store" title="Интеграции ставятся в облачный Workspace">Переключитесь на общий Workspace команды.</EmptyState>;
+  if (!remote) return <EmptyState icon="store" title="Интеграции ставятся в облачное рабочее пространство">Переключитесь на общее рабочее пространство команды.</EmptyState>;
   const mine = (apps ?? []).filter((a) => a.installed);
   return (
     <div className="col" style={{ gap: 12, alignItems: "stretch" }}>
       {error && <Notice tone="warn">{error}</Notice>}
       {apps === null ? <div className="center-fill"><Spinner /></div> : mine.length === 0 ? (
-        <EmptyState icon="store" title="Ничего не установлено">Выберите интеграцию в каталоге: её кнопки появятся в карточках CRM этого Workspace.</EmptyState>
+        <EmptyState icon="store" title="Ничего не установлено">Выберите интеграцию в каталоге: её кнопки появятся в карточках CRM этого рабочего пространства.</EmptyState>
       ) : (
         <ul className="market-grid" aria-label="Установленные интеграции">
           {mine.map((a) => (
@@ -423,7 +423,7 @@ function Moderation() {
   const load = () => void api.wsMarket<MarketReview[]>("market_review_queue").then(setQueue, () => setQueue([]));
   useEffect(load, []);
   const approve = async (r: MarketReview) => {
-    if (!(await confirmDialog({ title: `Опубликовать «${r.app.name}» ${r.version}?`, message: "Версия появится в каталоге. Уже установленные копии обновят владельцы Workspace.", confirm: "Опубликовать" }))) return;
+    if (!(await confirmDialog({ title: `Опубликовать «${r.app.name}» ${r.version}?`, message: "Версия появится в каталоге. Уже установленные копии обновят владельцы рабочего пространства.", confirm: "Опубликовать" }))) return;
     if ((await attempt(() => api.wsMarket("market_review", { version: r.version_id, approve: true }))) !== undefined) { load(); reload(); }
   };
   return (
@@ -467,7 +467,7 @@ function Moderation() {
       )}
       {rejecting && <ReasonDialog title={`Отклонить «${rejecting.app.name}» ${rejecting.version}`} action="Отклонить" onClose={() => setRejecting(null)}
         onSubmit={async (note) => { if ((await attempt(() => api.wsMarket("market_review", { version: rejecting.version_id, approve: false, note }))) !== undefined) { setRejecting(null); load(); } }} />}
-      {suspend && <ReasonDialog title={`Снять «${suspend.name}» с каталога`} action="Снять" hint="Интеграция пропадёт из каталога, её кнопки и события остановятся во всех Workspace." onClose={() => setSuspend(null)}
+      {suspend && <ReasonDialog title={`Снять «${suspend.name}» с каталога`} action="Снять" hint="Интеграция пропадёт из каталога, её кнопки и события остановятся во всех рабочих пространствах." onClose={() => setSuspend(null)}
         onSubmit={async (note) => { if ((await attempt(() => api.wsMarket("market_suspend", { app: suspend.id, suspend: true, note }))) !== undefined) { setSuspend(null); reload(); } }} />}
     </div>
   );

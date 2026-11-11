@@ -74,7 +74,7 @@ function QuickWindow({ perms }: { perms: string[] }) {
               {head && <li className="quick-group" role="presentation">{g}</li>}
               <li id={`q-${it.key}`} role="option" aria-selected={i === active} className={`quick-item${i === active ? " on" : ""}`}
                 onMouseMove={() => i !== active && setActive(i)} onClick={() => run(it)}>
-                <span className="quick-emoji" aria-hidden>{it.kind === "go" ? "→" : it.kind === "create" ? "＋" : ENTITIES[it.type].emoji}</span>
+                <span className="quick-emoji" aria-hidden>{it.kind === "go" ? <Icon name="chevronRight" size={14} /> : it.kind === "create" ? <Icon name="plus" size={14} /> : <Icon name={ENTITIES[it.type].icon} size={14} />}</span>
                 <span className="ellipsis">{it.title}</span>
                 {it.kind === "record" && it.hint && <span className="faint ellipsis quick-hint">{it.hint}</span>}
               </li>

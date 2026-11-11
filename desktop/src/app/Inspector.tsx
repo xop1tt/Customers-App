@@ -22,7 +22,7 @@ export function Inspector() {
       <div className="inspector-body">
         <EmptyState icon="list" title={`Выбрано: ${integer(selection.length)} ${plural(selection.length, "лид", "лида", "лидов")}`} action={
           <div className="col" style={{ alignItems: "stretch", width: 220 }}>
-            <Button icon="upload" onClick={() => openExport(selection)}>Экспортировать</Button>
+            <Button icon="download" onClick={() => openExport(selection)}>Экспортировать</Button>
             <Button icon="trash" variant="danger" onClick={() => void deleteLeads(selection)}>Удалить</Button>
             <Button variant="ghost" onClick={() => select([])}>Снять выделение</Button>
           </div>
@@ -50,7 +50,7 @@ function LeadInspector({ lead }: { lead: Lead }) {
           <IconButton icon="star" tip={lead.favorite ? "Убрать из избранного" : "В избранное"} active={lead.favorite} onClick={() => void setFavorite([lead.id], !lead.favorite)} />
           <IconButton icon="archive" tip={lead.archived ? "Вернуть из архива" : "В архив"} active={lead.archived} onClick={() => void setArchived([lead.id], !lead.archived)} />
           {d.url && <IconButton icon="external" tip="Открыть источник" onClick={() => void openLink(d.url)} />}
-          <IconButton icon="upload" tip="Экспортировать" onClick={() => openExport([lead.id])} />
+          <IconButton icon="download" tip="Экспортировать" onClick={() => openExport([lead.id])} />
           <span className="grow" />
           <IconButton icon="ban" tip="Исключить" onClick={() => void excludeLeads([lead.id])} />
           <IconButton icon="trash" tip="Удалить" onClick={() => void deleteLeads([lead.id])} />
@@ -239,7 +239,7 @@ function Compose({ lead }: { lead: Lead }) {
         <span className="grow" />
         <Button variant="ghost" onClick={() => { setSubject(initial.subject); setBody(initial.body); }}>Сбросить текст</Button>
       </div>
-      <p className="faint" style={{ fontSize: "var(--fs-sm)" }}>Подпись берётся из настроек рассылки. <a onClick={() => openSettings("outreach")}>Изменить</a></p>
+      <p className="faint" style={{ fontSize: "var(--fs-sm)" }}>Подпись берётся из настроек рассылки. <button type="button" className="link" onClick={() => openSettings("outreach")}>Изменить</button></p>
     </div>
   );
 }
@@ -270,7 +270,7 @@ function History({ lead }: { lead: Lead }) {
   );
 }
 
-/** «Перенести в CRM»: компания, контакт и (по желанию) сделка в активном Workspace. Повторно не дублирует. */
+/** «Добавить в CRM»: компания, контакт и (по желанию) сделка в активном Workspace. Повторно не дублирует. */
 function ToCrm({ lead }: { lead: Lead }) {
   const ws = useStore((s) => s.ws);
   const collections = useStore((s) => s.collections);
@@ -299,7 +299,7 @@ function ToCrm({ lead }: { lead: Lead }) {
   };
   return (
     <div className="row crm-convert">
-      <Button icon="upload" busy={busy} onClick={() => void go()}>Перенести в CRM</Button>
+      <Button icon="upload" busy={busy} onClick={() => void go()}>Добавить в CRM</Button>
       <Checkbox checked={deal} onChange={setDeal} label="со сделкой" />
     </div>
   );

@@ -21,7 +21,7 @@ export function tenure(hiredOn: string | null | undefined, now: Date = new Date(
 
 export interface TreeNode { member: TeamMember; children: TreeNode[] }
 
-/** Дерево «руководитель → подчинённые». Без руководителя (или он не в Workspace) — верхний уровень; циклы разрываются. */
+/** Дерево «руководитель → подчинённые». Без руководителя (или он не в рабочем пространстве) — верхний уровень; циклы разрываются. */
 export function buildTree(team: TeamMember[]): TreeNode[] {
   const ids = new Set(team.map((m) => m.user_id));
   const kids = new Map<string, TeamMember[]>();

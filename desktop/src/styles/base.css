@@ -21,6 +21,9 @@ button { cursor: default; }
 input, textarea, .selectable, .selectable * { user-select: text; -webkit-user-select: text; }
 a { color: var(--accent); text-decoration: none; cursor: pointer; }
 a:hover { color: var(--accent-hover); text-decoration: underline; }
+/* Ссылка-действие: настоящая кнопка, доступна с клавиатуры (F-37). */
+button.link { display: inline; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-align: inherit; text-decoration: none; cursor: pointer; }
+button.link:hover { color: var(--accent-hover); text-decoration: underline; }
 h1, h2, h3, h4, p { margin: 0; }
 h1 { font-size: var(--fs-xxl); font-weight: 650; letter-spacing: -0.02em; }
 h2 { font-size: var(--fs-xl); font-weight: 620; letter-spacing: -0.015em; }
@@ -51,3 +54,9 @@ ul { margin: 0; padding: 0; list-style: none; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(4px) scale(0.985); } to { opacity: 1; transform: none; } }
 @keyframes slide-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Уменьшенное движение: системная настройка macOS и Windows (F-38). Спиннер оставляем — он показывает, что идёт работа. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .spinner, .spinner * { animation-duration: 0.8s !important; animation-iteration-count: infinite !important; }
+}

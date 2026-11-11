@@ -28,7 +28,7 @@ const PERM_TEXT: Record<string, string> = {
   "records.view": "Читать записи CRM", "records.create": "Создавать записи", "records.edit_own": "Менять свои записи", "records.edit": "Менять любые записи",
   "records.delete": "Удалять и восстанавливать записи", "records.export": "Экспорт и массовая выгрузка", "members.view": "Видеть участников",
   "members.manage": "Менять роли и удалять участников", "invitations.manage": "Приглашать участников", "roles.manage": "Создавать и менять свои роли",
-  "workspace.manage": "Название, валюта и настройки Workspace", "workspace.delete": "Удалить Workspace", "ownership.transfer": "Передать владение",
+  "workspace.manage": "Название, валюта и настройки рабочего пространства", "workspace.delete": "Удалить рабочее пространство", "ownership.transfer": "Передать владение",
   "pipelines.manage": "Воронки и этапы", "fields.manage": "Пользовательские поля", "collections.manage": "Общие коллекции",
   "analytics.view": "Аналитика и отчёты", "audit.view": "Журнал действий",
 };
@@ -421,7 +421,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
   switch (cmd) {
     case "ws_state": case "ws_refresh": case "ws_sync_now": return state();
     case "ws_switch":
-      if (!workspaces.some((w) => w.info.id === s("id"))) fail("Такого Workspace нет в списке.");
+      if (!workspaces.some((w) => w.info.id === s("id"))) fail("Такого рабочего пространства нет в списке.");
       active = s("id");
       return state();
     case "ws_create_workspace": {

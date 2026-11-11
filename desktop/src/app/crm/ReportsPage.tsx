@@ -37,7 +37,7 @@ export function ReportsPage() {
   if (!data || !lk.stages.size) return <div className="page"><div className="boot"><Spinner size={18} /></div></div>;
   const pipes = [...lk.pipelines.values()].filter((p) => !p.deleted_at);
   const pipe = pipes.find((p) => p.id === pipelineId) ?? pipes.find((p) => p.is_default) ?? pipes[0];
-  if (!pipe) return <div className="page"><EmptyState icon="list" title="Нет воронки">Создайте воронку в настройках Workspace.</EmptyState></div>;
+  if (!pipe) return <div className="page"><EmptyState icon="list" title="Нет воронки">Создайте воронку в настройках рабочего пространства.</EmptyState></div>;
 
   const from = periodStart(period);
   const s = summary(data.deals, pipe.id, from);
@@ -91,7 +91,7 @@ export function ReportsPage() {
                 <tfoot><tr><td>Всего ожидается</td><td className="num">{integer(s.open)}</td><td className="num">{moneyList(s.openSums)}</td><td className="num">{moneyList(fc.weighted)}</td></tr></tfoot>
               </table>
               <p className="faint report-note">
-                Вероятность берётся из этапа воронки (настройки Workspace → Воронки).
+                Вероятность берётся из этапа воронки (настройки рабочего пространства → Воронки).
                 {fc.noAmount ? ` Без суммы: ${integer(fc.noAmount)} ${plural(fc.noAmount, "сделка", "сделки", "сделок")}.` : ""}
               </p>
             </>

@@ -92,7 +92,7 @@ function BindDialog({ drive, provider, onClose, onConfirm, onKey }: { drive: Dri
   const ready = !provider || provider.hasKey || provider.builtIn;
   return (
     <Dialog title={`Привязать ваш аккаунт в ${drive.title}?`} onClose={onClose} width={460}
-      footer={<><Button onClick={onClose}>Отмена</Button>{ready ? <Button variant="primary" icon="external" onClick={onConfirm}>Открыть браузер</Button> : provider && <Button variant="primary" onClick={() => onKey(provider)}>Указать ключ приложения…</Button>}</>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Отмена</Button>{ready ? <Button variant="primary" icon="external" onClick={onConfirm}>Открыть браузер</Button> : provider && <Button variant="primary" onClick={() => onKey(provider)}>Указать ключ приложения…</Button>}</>}>
       <div className="col" style={{ gap: 12 }}>
         {ready ? (
           <p className="muted">Откроется страница входа {drive.title} в браузере. Войдите в свой аккаунт и разрешите доступ: приложение сможет загружать только резервные копии базы. Пароль приложению не передаётся.</p>
@@ -116,9 +116,9 @@ function OAuthKeyDialog({ provider, redirect, onClose }: { provider: ProviderInf
   };
   return (
     <Dialog title="Ключ приложения для входа" onClose={onClose} width={500}
-      footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" busy={busy} disabled={!id.trim() || (provider.needsSecret && !secret.trim())} onClick={() => void save()}>Сохранить</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Отмена</Button><Button variant="primary" busy={busy} disabled={!id.trim() || (provider.needsSecret && !secret.trim())} onClick={() => void save()}>Сохранить</Button></>}>
       <div className="col" style={{ gap: 12 }}>
-        <p className="muted">Для входа через {provider.provider === "google" ? "Google" : "Dropbox"} нужен собственный ключ приложения. Создайте его в консоли и вставьте сюда. <a onClick={() => void openLink(provider.consolePage)}>Открыть консоль</a></p>
+        <p className="muted">Для входа через {provider.provider === "google" ? "Google" : "Dropbox"} нужен собственный ключ приложения. Создайте его в консоли и вставьте сюда. <button type="button" className="link" onClick={() => void openLink(provider.consolePage)}>Открыть консоль</button></p>
         <Field label="Адрес перенаправления" hint="Укажите его в настройках приложения в консоли."><div className="row"><TextInput value={redirect} onChange={() => {}} readOnly wrapClass="grow" /><Button onClick={() => void copyToClipboard(redirect, "Адрес скопирован")}>Копировать</Button></div></Field>
         <Field label={provider.clientIdLabel}><TextInput value={id} onChange={setId} data-autofocus /></Field>
         {provider.needsSecret && <Field label="Client secret"><PasswordInput value={secret} onChange={setSecret} /></Field>}
@@ -141,7 +141,7 @@ function WebdavDialog({ drive, onClose }: { drive: DriveInfo; onClose: (ok: bool
   };
   return (
     <Dialog title={`Привязать ваш аккаунт в ${drive.title}?`} onClose={() => onClose(false)} width={480}
-      footer={<><Button onClick={() => onClose(false)}>Отмена</Button><Button variant="primary" busy={busy} disabled={!url.trim() || !login.trim() || (!drive.passwordOptional && !password)} onClick={() => void connect()}>Подключить</Button></>}>
+      footer={<><Button variant="ghost" onClick={() => onClose(false)}>Отмена</Button><Button variant="primary" busy={busy} disabled={!url.trim() || !login.trim() || (!drive.passwordOptional && !password)} onClick={() => void connect()}>Подключить</Button></>}>
       <div className="col" style={{ gap: 12 }}>
         {drive.passwordPage && (
           <div className="col" style={{ gap: 8 }}>

@@ -80,7 +80,7 @@ export interface StartItem { id: StartItemId; title: string; done: boolean }
 
 export function startChecklist(f: StartFacts): StartItem[] {
   return [
-    { id: "workspace", title: "Создать Workspace и воронку", done: f.wizardDone },
+    { id: "workspace", title: "Создать рабочее пространство и воронку", done: f.wizardDone },
     { id: "clients", title: "Добавить клиентов", done: f.companies > 0 },
     { id: "deal", title: "Создать первую сделку", done: f.deals > 0 },
     { id: "task", title: "Запланировать задачу или встречу", done: f.tasks > 0 },

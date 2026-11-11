@@ -125,7 +125,7 @@ function NewRecord({ e, preset }: { e: EntityMeta; preset?: Record<string, unkno
   return (
     <div className="inspector-body">
       <div className="insp-head">
-        <div className="row insp-tags"><Tag>{e.emoji} {e.one}</Tag></div>
+        <div className="row insp-tags"><Tag><Icon name={e.icon} size={12} /> {e.one}</Tag></div>
         <h3 className="insp-title">Новая запись</h3>
       </div>
       <div className="insp-scroll">
@@ -133,7 +133,7 @@ function NewRecord({ e, preset }: { e: EntityMeta; preset?: Record<string, unkno
           {similar.length > 0 && (
             <Notice tone="warn">
               Похоже на: {similar.slice(0, 3).map((s, i) => (
-                <span key={s.id}>{i > 0 ? ", " : ""}<a onClick={() => openRecord(e.table, s.id)}>{e.title(s)}</a></span>
+                <span key={s.id}>{i > 0 ? ", " : ""}<button type="button" className="link" onClick={() => openRecord(e.table, s.id)}>{e.title(s)}</button></span>
               ))}
             </Notice>
           )}
@@ -167,7 +167,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
   const status = typeof r.status === "string" ? (ENUMS[`${e.table}.status`]?.[r.status] ?? r.status) : null;
 
   const remove = async () => {
-    if (!(await confirmDialog({ title: `Удалить: ${e.title(r)}?`, message: "Запись попадёт в корзину Workspace, её можно восстановить.", confirm: "Удалить", danger: true }))) return;
+    if (!(await confirmDialog({ title: `Удалить: ${e.title(r)}?`, message: "Запись попадёт в корзину, её можно восстановить.", confirm: "Удалить", danger: true }))) return;
     await attempt(() => api.wsDelete(e.table, id));
   };
 
@@ -178,7 +178,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
     <div className="inspector-body">
       <div className="insp-head">
         <div className="row insp-tags">
-          <Tag>{e.emoji} {e.one}</Tag>
+          <Tag><Icon name={e.icon} size={12} /> {e.one}</Tag>
           {status && <Tag tone={STATUS_TONE[String(r.status)] ?? "gray"}>{status}</Tag>}
           {e.type === "deal" && typeof r.amount === "number" && <Tag tone="blue">{money(r.amount, String(r.currency ?? "RUB"))}</Tag>}
           {r.archived_at && <Tag icon="archive">В архиве</Tag>}
@@ -203,7 +203,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
           {deletable && (r.deleted_at
             ? <Button small icon="refresh" onClick={() => void attempt(() => api.wsRestore(e.table, id))}>Восстановить</Button>
             : <IconButton icon="trash" tip="Удалить" onClick={() => void remove()} />)}
-          <IconButton icon="x" tip="Закрыть" onClick={() => openRecord(e.table, null)} />
+          <IconButton icon="x" tip="Закрыть (Esc)" aria-label="Закрыть" onClick={() => openRecord(e.table, null)} />
         </div>
       </div>
       {merging && <MergeDialog e={e} record={r} lk={lk} onClose={() => setMerging(false)} />}
@@ -261,13 +261,13 @@ function Overview({ e, data, lk, editable, save }: { e: EntityMeta; data: WsCard
       <AttachmentsSection e={e} data={data} />
       {data.contacts && (
         <section className="insp-sec">
-          <h4 className="row"><span className="grow">Контакты</span>{creatable && <a onClick={() => void quick("contacts", { company_id: r.id, first_name: "Новый контакт" })}>Добавить</a>}</h4>
+          <h4 className="row"><span className="grow">Контакты</span>{creatable && <button type="button" className="link" onClick={() => openRecord("contacts", "new", { company_id: r.id })}>Добавить</button>}</h4>
           <Related rows={data.contacts} e={ENTITIES.contact} lk={lk} />
         </section>
       )}
       {data.deals && (
         <section className="insp-sec">
-          <h4 className="row"><span className="grow">Сделки</span>{creatable && <a onClick={() => { const d = defaultStage(lk); if (d) void quick("deals", { ...d, company_id: r.id, title: `Сделка: ${e.title(r)}`, currency: "RUB" }); }}>Добавить</a>}</h4>
+          <h4 className="row"><span className="grow">Сделки</span>{creatable && <button type="button" className="link" onClick={() => openRecord("deals", "new", { company_id: r.id, title: `Сделка: ${e.title(r)}` })}>Добавить</button>}</h4>
           <Related rows={data.deals} e={ENTITIES.deal} lk={lk} />
         </section>
       )}
@@ -290,11 +290,6 @@ function Overview({ e, data, lk, editable, save }: { e: EntityMeta; data: WsCard
       </section>
     </>
   );
-}
-
-async function quick(table: string, fields: Record<string, unknown>) {
-  const saved = await attempt(() => api.wsSave(table, null, fields));
-  if (saved) openRecord(table, saved.id);
 }
 
 function Related({ rows, e, lk }: { rows: CrmRecord[]; e: EntityMeta; lk: Lookup }) {

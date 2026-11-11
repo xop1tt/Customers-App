@@ -35,7 +35,7 @@ export function DealBoard() {
   const pipe = pipes.find((p) => p.id === pipelineId) ?? pipes.find((p) => p.is_default) ?? pipes[0];
   if (error) return <div className="page"><EmptyState icon="alert" title="Сделки не загрузились">{error}</EmptyState></div>;
   if (!deals || !lk.stages.size) return <div className="page"><div className="boot"><Spinner size={18} /></div></div>;
-  if (!pipe) return <div className="page"><EmptyState icon="list" title="Нет воронки">Создайте воронку в настройках Workspace.</EmptyState></div>;
+  if (!pipe) return <div className="page"><EmptyState icon="list" title="Нет воронки">Создайте воронку в настройках рабочего пространства.</EmptyState></div>;
 
   const perms = ws?.permissions ?? [];
   const me = ws?.me;
@@ -58,13 +58,13 @@ export function DealBoard() {
         <span className="muted">{integer(open.length)} {plural(open.length, "открытая сделка", "открытые сделки", "открытых сделок")}{openSum ? ` · ${money(openSum)}` : ""}</span>
         <span className="grow" />
         {can(perms, "export") && <Button icon="download" small disabled={inPipe === 0} onClick={() => setExporting(true)}>Экспорт</Button>}
-        {can(perms, "create") && <Button icon="plus" small onClick={() => openRecord("deals", "new")}>Сделка</Button>}
+        {can(perms, "create") && <Button icon="plus" small onClick={() => openRecord("deals", "new")}>Новая сделка</Button>}
       </div>
       {exporting && <CrmExportDialog source={{ entity: "deals", query: { filters: [{ field: "pipeline_id", op: "eq", value: pipe.id }] }, total: inPipe }} onClose={() => setExporting(false)} />}
       {deals.filter((d) => !d.deleted_at).length === 0 ? (
         <EmptyState icon="chart" title="Сделок пока нет" action={
           <div className="empty-actions">
-            {can(perms, "create") && <Button variant="primary" icon="plus" onClick={() => openRecord("deals", "new")}>Сделка</Button>}
+            {can(perms, "create") && <Button variant="primary" icon="plus" onClick={() => openRecord("deals", "new")}>Новая сделка</Button>}
             <Button onClick={() => setSection("new")}>Открыть лиды</Button>
             <Button variant="ghost" onClick={() => setState({ workspaceOpen: true })}>Настроить этапы</Button>
           </div>
@@ -110,7 +110,7 @@ export function DealBoard() {
                       </span>
                       {c.stage.kind === "open" && dealTasks && <NextLine n={next.get(d.id)} />}
                     </button>
-                    {editable && <IconButton icon="chevronDown" size={14} tip="Перенести в этап" className="board-move" onClick={(e) => stageMenu(d, e.currentTarget.getBoundingClientRect())} />}
+                    {editable && <IconButton icon="chevronDown" size={14} tip="Сменить этап" className="board-move" onClick={(e) => stageMenu(d, e.currentTarget.getBoundingClientRect())} />}
                   </article>
                 );
               })}

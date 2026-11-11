@@ -44,7 +44,7 @@ export function KeyEntryDialog({ onClose, onSubmit }: { onClose: () => void; onS
   };
   return (
     <Dialog title="Открыть переносимую копию" onClose={onClose} width={480} footer={
-      <><Button onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit}>Открыть</Button></>
+      <><Button variant="ghost" onClick={onClose}>Отмена</Button><Button variant="primary" onClick={submit}>Открыть</Button></>
     }>
       <form className="col" style={{ gap: 12 }} onSubmit={(ev) => { ev.preventDefault(); submit(); }}>
         <p className="muted" style={{ margin: 0 }}>Введите ключ восстановления, который приложение показало при создании ключа. Текущие данные этого устройства перед заменой сохранятся в резервных копиях.</p>

@@ -40,7 +40,7 @@ describe("окно Ctrl/Cmd+K", () => {
     await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(2));
     expect(screen.getByText("Компании")).toBeTruthy();
     expect(screen.getByText("Контакты")).toBeTruthy();
-    expect(options()).toContain(`💼${deal.title}`);
+    expect(options()).toContain(deal.title);
     const first = options()[0];
     expect(first).toContain("ООО «Северный ветер»");
     fireEvent.keyDown(input(), { key: "Enter" });
@@ -82,7 +82,7 @@ describe("окно Ctrl/Cmd+K", () => {
 
   it("тексты окна переведены на английский", () => {
     for (const ru of ["Быстрый поиск", "Быстрый поиск (Ctrl+K)", "Компания, контакт, сделка, задача или действие", "Создать", "Разделы", "Новая компания", "Новый контакт",
-      "Новая сделка", "Новая задача", "Новый лид", "Перейти: Сегодня", "Перейти: Календарь", "Перейти: Сделки", "Перейти: Отчёты", "выбрать", "открыть", "закрыть", "Результаты"]) {
+      "Новая сделка", "Новая задача", "Новая заявка", "Перейти: Сегодня", "Перейти: Календарь", "Перейти: Сделки", "Перейти: Отчёты", "выбрать", "открыть", "закрыть", "Результаты"]) {
       expect(translate(ru), ru).not.toBeNull();
     }
   });

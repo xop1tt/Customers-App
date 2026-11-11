@@ -14,7 +14,7 @@ export type QuickItem =
   | { kind: "create"; key: string; type: EntityType; title: string }
   | { kind: "go"; key: string; section: SectionId; title: string };
 
-const CREATE: [EntityType, string][] = [["company", "Новая компания"], ["contact", "Новый контакт"], ["deal", "Новая сделка"], ["task", "Новая задача"], ["crm_lead", "Новый лид"]];
+const CREATE: [EntityType, string][] = [["company", "Новая компания"], ["contact", "Новый контакт"], ["deal", "Новая сделка"], ["task", "Новая задача"], ["crm_lead", "Новая заявка"]];
 const GO: [SectionId, string][] = [["today", "Перейти: Сегодня"], ["calendar", "Перейти: Календарь"], ["deals", "Перейти: Сделки"], ["reports", "Перейти: Отчёты"]];
 
 const norm = (s: string) => s.toLocaleLowerCase("ru").replace(/ё/g, "е").trim();

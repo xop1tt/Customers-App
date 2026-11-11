@@ -36,7 +36,7 @@ export function ProfilePage() {
   if (!m) {
     return (
       <div className="page scroll"><div className="profile">
-        <Notice>Сотрудника нет в этом Workspace. Возможно, его удалили или вы переключились на другой Workspace.</Notice>
+        <Notice>Сотрудника нет в этом рабочем пространстве. Возможно, его удалили или вы переключились на другое рабочее пространство.</Notice>
         <div><Button icon="users" onClick={() => setState({ section: "people" })}>К сотрудникам</Button></div>
       </div></div>
     );
@@ -154,7 +154,7 @@ export function EditMemberDialog({ member, team, onClose }: { member: TeamMember
         </Field>
         <datalist id="team-departments">{departments.map((d) => <option key={d} value={d} />)}</datalist>
         <Field label="Руководитель"><Select value={manager} onChange={setManager} options={options} /></Field>
-        <Field label="В компании с" hint="По умолчанию — дата входа в Workspace.">
+        <Field label="В компании с" hint="По умолчанию — дата входа в рабочее пространство.">
           <TextInput type="date" value={hired} onChange={setHired} aria-label="Дата прихода в компанию" />
         </Field>
       </div>

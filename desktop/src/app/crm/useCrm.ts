@@ -6,7 +6,7 @@ import type { CrmRecord } from "../../api/types";
 import type { Lookup } from "../../lib/crm";
 import { errText, useStore, NONE } from "../../state/store";
 
-/** Результат запроса к ядру; перечитывается, когда меняются `deps` или данные Workspace (`wsVersion`). */
+/** Результат запроса к ядру; перечитывается, когда меняются `deps` или данные рабочего пространства (`wsVersion`). */
 export function useWsQuery<T>(load: () => Promise<T>, deps: unknown[]): { data: T | null; error: string | null } {
   const version = useStore((s) => s.wsVersion);
   const [out, setOut] = useState<{ data: T | null; error: string | null }>({ data: null, error: null });

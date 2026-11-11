@@ -118,6 +118,7 @@ body.resizing .sidebar, body.resizing .inspector { transition: none; }
 .th { display: flex; align-items: center; gap: 4px; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; text-align: left; white-space: nowrap; }
 button.th:hover { color: var(--text); }
 .th.sorted { color: var(--text); }
+.th-cell { display: flex; min-width: 0; height: 100%; }
 .tbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; position: relative; }
 .rows { position: relative; }
 .tr { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line); cursor: default; }
@@ -387,7 +388,7 @@ button.kpi:not(:disabled):hover { background: var(--bg-hover); }
 .crm-link .done { text-decoration: line-through; color: var(--text-3); }
 .crm-link .bad, .bad { color: var(--orange); }
 .insp-sec h4.row { display: flex; align-items: center; }
-.insp-sec h4 a { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.insp-sec h4 a, .insp-sec h4 button.link { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .tl-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--bg-raised); color: var(--text-2); }
 .crm-body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .crm-convert { gap: 12px; flex-wrap: wrap; }
@@ -666,3 +667,10 @@ button.pick-row:hover { background: var(--bg-hover); }
 .board-next.bad { color: var(--red); }
 .backup-reminder { padding: 16px 16px 0; }
 .recovery-key { font-family: var(--mono); font-size: var(--fs-lg, 16px); letter-spacing: 0.06em; padding: 12px 14px; background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md, 6px); text-align: center; word-break: break-all; }
+
+/* Переключатель рабочего пространства в шапке панели CRM (макет 1 из аудита). */
+.ws-switch { display: flex; align-items: center; gap: 8px; min-width: 0; height: 44px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-md, 8px); background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.ws-switch:hover { background: var(--bg-hover); }
+.ws-switch-name { font-weight: 650; }
+.ws-switch-sub { font-size: var(--fs-sm); }
+.side-ws { display: flex; padding: 0 10px 8px; flex: none; }

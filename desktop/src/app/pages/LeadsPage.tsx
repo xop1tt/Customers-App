@@ -246,7 +246,7 @@ function FilterBar({ filter, sources, regions }: { filter: LeadFilter; sources: 
           options={[{ value: "", label: "Все регионы" }, ...regions.map((r) => ({ value: r, label: r }))]} />
       )}
       <Select small width={138} value={filter.minScore} onChange={(v) => setFilter({ minScore: v })} label="Оценка"
-        options={[{ value: 0, label: "Любая оценка" }, { value: 40, label: "От 40" }, { value: 60, label: "От 60" }, { value: 80, label: "От 80" }]} />
+        options={[{ value: 0, label: "Любая оценка" }, { value: 30, label: "От 30" }, { value: 50, label: "От 50" }, { value: 70, label: "От 70" }, { value: 90, label: "От 90" }]} />
       <Checkbox checked={filter.hideRejected} onChange={(v) => setFilter({ hideRejected: v })} label={<span className="nowrap">Скрыть неподходящие</span>} />
       <span className="grow" />
       {active && <Button small variant="ghost" icon="x" onClick={() => setState({ filter: emptyFilter(filter.search) })}>Сбросить</Button>}
@@ -264,7 +264,7 @@ function BulkBar({ ids }: { ids: string[] }) {
       <span className="num bulk-count">Выбрано: {integer(ids.length)}</span>
       <Button small variant="subtle" icon="star" onClick={() => void setFavorite(ids, !allFav)}>{allFav ? "Убрать из избранного" : "В избранное"}</Button>
       <Button small variant="subtle" icon="archive" onClick={() => void setArchived(ids, !allArch)}>{allArch ? "Вернуть" : "В архив"}</Button>
-      <Button small variant="subtle" icon="upload" onClick={() => openExport(ids)}>Экспорт</Button>
+      <Button small variant="subtle" icon="download" onClick={() => openExport(ids)}>Экспорт</Button>
       <Button small variant="subtle" icon="ban" onClick={() => void excludeLeads(ids)}>Исключить</Button>
       <Button small variant="danger" icon="trash" onClick={() => void deleteLeads(ids)}>Удалить</Button>
       <span className="grow" />

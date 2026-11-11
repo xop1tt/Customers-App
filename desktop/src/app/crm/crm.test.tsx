@@ -38,7 +38,7 @@ describe("описание CRM-сущностей", () => {
   });
 
   it("подписывает значения перечислений и суммы", () => {
-    expect(cellText(ENTITIES.deal, rec({ status: "won" }), "status", lookup)).toBe("Успешна");
+    expect(cellText(ENTITIES.deal, rec({ status: "won" }), "status", lookup)).toBe("Выиграна");
     expect(cellText(ENTITIES.task, rec({ priority: "urgent" }), "priority", lookup)).toBe("Срочный");
     expect(cellText(ENTITIES.deal, rec({ amount: 1500, currency: "RUB" }), "amount", lookup)).toMatch(/1\s?500/);
   });
@@ -122,14 +122,31 @@ describe("интерфейс CRM", () => {
     expect(within(nav).queryByText("По источнику")).toBeNull();
     fireEvent.click(await within(nav).findByText("Все клиенты"));
     const header = document.querySelector(".topbar-title") as HTMLElement;
-    await waitFor(() => expect(header).toHaveTextContent("🤝Все клиенты"));
+    await waitFor(() => expect(header).toHaveTextContent("Все клиенты"));
     fireEvent.click(await screen.findByText("ООО «Северный ветер»"));
     const card = await screen.findByLabelText("Карточка записи");
     expect(await within(card).findByDisplayValue("ООО «Северный ветер»")).toBeInTheDocument();
     expect(within(card).getByText("Ольга Смирнова")).toBeInTheDocument();
   });
 
-  it("аватары участников видны только в облачном Workspace из нескольких человек", async () => {
+  it("панель карточки закрывается кнопкой и клавишей Esc; в шапке панели CRM виден переключатель рабочего пространства", async () => {
+    render(<App />);
+    const nav = await screen.findByLabelText("Навигация");
+    await openCrm();
+    const wsBtn = await within(nav).findByRole("button", { name: /^Рабочее пространство:/ });
+    expect(wsBtn).toBeInTheDocument();
+    fireEvent.click(await within(nav).findByText("Все клиенты"));
+    fireEvent.click(await screen.findByText("ООО «Северный ветер»"));
+    const card = await screen.findByLabelText("Карточка записи");
+    fireEvent.click(within(card).getByRole("button", { name: "Закрыть" }));
+    await waitFor(() => expect(screen.queryByLabelText("Карточка записи")).toBeNull());
+    fireEvent.click(await screen.findByText("ООО «Северный ветер»"));
+    await screen.findByLabelText("Карточка записи");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByLabelText("Карточка записи")).toBeNull());
+  });
+
+  it("аватары участников видны только в облачном рабочем пространстве из нескольких человек", async () => {
     render(<App />);
     await screen.findByLabelText("Навигация");
     await waitFor(() => expect(getState().ws).not.toBeNull());
@@ -174,7 +191,7 @@ describe("редакторы воронок и ролей (демо-ядро)", 
     await expect(api.wsDeleteStage(to.id, to.id)).rejects.toBeDefined();
   });
 
-  it("локальный Workspace не показывает роли", async () => {
+  it("локальное рабочее пространство не показывает роли", async () => {
     expect(await api.wsRoles()).toEqual({ roles: [], catalog: [] });
   });
 });
