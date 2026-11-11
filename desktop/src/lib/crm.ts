@@ -12,6 +12,8 @@ export interface EntityMeta {
   type: EntityType;
   table: string;
   one: string;
+  /** Подпись кнопки создания: «Новая сделка». */
+  create: string;
   many: string;
   emoji: string;
   title: (r: CrmRecord) => string;
@@ -37,7 +39,7 @@ const text = (r: CrmRecord, f: string) => (typeof r[f] === "string" ? (r[f] as s
 
 export const ENTITIES: Record<EntityType, EntityMeta> = {
   company: {
-    type: "company", table: "companies", one: "Компания", many: "Компании", emoji: "🏢",
+    type: "company", table: "companies", one: "Компания", create: "Новая компания", many: "Компании", emoji: "🏢",
     title: (r) => text(r, "name") || "Без названия",
     columns: ["name", "phones", "emails", "industry", "owner_id", "updated_at"],
     fields: [
@@ -55,7 +57,7 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
     ],
   },
   contact: {
-    type: "contact", table: "contacts", one: "Контакт", many: "Контакты", emoji: "👤",
+    type: "contact", table: "contacts", one: "Контакт", create: "Новый контакт", many: "Контакты", emoji: "👤",
     title: (r) => text(r, "full_name") || "Без имени",
     columns: ["full_name", "position", "phones", "emails", "owner_id", "updated_at"],
     fields: [
@@ -69,7 +71,7 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
     ],
   },
   crm_lead: {
-    type: "crm_lead", table: "crm_leads", one: "Лид", many: "Лиды CRM", emoji: "🌱",
+    type: "crm_lead", table: "crm_leads", one: "Лид", create: "Новый лид", many: "Лиды CRM", emoji: "🌱",
     title: (r) => text(r, "title") || "Без названия",
     columns: ["title", "company_name", "status", "source", "owner_id", "created_at"],
     fields: [
@@ -84,7 +86,7 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
     ],
   },
   deal: {
-    type: "deal", table: "deals", one: "Сделка", many: "Сделки", emoji: "💼",
+    type: "deal", table: "deals", one: "Сделка", create: "Новая сделка", many: "Сделки", emoji: "💼",
     title: (r) => text(r, "title") || "Без названия",
     columns: ["title", "stage_id", "amount", "expected_close_date", "owner_id", "updated_at"],
     fields: [
@@ -100,7 +102,7 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
     ],
   },
   task: {
-    type: "task", table: "tasks", one: "Задача", many: "Задачи", emoji: "📋",
+    type: "task", table: "tasks", one: "Задача", create: "Новая задача", many: "Задачи", emoji: "📋",
     title: (r) => text(r, "title") || "Без названия",
     columns: ["title", "status", "priority", "due_at", "assignee_id", "updated_at"],
     fields: [

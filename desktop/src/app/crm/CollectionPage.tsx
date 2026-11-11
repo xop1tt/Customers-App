@@ -44,7 +44,7 @@ export function CollectionPage() {
         <span className="grow" />
         {exportable && <Button icon="download" small disabled={data.total === 0} onClick={() => setExporting(true)}>Экспорт</Button>}
         {creatable && <Button icon="upload" small onClick={() => setImporting(true)}>Импорт</Button>}
-        {creatable && <Button icon="plus" small onClick={() => openRecord(e.table, "new")}>{e.one}</Button>}
+        {creatable && <Button icon="plus" small onClick={() => openRecord(e.table, "new")}>{e.create}</Button>}
       </div>
       {importing && <ImportDialog onClose={() => setImporting(false)} />}
       {exporting && <CrmExportDialog source={{ entity: e.table, collection: { id: data.collection.id, name: data.collection.name }, query: { search }, total: data.total }} onClose={() => setExporting(false)} />}
@@ -52,7 +52,7 @@ export function CollectionPage() {
         <EmptyState icon="users" title="Здесь будут ваши клиенты" action={
           <div className="empty-actions">
             <Button variant="primary" icon="upload" onClick={() => setImporting(true)}>Импорт из Excel или CSV</Button>
-            <Button icon="plus" onClick={() => openRecord(e.table, "new")}>{e.one}</Button>
+            <Button icon="plus" onClick={() => openRecord(e.table, "new")}>{e.create}</Button>
             <Button icon="search" onClick={() => setSection("home")}>Найти новых</Button>
           </div>
         }>

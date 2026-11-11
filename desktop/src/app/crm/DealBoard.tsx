@@ -58,13 +58,13 @@ export function DealBoard() {
         <span className="muted">{integer(open.length)} {plural(open.length, "открытая сделка", "открытые сделки", "открытых сделок")}{openSum ? ` · ${money(openSum)}` : ""}</span>
         <span className="grow" />
         {can(perms, "export") && <Button icon="download" small disabled={inPipe === 0} onClick={() => setExporting(true)}>Экспорт</Button>}
-        {can(perms, "create") && <Button icon="plus" small onClick={() => openRecord("deals", "new")}>Сделка</Button>}
+        {can(perms, "create") && <Button icon="plus" small onClick={() => openRecord("deals", "new")}>Новая сделка</Button>}
       </div>
       {exporting && <CrmExportDialog source={{ entity: "deals", query: { filters: [{ field: "pipeline_id", op: "eq", value: pipe.id }] }, total: inPipe }} onClose={() => setExporting(false)} />}
       {deals.filter((d) => !d.deleted_at).length === 0 ? (
         <EmptyState icon="chart" title="Сделок пока нет" action={
           <div className="empty-actions">
-            {can(perms, "create") && <Button variant="primary" icon="plus" onClick={() => openRecord("deals", "new")}>Сделка</Button>}
+            {can(perms, "create") && <Button variant="primary" icon="plus" onClick={() => openRecord("deals", "new")}>Новая сделка</Button>}
             <Button onClick={() => setSection("new")}>Открыть лиды</Button>
             <Button variant="ghost" onClick={() => setState({ workspaceOpen: true })}>Настроить этапы</Button>
           </div>

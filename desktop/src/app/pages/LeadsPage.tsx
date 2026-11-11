@@ -246,7 +246,7 @@ function FilterBar({ filter, sources, regions }: { filter: LeadFilter; sources: 
           options={[{ value: "", label: "Все регионы" }, ...regions.map((r) => ({ value: r, label: r }))]} />
       )}
       <Select small width={138} value={filter.minScore} onChange={(v) => setFilter({ minScore: v })} label="Оценка"
-        options={[{ value: 0, label: "Любая оценка" }, { value: 40, label: "От 40" }, { value: 60, label: "От 60" }, { value: 80, label: "От 80" }]} />
+        options={[{ value: 0, label: "Любая оценка" }, { value: 30, label: "От 30" }, { value: 50, label: "От 50" }, { value: 70, label: "От 70" }, { value: 90, label: "От 90" }]} />
       <Checkbox checked={filter.hideRejected} onChange={(v) => setFilter({ hideRejected: v })} label={<span className="nowrap">Скрыть неподходящие</span>} />
       <span className="grow" />
       {active && <Button small variant="ghost" icon="x" onClick={() => setState({ filter: emptyFilter(filter.search) })}>Сбросить</Button>}

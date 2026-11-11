@@ -79,7 +79,7 @@ function WorkspaceDialogBody() {
       {current && (
         <Group title="Настройка CRM">
           <SettingRow title="Воронки и этапы" hint="Названия, порядок, вероятность, тип этапа.">
-            <Button small icon="edit" onClick={() => setEditor("pipelines")}>Открыть</Button>
+            <Button small icon="edit" onClick={() => setEditor("pipelines")}>Настроить воронки</Button>
           </SettingRow>
           {ws.isCloud && !current.remote && (
             <SettingRow title="Загрузить в облако" hint="Создаст облачный Workspace с копией записей этого локального. Локальный останется как есть; повторная загрузка не плодит дубли.">
@@ -92,11 +92,11 @@ function WorkspaceDialogBody() {
             </SettingRow>
           )}
           <SettingRow title="Свои поля" hint="Дополнительные поля в карточках компаний, контактов, лидов и сделок.">
-            <Button small icon="edit" onClick={() => setEditor("fields")}>Открыть</Button>
+            <Button small icon="edit" onClick={() => setEditor("fields")}>Настроить поля</Button>
           </SettingRow>
           {ws.isCloud && (
             <SettingRow title="Роли" hint="Свои роли с набором разрешений.">
-              <Button small icon="shield" onClick={() => setEditor("roles")}>Открыть</Button>
+              <Button small icon="shield" onClick={() => setEditor("roles")}>Управлять ролями</Button>
             </SettingRow>
           )}
         </Group>
