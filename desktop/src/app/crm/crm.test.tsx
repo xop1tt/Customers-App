@@ -103,14 +103,23 @@ describe("демо-ядро Workspace", () => {
   });
 });
 
+async function openCrm() {
+  const rail = await screen.findByRole("navigation", { name: "Модули" });
+  fireEvent.click(await within(rail).findByRole("button", { name: /^CRM/ }));
+}
+
 describe("интерфейс CRM", () => {
-  it("группа «Коллекции» стоит после основной группы и перед источниками и открывает коллекцию", async () => {
+  it("модуль CRM рейки: «Сегодня», «Сделки» и коллекции; разделы поиска в нём не показываются; коллекция открывается", async () => {
     render(<App />);
     const nav = await screen.findByLabelText("Навигация");
+    expect(within(nav).getByText("Все лиды")).toBeInTheDocument();
+    expect(within(nav).queryByText("Коллекции")).toBeNull();
+    await openCrm();
     const title = await within(nav).findByText("Коллекции");
-    const sources = within(nav).getByText("По источнику");
-    expect(title.compareDocumentPosition(sources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(nav).getByText("Все лиды").compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(getState().section).toBe("today");
+    expect(within(nav).getByRole("button", { name: "Сделки" }).compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(nav).queryByText("Все лиды")).toBeNull();
+    expect(within(nav).queryByText("По источнику")).toBeNull();
     fireEvent.click(await within(nav).findByText("Все клиенты"));
     const header = document.querySelector(".topbar-title") as HTMLElement;
     await waitFor(() => expect(header).toHaveTextContent("🤝Все клиенты"));
@@ -141,6 +150,7 @@ describe("интерфейс CRM", () => {
   it("новая коллекция создаётся из диалога с эмодзи и открывается", async () => {
     render(<App />);
     const nav = await screen.findByLabelText("Навигация");
+    await openCrm();
     fireEvent.click(await within(nav).findByRole("button", { name: "Новая коллекция" }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.change(within(dialog).getByPlaceholderText(/Клиенты из Казани/), { target: { value: "Горячие" } });

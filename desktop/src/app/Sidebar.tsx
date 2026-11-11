@@ -3,8 +3,7 @@ import { count, type SectionId, SECTIONS } from "../lib/leads";
 import { integer } from "../lib/format";
 import { CONFIGURABLE, MAIN_GROUP, WORK_GROUP, move, ordered, toggled } from "../lib/sidebarPrefs";
 import { SOURCES } from "../lib/sources";
-import appIcon from "../assets/app-icon.png";
-import appIconLight from "../assets/app-icon-light.png";
+import { MODULES, moduleOf } from "../lib/modules";
 import { Avatar, Button, IconButton } from "../ui/kit";
 import { api } from "../api";
 import { Icon } from "../ui/icons";
@@ -73,6 +72,11 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const teamShut = useCollapsed("team");
   const chat = useStore((s) => s.chat);
   const hasWs = useStore((s) => !!s.ws?.active);
+  // Панель разделов показывает группы открытого модуля рейки; в режиме настройки — все настраиваемые группы.
+  const mod = moduleOf(section);
+  const showSearch = customize || mod === "search";
+  const showCrm = customize || mod === "crm";
+  const showTeam = !customize && mod === "team";
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
@@ -140,23 +144,22 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   return (
     <aside className={`sidebar${overlay ? " overlay" : ""}`} style={{ width: "var(--nav-w)" }} aria-label="Навигация">
       <div className="side-head">
-        <span className="side-brand grow"><img className="icon-dark" src={appIcon} width={20} height={20} alt="" draggable={false} /><img className="icon-light" src={appIconLight} width={20} height={20} alt="" draggable={false} />Customers</span>
+        <span className="side-brand side-module grow">{customize ? "Настройка панели" : MODULES.find((m) => m.id === mod)!.title}</span>
         <IconButton icon="sidebar" tip="Свернуть панель" onClick={() => (overlay ? setState({ navPeek: false }) : void patchDevice({ navOpen: false }))} />
       </div>
 
       <nav className="side-scroll">
-        <div className="nav-group">{groupFor(main, MAIN_GROUP)}</div>
+        {showSearch && <div className="nav-group">{groupFor(main, MAIN_GROUP)}</div>}
 
-        {session && !customize && hasWs && (
+        {session && !customize && hasWs && mod === "crm" && (
           <div className="nav-group">
-            <GroupTitle id="crm" title="CRM" />
             {(["today", "deals"] as SectionId[]).map((id) => <NavItem key={id} id={id} active={section === id} onClick={() => setSection(id)} />)}
           </div>
         )}
 
-        <CollectionsGroup customize={customize} onOpen={openCollection} />
+        {showCrm && <CollectionsGroup customize={customize} onOpen={openCollection} />}
 
-        {(device.sidebarSources || customize) && (
+        {showSearch && (device.sidebarSources || customize) && (
           <div className="nav-group">
             <GroupTitle id="sources" title="По источнику" />
             {sourceKeys.map((key, i) => {
@@ -177,7 +180,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </div>
         )}
 
-        {!customize && (
+        {!customize && mod === "search" && (
           <div className="nav-group">
             <GroupTitle id="scores" title="По оценке" />
             {SCORE_STEPS.filter((n) => !scoresShut || (section === "all" && !sourceFilter && minScore === n)).map((n) => (
@@ -190,7 +193,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </div>
         )}
 
-        {!customize && (
+        {showTeam && (
           <div className="nav-group">
             <GroupTitle id="team" title="Команда" />
             {(["chat", "people", "notifications"] as const).filter((id) => !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
@@ -207,10 +210,12 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </div>
         )}
 
-        <div className="nav-group">
-          <GroupTitle id="work" title="Работа" />
-          {groupFor(workShut ? work.filter((id) => id === section) : work, WORK_GROUP)}
-        </div>
+        {showSearch && (
+          <div className="nav-group">
+            <GroupTitle id="work" title="Работа" />
+            {groupFor(workShut ? work.filter((id) => id === section) : work, WORK_GROUP)}
+          </div>
+        )}
 
         {customize && (
           <div className="nav-group nav-opts">

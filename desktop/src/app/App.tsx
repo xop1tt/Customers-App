@@ -27,6 +27,7 @@ import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
 import { useViewportWidth } from "../state/hooks";
 import { CollectionPage } from "./crm/CollectionPage";
+import { ModuleRail, RAIL_W } from "./ModuleRail";
 import { DealBoard } from "./crm/DealBoard";
 import { TodayPage } from "./crm/TodayPage";
 import { CrmCard } from "./crm/CrmCard";
@@ -223,7 +224,7 @@ function Shell() {
   const width = useViewportWidth();
   const narrow = width < 900;
   // Рабочая область не должна становиться уже MIN_CENTER: иначе панель сведений наезжает на кнопки верхней панели.
-  const navTaken = narrow || !device.navOpen ? 0 : navW;
+  const navTaken = RAIL_W + (narrow || !device.navOpen ? 0 : navW);
   const room = width - navTaken - MIN_CENTER;
   const floatInsp = room < INSP_MIN;
   const inspDock = clamp(inspW, INSP_MIN, Math.max(INSP_MIN, Math.min(INSP_MAX, room)));
@@ -241,7 +242,8 @@ function Shell() {
   const inspLabel = crm ? "Карточка записи" : "Сведения о лиде";
 
   return (
-    <div className="shell" style={{ ["--nav-w" as string]: `${navW}px`, ["--insp-w" as string]: `${floatInsp ? Math.min(inspW, 460) : inspDock}px` }}>
+    <div className="shell" style={{ ["--rail-w" as string]: `${RAIL_W}px`, ["--nav-w" as string]: `${navW}px`, ["--insp-w" as string]: `${floatInsp ? Math.min(inspW, 460) : inspDock}px` }}>
+      <ModuleRail />
       {narrow ? (
         peek && (
           <>
