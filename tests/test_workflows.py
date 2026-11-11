@@ -228,9 +228,14 @@ def test_ci_checks_cover_lint_lock_tests_and_both_desktop_builds():
 def test_ci_checks_rust_dependencies_with_cargo_deny():
     # Пакет G8 (ADR-060): уязвимости, лицензии и источники зависимостей проверяются в каждом PR.
     steps = load("desktop.yml")["jobs"]["rust"]["steps"]
-    deny = [s for s in steps if str(s.get("uses", "")).startswith("EmbarkStudios/cargo-deny-action@")]
-    assert len(deny) == 1 and deny[0]["with"]["manifest-path"] == "desktop/src-tauri/Cargo.toml"
-    assert deny[0]["with"]["command"] == "check" and "--all-features" not in deny[0]["with"].get("arguments", "")
+    deny = [s for s in steps if s.get("name") == "Dependencies (cargo deny)"]
+    assert len(deny) == 1
+    run = deny[0]["run"]
+    # Бинарник из релиза ставится только после сверки SHA-256, проверка — по lock-файлу и без лишних признаков.
+    assert re.fullmatch(r"[0-9a-f]{64}", deny[0]["env"]["DENY_SHA256"])
+    assert "sha256sum -c" in run and run.index("sha256sum -c") < run.index("tar -xzf")
+    assert "--manifest-path src-tauri/Cargo.toml --locked check" in run and "--all-features" not in run
+    assert "set -euo pipefail" in run
     config = (WF.parents[1] / "desktop/src-tauri/deny.toml").read_text(encoding="utf-8")
     for needed in ('unknown-registry = "deny"', 'unknown-git = "deny"', 'yanked = "deny"', "ignore = []"):
         assert needed in config, needed
