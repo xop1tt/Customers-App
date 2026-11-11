@@ -865,6 +865,49 @@ impl WorkspaceStore {
         self.set_meta("seeded", "1")
     }
 
+    /// Убирает дубли шаблона, которые давал одновременный запуск двух команд (2.3.0 и раньше): одинаковые общие коллекции
+    /// и лишние воронки «Продажи». Воронку со сделками и коллекции с другим содержимым не трогает. Выполняется один раз.
+    pub fn dedupe_local_seed(&self) -> AppResult<()> {
+        if self.meta("seed_deduped").is_some() {
+            return Ok(());
+        }
+        let order = |a: &Value, b: &Value| a["created_at"].as_str().cmp(&b["created_at"].as_str()).then(a["id"].as_str().cmp(&b["id"].as_str()));
+        let mut seen = BTreeSet::new();
+        let mut collections = self.list("collections", &Query::default())?;
+        collections.sort_by(order);
+        for c in collections.iter().filter(|c| c["visibility"] == "workspace") {
+            let key = format!("{}|{}|{}", c["entity_type"], c["name"], c["config"]);
+            if !seen.insert(key) {
+                self.delete("collections", c["id"].as_str().unwrap_or_default())?;
+            }
+        }
+        let mut pipelines = self.list("pipelines", &Query::default())?;
+        pipelines.retain(|p| p["name"] == "Продажи");
+        pipelines.sort_by(order);
+        let deals = self.list("deals", &Query { archived: true, ..Default::default() })?;
+        let used = |id: &Value| deals.iter().any(|d| d["pipeline_id"] == *id);
+        // Оставляем первую воронку и любую, в которой есть сделки.
+        for p in pipelines.iter().skip(1).filter(|p| !used(&p["id"])) {
+            let id = p["id"].as_str().unwrap_or_default();
+            for st in self.list("pipeline_stages", &Query::default())?.iter().filter(|st| st["pipeline_id"] == p["id"]) {
+                self.delete("pipeline_stages", st["id"].as_str().unwrap_or_default())?;
+            }
+            self.delete("pipelines", id)?;
+        }
+        let alive: Vec<Value> = self.list("pipelines", &Query::default())?;
+        if let Some(first) = alive.first() {
+            let default_count = alive.iter().filter(|p| p["is_default"] == true).count();
+            if default_count != 1 {
+                for p in &alive {
+                    let mut m = Map::new();
+                    m.insert("is_default".into(), json!(p["id"] == first["id"]));
+                    self.save("pipelines", p["id"].as_str(), &m)?;
+                }
+            }
+        }
+        self.set_meta("seed_deduped", "1")
+    }
+
     /// Шаблон локального Workspace не уходит на сервер: при подключении облака Workspace создаётся там со своим шаблоном.
     pub fn drop_seed_ops(&self) -> AppResult<()> {
         self.conn.execute("DELETE FROM sync_outbox WHERE entity IN ('pipelines', 'pipeline_stages', 'collections')", [])?;

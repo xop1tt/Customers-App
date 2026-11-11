@@ -278,6 +278,8 @@ const lastIn = new Map<ModuleId, { section: SectionId; collectionId: string | nu
 /** Открыть модуль рейки: последний раздел в нём или его главный раздел. */
 export function openModule(id: ModuleId) {
   const cur = state.section;
+  // «Настроить панель» у каждой вкладки своя: при смене вкладки режим настройки закрывается.
+  if (moduleOf(cur) !== id && state.customizeNav) setState({ customizeNav: false });
   lastIn.set(moduleOf(cur), { section: cur, collectionId: state.collectionId });
   if (moduleOf(cur) === id) return;
   const last = lastIn.get(id);

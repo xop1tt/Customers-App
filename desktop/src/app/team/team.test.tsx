@@ -24,15 +24,17 @@ async function nav() {
 }
 
 describe("команда в левой панели", () => {
-  it("группа «Команда»: сообщения и уведомления с числом непрочитанных, группа сворачивается", async () => {
+  it("«Сообщения» — отдельный модуль рейки с числом непрочитанных; в группе «Команда» уведомления, группа сворачивается", async () => {
     const n = await nav();
-    const chat = within(n).getByRole("button", { name: /Сообщения/ });
-    await waitFor(() => expect(within(chat).getByLabelText("Непрочитанных: 3")).toBeInTheDocument());
+    const rail = within(screen.getByRole("navigation", { name: "Модули" }));
+    await waitFor(() => expect(rail.getByRole("button", { name: "Сообщения, новых: 3" })).toBeInTheDocument());
+    expect(Array.from(n.querySelectorAll(".side-scroll .nav-item")).some((b) => /Сообщения/.test(b.textContent ?? ""))).toBe(false);
     expect(within(within(n).getByRole("button", { name: /Уведомления/ })).getByLabelText("Непрочитанных: 2")).toBeInTheDocument();
     fireEvent.click(within(n).getByRole("button", { name: "Команда" }));
-    await waitFor(() => expect(within(n).queryByRole("button", { name: /Сотрудники/ })).toBeNull());
+    // В свёрнутой группе остаётся только открытый раздел («Сотрудники»).
+    await waitFor(() => expect(within(n).queryByRole("button", { name: /Уведомления/ })).toBeNull());
     fireEvent.click(within(n).getByRole("button", { name: "Команда" }));
-    expect(await within(n).findByRole("button", { name: /Сотрудники/ })).toBeInTheDocument();
+    expect(await within(n).findByRole("button", { name: /Уведомления/ })).toBeInTheDocument();
   });
 });
 
@@ -89,8 +91,8 @@ describe("сотрудники и профили", () => {
 
 describe("сообщения", () => {
   it("лента, отправка с @упоминанием из подсказки, непрочитанное сбрасывается", async () => {
-    const n = await nav();
-    fireEvent.click(within(n).getByRole("button", { name: /Сообщения/ }));
+    await nav();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Сообщения/ }));
     const items = await screen.findByRole("complementary", { name: "Обсуждения" });
     fireEvent.click(await within(items).findByText("Отдел продаж"));
     expect(await screen.findByText(/подскажи, где шаблон договора/)).toBeInTheDocument();
@@ -111,8 +113,8 @@ describe("сообщения", () => {
   });
 
   it("карточка CRM в сообщении: выбор, отправка без текста и переход к карточке", async () => {
-    const n = await nav();
-    fireEvent.click(within(n).getByRole("button", { name: /Сообщения/ }));
+    await nav();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Сообщения/ }));
     const items = await screen.findByRole("complementary", { name: "Обсуждения" });
     fireEvent.click(await within(items).findByText("Отдел продаж"));
     await screen.findByText(/подскажи, где шаблон договора/);
@@ -135,8 +137,8 @@ describe("сообщения", () => {
   });
 
   it("новое групповое обсуждение с участниками, участники добавляют коллег", async () => {
-    const n = await nav();
-    fireEvent.click(within(n).getByRole("button", { name: /Сообщения/ }));
+    await nav();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Сообщения/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Новое сообщение или обсуждение" }));
     fireEvent.click(await screen.findByText("Групповое обсуждение"));
     const dialog = await screen.findByRole("dialog", { name: "Новое обсуждение" });

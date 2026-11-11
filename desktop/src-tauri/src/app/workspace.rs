@@ -142,6 +142,11 @@ impl Core {
         if let Some(st) = s.workspace.lock().unwrap().store.clone() {
             return Ok(st);
         }
+        // Одновременные команды при запуске (состояние, коллекции, «Сегодня») ждут здесь, пока первая откроет базу.
+        let _opening = s.ws_open.lock().unwrap();
+        if let Some(st) = s.workspace.lock().unwrap().store.clone() {
+            return Ok(st);
+        }
         let c = self.ws_catalog(s)?;
         let info = c
             .active_info()
@@ -156,6 +161,7 @@ impl Core {
         store.set_meta("channel", "stable").map_err(cmd)?;
         if !info.remote {
             store.seed_local().map_err(cmd)?;
+            store.dedupe_local_seed().map_err(cmd)?;
             let me = Member {
                 user_id: user_id(s),
                 display_name: s.display_name.clone(),

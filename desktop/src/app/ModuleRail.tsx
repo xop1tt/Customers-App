@@ -1,4 +1,4 @@
-// Рейка модулей слева (пакет C2, вариант B макетов C1): CRM, поиск клиентов, команда, внизу — настройки.
+// Рейка модулей слева (пакет C2, вариант B макетов C1): CRM, поиск клиентов, сообщения, команда, внизу — настройки.
 
 import { count } from "../lib/leads";
 import { integer } from "../lib/format";
@@ -20,7 +20,8 @@ export function ModuleRail() {
   const badge: Record<ModuleId, number> = {
     crm: 0,
     search: count(leads, "new", true),
-    team: unreadTotal(chat) + unreadNotifications(chat),
+    messages: unreadTotal(chat),
+    team: unreadNotifications(chat),
   };
 
   return (

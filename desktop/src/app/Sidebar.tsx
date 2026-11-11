@@ -63,7 +63,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const session = useStore((s) => s.session);
   const sync = useStore((s) => s.sync);
   const update = useStore((s) => s.update);
-  const customize = useStore((s) => s.customizeNav);
+  const customizeFlag = useStore((s) => s.customizeNav);
   const sourceFilter = useStore((s) => s.filter.source);
   const minScore = useStore((s) => s.filter.minScore);
   const sourcesShut = useCollapsed("sources");
@@ -74,9 +74,12 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const hasWs = useStore((s) => !!s.ws?.active);
   // Панель разделов показывает группы открытого модуля рейки; в режиме настройки — все настраиваемые группы.
   const mod = moduleOf(section);
-  const showSearch = customize || mod === "search";
-  const showCrm = customize || mod === "crm";
-  const showTeam = !customize && mod === "team";
+  // «Настроить панель» у каждой вкладки своя: настраивается только то, что показано в открытой вкладке.
+  const canCustomize = mod === "search" || mod === "crm";
+  const customize = customizeFlag && canCustomize;
+  const showSearch = mod === "search";
+  const showCrm = mod === "crm";
+  const showTeam = !customize && (mod === "team" || mod === "messages");
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
@@ -144,8 +147,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   return (
     <aside className={`sidebar${overlay ? " overlay" : ""}`} style={{ width: "var(--nav-w)" }} aria-label="Навигация">
       <div className="side-head">
-        <span className="side-brand side-module grow">{customize ? "Настройка панели" : MODULES.find((m) => m.id === mod)!.title}</span>
-        <IconButton icon="sidebar" tip="Свернуть панель" onClick={() => (overlay ? setState({ navPeek: false }) : void patchDevice({ navOpen: false }))} />
+        <span className="side-brand side-module grow">{customize ? `Настройка: ${MODULES.find((m) => m.id === mod)!.title}` : MODULES.find((m) => m.id === mod)!.title}</span>
       </div>
 
       <nav className="side-scroll">
@@ -195,8 +197,8 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
         {showTeam && (
           <div className="nav-group">
-            <GroupTitle id="team" title="Команда" />
-            {(["chat", "people", "notifications"] as const).filter((id) => !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
+            {mod === "team" && <GroupTitle id="team" title="Команда" />}
+            {((mod === "messages" ? ["chat"] : ["people", "notifications"]) as ("chat" | "people" | "notifications")[]).filter((id) => mod === "messages" || !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
               const n = id === "chat" ? unreadTotal(chat) : id === "notifications" ? unreadNotifications(chat) : 0;
               const active = section === id || (id === "people" && section === "profile");
               return (
@@ -217,7 +219,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </div>
         )}
 
-        {customize && (
+        {customize && mod === "search" && (
           <div className="nav-group nav-opts">
             <label className="nav-opt"><span className="grow">Числа у разделов</span><SwitchMini on={device.sidebarCounts} onChange={(v) => void patchDevice({ sidebarCounts: v })} /></label>
             <label className="nav-opt"><span className="grow">Список источников</span><SwitchMini on={device.sidebarSources} onChange={(v) => void patchDevice({ sidebarSources: v })} /></label>
@@ -232,7 +234,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
         ) : (
           <>
             {updateReady && <UpdateButton />}
-            <button type="button" className="nav-item" onClick={() => setState({ customizeNav: true })}><Icon name="edit" size={16} /><span>Настроить панель</span></button>
+            {canCustomize && <button type="button" className="nav-item" onClick={() => setState({ customizeNav: true })}><Icon name="edit" size={16} /><span>Настроить панель</span></button>}
           </>
         )}
         <div className="row side-account-row">
