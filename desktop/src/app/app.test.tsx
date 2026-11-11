@@ -31,7 +31,7 @@ describe("приложение с демо-бэкендом", () => {
     fireEvent.click(await screen.findByText("Настройки", { selector: ".menu-item" }));
     const dialog = await screen.findByRole("dialog", { name: "Настройки" });
     expect(within(dialog).getByText("Акцентный цвет")).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByText("Исключения"));
+    fireEvent.click(within(dialog).getByText("Исключения из поиска"));
     await within(dialog).findByText("example-spam.ru");
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Настройки" })).toBeNull());
@@ -43,10 +43,10 @@ describe("приложение с демо-бэкендом", () => {
     fireEvent.click(screen.getByLabelText("Учётная запись"));
     fireEvent.click(await screen.findByText("Настройки", { selector: ".menu-item" }));
     const dialog = await screen.findByRole("dialog", { name: "Настройки" });
-    for (const title of ["Основные", "Приложение", "Работа", "Поддержка"]) expect(within(dialog).getByText(title)).toBeInTheDocument();
-    for (const name of ["Способы связи", "Уведомления", "Система"]) expect(within(dialog).getByText(name)).toBeInTheDocument();
+    for (const title of ["Основные", "Приложение", "Поиск клиентов", "Поддержка"]) expect(within(dialog).getByText(title)).toBeInTheDocument();
+    for (const name of ["Почта и звонки", "Уведомления", "Система"]) expect(within(dialog).getByText(name)).toBeInTheDocument();
     expect(within(dialog).queryByText("Рассылка")).toBeNull();
-    fireEvent.click(within(dialog).getByText("Способы связи"));
+    fireEvent.click(within(dialog).getByText("Почта и звонки"));
     // У страницы есть подразделы: выбранный показывается, остальные скрыты.
     expect(within(dialog).queryByText("Программа для звонков")).toBeNull();
     fireEvent.click(within(dialog).getByRole("button", { name: "Звонки" }));

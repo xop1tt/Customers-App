@@ -25,13 +25,13 @@ export const CATEGORIES: { title: string; items: Item[] }[] = [
     { id: "notifications", title: "Уведомления", icon: "bell" },
     { id: "updates", title: "Обновления", icon: "download" },
   ] },
-  { title: "Работа", items: [
-    { id: "search", title: "Поиск", icon: "search" },
-    { id: "exclusions", title: "Исключения", icon: "ban" },
-    { id: "outreach", title: "Способы связи", icon: "mail" },
+  { title: "Поиск клиентов", items: [
+    { id: "search", title: "Автопоиск", icon: "search" },
+    { id: "exclusions", title: "Исключения из поиска", icon: "ban" },
+    { id: "outreach", title: "Почта и звонки", icon: "mail" },
   ] },
   { title: "Поддержка", items: [
-    { id: "reports", title: "Отчёты", icon: "report" },
+    { id: "reports", title: "Диагностика и сбои", icon: "report" },
   ] },
 ];
 const ALL = CATEGORIES.flatMap((c) => c.items);
