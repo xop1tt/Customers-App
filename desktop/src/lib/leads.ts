@@ -3,7 +3,7 @@
 import type { Lead, LeadKind } from "../api/types";
 import { money } from "./format";
 
-export type SectionId = "home" | "all" | "new" | "favorites" | "archive" | "excluded" | "sources" | "runs" | "collection" | "profile" | "people" | "chat" | "notifications" | "today" | "calendar" | "deals" | "reports";
+export type SectionId = "home" | "all" | "new" | "favorites" | "archive" | "excluded" | "sources" | "runs" | "collection" | "profile" | "people" | "chat" | "notifications" | "today" | "calendar" | "deals" | "reports" | "trash";
 
 /** `emoji` — крупная иконка раздела в заголовке верхней панели (docs/CRM_ARCHITECTURE.md §8.2). */
 export const SECTIONS: Record<SectionId, { title: string; icon: string; emoji: string }> = {
@@ -24,6 +24,7 @@ export const SECTIONS: Record<SectionId, { title: string; icon: string; emoji: s
   calendar: { title: "Календарь", icon: "calendar", emoji: "📅" },
   deals: { title: "Сделки", icon: "chart", emoji: "📊" },
   reports: { title: "Отчёты", icon: "report", emoji: "📈" },
+  trash: { title: "Корзина", icon: "trash", emoji: "🗑️" },
 };
 
 export const isLeadList = (s: SectionId) => ["all", "new", "favorites", "archive", "excluded"].includes(s);

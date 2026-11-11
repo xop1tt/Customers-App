@@ -36,6 +36,7 @@ import { TodayPage } from "./crm/TodayPage";
 import { CrmCard } from "./crm/CrmCard";
 import { CollectionDialog } from "./crm/Collections";
 import { WorkspaceDialog } from "./crm/WorkspaceDialog";
+import { TrashPage } from "./crm/TrashPage";
 import { ProfilePage } from "./team/ProfilePage";
 import { PeoplePage } from "./team/PeoplePage";
 import { ChatPage } from "./team/ChatPage";
@@ -244,7 +245,7 @@ function Shell() {
   useChatPolling();
   useMarketInstalled();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
-  const crm = section === "collection" || section === "today" || section === "calendar" || section === "deals" || section === "reports";
+  const crm = section === "collection" || section === "today" || section === "calendar" || section === "deals" || section === "reports" || section === "trash";
   const showInsp = (lead && device.inspectorShown && (!floatInsp || selected === 1)) || (crm && !!crmRecord);
   const InspectorBody = crm ? CrmCard : Inspector;
   const inspLabel = crm ? "Карточка записи" : "Сведения о лиде";
@@ -277,6 +278,7 @@ function Shell() {
           {section === "calendar" && <CalendarPage />}
           {section === "deals" && <DealBoard />}
           {section === "reports" && <ReportsPage />}
+          {section === "trash" && <TrashPage />}
           {section === "profile" && <ProfilePage />}
           {section === "people" && <PeoplePage />}
           {section === "chat" && <ChatPage />}

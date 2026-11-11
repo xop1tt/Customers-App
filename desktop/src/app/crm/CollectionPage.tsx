@@ -6,10 +6,14 @@ import type { CrmRecord } from "../../api/types";
 import { byTable, can, cellText, columnLabel, STATUS_TONE } from "../../lib/crm";
 import { integer, plural } from "../../lib/format";
 import { Button, EmptyState, Spinner, Tag, TextInput } from "../../ui/kit";
+import { Icon } from "../../ui/icons";
 import { openRecord, setSection, useStore } from "../../state/store";
 import { CrmExportDialog } from "./CrmExport";
 import { ImportDialog } from "./ImportDialog";
 import { useLookup, useWsQuery } from "./useCrm";
+
+/** Типы полей, по которым есть смысл сортировать (идентификаторы связей — нет). */
+const SORTABLE = ["text", "money", "number", "date", "datetime", "enum"];
 
 export function CollectionPage() {
   const id = useStore((s) => s.collectionId);
@@ -18,8 +22,10 @@ export function CollectionPage() {
   const [search, setSearch] = useState("");
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // Сортировка по столбцу (щелчок по заголовку: по возрастанию → по убыванию → как задано в коллекции).
+  const [sort, setSort] = useState<{ field: string; dir: "asc" | "desc" } | null>(null);
   const lk = useLookup();
-  const { data, error } = useWsQuery(() => (id ? api.wsCollectionItems(id, { search, limit: 2000 }) : Promise.resolve(null)), [id, search]);
+  const { data, error } = useWsQuery(() => (id ? api.wsCollectionItems(id, { search, limit: 2000, ...(sort ? { sort: [sort] } : {}) }) : Promise.resolve(null)), [id, search, sort?.field, sort?.dir]);
 
   if (error) return <div className="page"><EmptyState icon="alert" title="Коллекция не открылась">{error}</EmptyState></div>;
   if (!data) return <div className="page"><div className="boot"><Spinner size={18} /></div></div>;
@@ -65,7 +71,19 @@ export function CollectionPage() {
       ) : (
         <div className="table-wrap" role="grid" aria-label={data.collection.name} aria-rowcount={data.total}>
           <div className="thead crm-row" role="row" style={grid}>
-            {cols.map((c) => <span key={c} role="columnheader" className="th">{columnLabel(e, c)}</span>)}
+            {cols.map((c) => {
+              const kind = e.fields.find((f) => f.name === c)?.kind;
+              if (!kind || !SORTABLE.includes(kind)) return <span key={c} role="columnheader" className="th">{columnLabel(e, c)}</span>;
+              const on = sort?.field === c;
+              const next = () => setSort(!on ? { field: c, dir: "asc" } : sort?.dir === "asc" ? { field: c, dir: "desc" } : null);
+              return (
+                <span key={c} role="columnheader" className="th-cell" aria-sort={on ? (sort?.dir === "desc" ? "descending" : "ascending") : undefined}>
+                  <button type="button" className={`th${on ? " sorted" : ""}`} onClick={next}>
+                    {columnLabel(e, c)}{on && <Icon name={sort?.dir === "desc" ? "arrowDown" : "arrowUp"} size={12} />}
+                  </button>
+                </span>
+              );
+            })}
           </div>
           <div className="tbody" role="rowgroup">
             {data.items.map((r) => (

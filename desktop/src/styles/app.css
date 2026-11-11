@@ -118,6 +118,7 @@ body.resizing .sidebar, body.resizing .inspector { transition: none; }
 .th { display: flex; align-items: center; gap: 4px; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; text-align: left; white-space: nowrap; }
 button.th:hover { color: var(--text); }
 .th.sorted { color: var(--text); }
+.th-cell { display: flex; min-width: 0; height: 100%; }
 .tbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; position: relative; }
 .rows { position: relative; }
 .tr { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line); cursor: default; }

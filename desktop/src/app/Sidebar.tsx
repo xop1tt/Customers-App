@@ -155,7 +155,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
         {session && !customize && hasWs && mod === "crm" && (
           <div className="nav-group">
-            {(["today", "calendar", "deals", "reports"] as SectionId[]).map((id) => <NavItem key={id} id={id} active={section === id} onClick={() => setSection(id)} />)}
+            {(["today", "calendar", "deals", "reports", "trash"] as SectionId[]).map((id) => <NavItem key={id} id={id} active={section === id} onClick={() => setSection(id)} />)}
           </div>
         )}
 
