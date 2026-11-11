@@ -186,7 +186,7 @@ const session = (): SessionInfo => ({
 
 let update: UpdateInfo = {
   phase: demo.has("update") ? "ready" : "idle", current: "1.1.0", canUpdate: true, available: demo.has("update") ? { version: "1.2.0", title: "Customers 1.2.0", notes: "• Новый интерфейс", page: null, size: 90_000_000 } : null,
-  stagedVersion: demo.has("update") ? "1.2.0" : null, lastCheck: ago(3), releasesPage: "https://github.com/xop1tt/CLIENTS/releases",
+  stagedVersion: demo.has("update") ? "1.2.0" : null, lastCheck: ago(3), releasesPage: "https://github.com/xop1tt/Customers-App/releases",
 };
 
 const sync = (): SyncStatus => ({ enabled: cloud, kind: "idle", message: null, lastSync: ago(0.2), pending: 0 });

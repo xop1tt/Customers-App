@@ -6,7 +6,7 @@
 задаёте сами; правила оценки по умолчанию настроены на заказы на разработку (сайты, Telegram-боты, приложения,
 автоматизация, CRM). Без платных сервисов, пробных периодов и AI API.
 
-Здесь собрана подробная документация. Краткое описание и быстрый старт — в [README](https://github.com/xop1tt/CLIENTS#readme).
+Здесь собрана подробная документация. Краткое описание и быстрый старт — в [README](https://github.com/xop1tt/Customers-App#readme).
 
 ## С чего начать
 
@@ -35,9 +35,9 @@
 
 Эти документы обновляются вместе с кодом, поэтому лежат в репозитории, а не в Wiki:
 
-- [docs/cloud-setup.md](https://github.com/xop1tt/CLIENTS/blob/main/docs/cloud-setup.md) — пошаговая настройка облака (Supabase) для неспециалиста.
-- [docs/cloud.md](https://github.com/xop1tt/CLIENTS/blob/main/docs/cloud.md) — техническое устройство облака, лимиты писем, протокол синхронизации.
-- [docs/research.md](https://github.com/xop1tt/CLIENTS/blob/main/docs/research.md) — аудит источников и бесплатных сервисов: что подключено и почему.
-- [SECURITY.md](https://github.com/xop1tt/CLIENTS/blob/main/SECURITY.md) — как сообщить об уязвимости.
-- [desktop/README.md](https://github.com/xop1tt/CLIENTS/blob/main/desktop/README.md) — исходники приложения для macOS и Windows (Tauri 2: Rust и React): устройство, запуск, сборка
-- [LICENSE](https://github.com/xop1tt/CLIENTS/blob/main/LICENSE) — лицензия.
+- [docs/cloud-setup.md](https://github.com/xop1tt/Customers-App/blob/main/docs/cloud-setup.md) — пошаговая настройка облака (Supabase) для неспециалиста.
+- [docs/cloud.md](https://github.com/xop1tt/Customers-App/blob/main/docs/cloud.md) — техническое устройство облака, лимиты писем, протокол синхронизации.
+- [docs/research.md](https://github.com/xop1tt/Customers-App/blob/main/docs/research.md) — аудит источников и бесплатных сервисов: что подключено и почему.
+- [SECURITY.md](https://github.com/xop1tt/Customers-App/blob/main/SECURITY.md) — как сообщить об уязвимости.
+- [desktop/README.md](https://github.com/xop1tt/Customers-App/blob/main/desktop/README.md) — исходники приложения для macOS и Windows (Tauri 2: Rust и React): устройство, запуск, сборка
+- [LICENSE](https://github.com/xop1tt/Customers-App/blob/main/LICENSE) — лицензия.

@@ -47,7 +47,7 @@ Telegram (лиды, дайджест, ошибки одним сообщение
 ### 1. Свой репозиторий
 
 1. Сделайте форк этого репозитория (**Fork**): Actions в публичных репозиториях бесплатны.
-   Перед этим прочитайте [LICENSE](https://github.com/xop1tt/CLIENTS/blob/main/LICENSE): можно использовать и
+   Перед этим прочитайте [LICENSE](https://github.com/xop1tt/Customers-App/blob/main/LICENSE): можно использовать и
    изменять для любых целей, кроме конкурирующего коммерческого продукта или сервиса.
 2. Проверьте вкладку **Actions**: workflow **Tests** должен стать зелёным.
 
@@ -64,7 +64,7 @@ Telegram (лиды, дайджест, ошибки одним сообщение
 1. Откройте [notion.so/profile/integrations](https://www.notion.so/profile/integrations), нажмите **New integration**
    (тип Internal) и скопируйте токен в секрет `NOTION_TOKEN`.
 2. Создайте базу с нужными полями: вручную (список полей и их типов — в `SCHEMA` в
-   [`src/leadgen/storage/notion.py`](https://github.com/xop1tt/CLIENTS/blob/main/src/leadgen/storage/notion.py), названия должны совпадать точно)
+   [`src/leadgen/storage/notion.py`](https://github.com/xop1tt/Customers-App/blob/main/src/leadgen/storage/notion.py), названия должны совпадать точно)
    или командой. Для команды нужен Python 3.11 или новее (`python3 --version`). Сначала создайте пустую страницу,
    например «Лиды», и через **⋯ → Connections** подключите к ней интеграцию: база создаётся внутри этой страницы.
    ```bash
@@ -97,7 +97,7 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
 ### 6. Настроить источники
 
-Скопируйте [`config.example.yaml`](https://github.com/xop1tt/CLIENTS/blob/main/config.example.yaml) в `config.yaml`, отредактируйте и закоммитьте.
+Скопируйте [`config.example.yaml`](https://github.com/xop1tt/Customers-App/blob/main/config.example.yaml) в `config.yaml`, отредактируйте и закоммитьте.
 Файл публичный, поэтому личных данных и секретов в нём быть не должно.
 
 - `telegram_channels.channels` — имена публичных каналов с заказами. Проверьте, что `https://t.me/s/<имя>` открывается.
@@ -139,7 +139,7 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
 > С версии 1.0.2 расписание в `search.yml` выключено: поиск идёт в приложении. Запустить поиск в Actions можно
 > вручную (**Actions → Lead search → Run workflow**). Чтобы вернуть ежечасный запуск, раскомментируйте блок `schedule`
-> в начале [`search.yml`](https://github.com/xop1tt/CLIENTS/blob/main/.github/workflows/search.yml).
+> в начале [`search.yml`](https://github.com/xop1tt/Customers-App/blob/main/.github/workflows/search.yml).
 
 Когда расписание включено, workflow запускается каждый час, а каждый источник сам решает, пора ли ему работать
 (`interval_hours`):

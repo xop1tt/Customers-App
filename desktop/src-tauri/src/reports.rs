@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(q["title"], "Вылет");
         assert!(q["body"].starts_with(&"a".repeat(40)) && q["body"].contains("текст обрезан"));
         assert!(!url.contains('+'));
-        assert!(default_issue_url("t", "b").starts_with("https://github.com/xop1tt/CLIENTS/issues/new"));
+        assert!(default_issue_url("t", "b").starts_with("https://github.com/xop1tt/Customers-App/issues/new"));
     }
 
     #[test]

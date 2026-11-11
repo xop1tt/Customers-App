@@ -1,1 +1,1 @@
-[Customers](https://github.com/xop1tt/CLIENTS) · [Релизы](https://github.com/xop1tt/CLIENTS/releases) · [Issues](https://github.com/xop1tt/CLIENTS/issues) · [Лицензия](https://github.com/xop1tt/CLIENTS/blob/main/LICENSE) · Нашли ошибку в документации? Откройте issue.
+[Customers](https://github.com/xop1tt/Customers-App) · [Релизы](https://github.com/xop1tt/Customers-App/releases) · [Issues](https://github.com/xop1tt/Customers-App/issues) · [Лицензия](https://github.com/xop1tt/Customers-App/blob/main/LICENSE) · Нашли ошибку в документации? Откройте issue.

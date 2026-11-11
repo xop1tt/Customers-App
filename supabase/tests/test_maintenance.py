@@ -84,3 +84,51 @@ def test_platform_maintenance_is_closed_to_users_and_anon():
         for role in ("anon", "authenticated"):
             assert c.execute("select has_function_privilege(%s, 'public.platform_maintenance()', 'execute')",
                              (role,)).fetchone()[0] is False
+
+
+def drop_users(*uids: str) -> None:
+    """Удалить учётные записи одной транзакцией (как удаление аккаунта в Auth)."""
+    with db() as c:
+        c.execute("delete from auth.users where id = any(%s::uuid[])", (list(uids),))
+
+
+def age_deleted_workspace(ws: str, days: int) -> None:
+    with db() as c:
+        c.execute("update public.workspaces set deleted_at = now() - make_interval(days => %s) where id = %s", (days, ws))
+
+
+def test_workspace_without_members_is_purged_30_days_after_the_last_account_is_deleted():
+    """S6 (ADR-046, решение Maksim): данные не остаются навсегда после удаления всех учётных записей."""
+    a, b, keeper = users(3)
+    lonely = workspace_with(a, {b: "employee"})
+    company = op("companies", name="Останется ли?")
+    push1(a, lonely, company)
+    conv = rpc(a, "chat_open_direct", p_workspace=lonely, p_user=b)
+    rpc(a, "chat_send", p_conversation=conv["id"], p_body="Привет")
+    recent = workspace_with(keeper, {})
+
+    drop_users(a, b)
+    with db() as c:
+        assert c.execute("select deleted_at is not null from public.workspaces where id = %s", (lonely,)).fetchone()[0]
+
+    age_deleted_workspace(lonely, 29)
+    assert call().status_code == 200
+    assert count("select count(*) from public.workspaces where id = %s", lonely) == 1, "раньше 30 дней не удаляется"
+
+    age_deleted_workspace(lonely, 31)
+    r = call()
+    assert r.status_code == 200, r.text
+    assert r.json()["removed"]["workspaces"] >= 1
+    assert count("select count(*) from public.workspaces where id = %s", lonely) == 0
+    assert count("select count(*) from public.companies where id = %s", company["id"]) == 0
+    assert count("select count(*) from public.chat_conversations where workspace_id = %s", lonely) == 0
+    assert count("select count(*) from public.workspaces where id = %s", recent) == 1
+
+
+def test_deleted_workspace_with_active_members_is_kept():
+    owner, member = users(2)
+    ws = workspace_with(owner, {member: "employee"})
+    with db() as c:
+        c.execute("update public.workspaces set deleted_at = now() - interval '100 days' where id = %s", (ws,))
+    assert call().status_code == 200
+    assert count("select count(*) from public.workspaces where id = %s", ws) == 1

@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-pub const REPOSITORY: &str = "xop1tt/CLIENTS";
+pub const REPOSITORY: &str = "xop1tt/Customers-App";
 /// Начало имён файлов снятых с выпуска Beta-сборок (Customers-Beta-v1.3.0-beta.1-macOS.dmg): их приложение не ставит.
 pub const BETA_ASSET_PREFIX: &str = "Customers-Beta-";
-pub const RELEASES_PAGE: &str = "https://github.com/xop1tt/CLIENTS/releases";
-pub const WIKI_PAGE: &str = "https://github.com/xop1tt/CLIENTS/wiki";
+pub const RELEASES_PAGE: &str = "https://github.com/xop1tt/Customers-App/releases";
+pub const WIKI_PAGE: &str = "https://github.com/xop1tt/Customers-App/wiki";
 
 pub fn user_agent(version: &str) -> String {
     format!("Customers/{version} ({})", Platform::current().label())
@@ -649,7 +649,7 @@ mod tests {
 
     fn release_json(tag: &str, assets: &str) -> String {
         format!(
-            r#"{{"tag_name":"{tag}","name":"Customers {tag}","body":"Что нового","html_url":"https://github.com/xop1tt/CLIENTS/releases/tag/{tag}","draft":false,"prerelease":false,"published_at":"2026-11-05T09:42:00Z","assets":[{assets}]}}"#
+            r#"{{"tag_name":"{tag}","name":"Customers {tag}","body":"Что нового","html_url":"https://github.com/xop1tt/Customers-App/releases/tag/{tag}","draft":false,"prerelease":false,"published_at":"2026-11-05T09:42:00Z","assets":[{assets}]}}"#
         )
     }
 
@@ -695,7 +695,7 @@ mod tests {
         let u = update_from(&r, &v("1.1.0"), Platform::Windows).unwrap();
         assert_eq!(u.version, v("1.2.0"));
         assert_eq!(u.checksum_file.as_ref().unwrap().name, "Customers-v1.2.0-Windows-x64-Setup.exe.sha256");
-        assert_eq!(u.page.as_deref(), Some("https://github.com/xop1tt/CLIENTS/releases/tag/v1.2.0"));
+        assert_eq!(u.page.as_deref(), Some("https://github.com/xop1tt/Customers-App/releases/tag/v1.2.0"));
         assert!(update_from(&r, &v("1.2.0"), Platform::MacOs).is_none());
         assert!(update_from(&r, &v("2.0"), Platform::MacOs).is_none());
         let mut draft = r.clone();
@@ -735,7 +735,7 @@ mod tests {
         let t = FakeTransport::new(vec![Ok(HttpResponse::new(200, release_json("v1.2.0", &[asset("Customers-v1.2.0-macOS.dmg", None)].join(","))))]);
         assert!(check(t.as_ref(), &v("1.1.0"), Platform::MacOs).await.unwrap().is_some());
         let sent = &t.requests.lock().unwrap()[0];
-        assert_eq!(sent.url, "https://api.github.com/repos/xop1tt/CLIENTS/releases/latest");
+        assert_eq!(sent.url, "https://api.github.com/repos/xop1tt/Customers-App/releases/latest");
         assert!(sent.headers.iter().any(|h| h.0 == "User-Agent" && h.1.starts_with("Customers/1.1.0")));
         let t = FakeTransport::new(vec![Ok(HttpResponse::new(403, ""))]);
         assert_eq!(check(t.as_ref(), &v("1.1.0"), Platform::MacOs).await.unwrap_err(), UpdateError::BadResponse(403));

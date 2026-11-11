@@ -57,6 +57,28 @@ def test_security_definer_functions_pin_search_path():
     assert bad == []
 
 
+GUARDS = ("private.require_perm(", "private.is_member(", "private.has_perm(", "private.uid()", "auth.uid()",
+          "private.require_moderator(", "private.is_platform_admin(")
+
+
+def test_security_definer_functions_open_to_users_check_the_caller():
+    """S8 (ADR-046): каждая security definer функция, которую могут вызвать anon или authenticated, проверяет,
+    кто её вызывает. Служебные функции (только service_role) этой проверке не подлежат: у пользователей нет права
+    их выполнять."""
+    with db() as c:
+        rows = c.execute("""select p.proname, p.prosrc,
+                                   has_function_privilege('authenticated', p.oid, 'execute'),
+                                   has_function_privilege('anon', p.oid, 'execute')
+                            from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public' and p.prosecdef""").fetchall()
+    open_to_users = [(name, src) for name, src, auth, anon in rows if auth or anon]
+    assert len(open_to_users) > 30
+    unguarded = sorted(name for name, src in open_to_users if not any(g in src for g in GUARDS))
+    assert unguarded == []
+    service_only = {name for name, _, auth, anon in rows if not (auth or anon)}
+    assert {"platform_maintenance", "inactive_purge", "email_hook_reserve"} <= service_only
+
+
 def test_anon_has_no_table_privileges_and_no_crm_functions():
     with db() as c:
         tables = c.execute("""select table_name, privilege_type from information_schema.role_table_grants

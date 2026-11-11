@@ -21,6 +21,6 @@
 - [Ограничения и планы](Ограничения-и-планы)
 
 **Ссылки**
-- [Скачать последнюю версию](https://github.com/xop1tt/CLIENTS/releases/latest)
-- [Сообщить о проблеме](https://github.com/xop1tt/CLIENTS/issues/new)
-- [Лицензия](https://github.com/xop1tt/CLIENTS/blob/main/LICENSE)
+- [Скачать последнюю версию](https://github.com/xop1tt/Customers-App/releases/latest)
+- [Сообщить о проблеме](https://github.com/xop1tt/Customers-App/issues/new)
+- [Лицензия](https://github.com/xop1tt/Customers-App/blob/main/LICENSE)
