@@ -72,6 +72,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const workShut = useCollapsed("work");
   const teamShut = useCollapsed("team");
   const chat = useStore((s) => s.chat);
+  const hasWs = useStore((s) => !!s.ws?.active);
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
@@ -145,6 +146,13 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
       <nav className="side-scroll">
         <div className="nav-group">{groupFor(main, MAIN_GROUP)}</div>
+
+        {session && !customize && hasWs && (
+          <div className="nav-group">
+            <GroupTitle id="crm" title="CRM" />
+            {(["today", "deals"] as SectionId[]).map((id) => <NavItem key={id} id={id} active={section === id} onClick={() => setSection(id)} />)}
+          </div>
+        )}
 
         <CollectionsGroup customize={customize} onOpen={openCollection} />
 
