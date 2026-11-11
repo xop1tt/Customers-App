@@ -477,3 +477,15 @@ button.pick-row:hover { background: var(--bg-hover); }
 .notif.unread .notif-title { font-weight: 620; }
 .notif-excerpt { font-size: var(--fs-sm); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .notif-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* Импорт таблиц */
+.import-step { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.import-step > * { max-width: 100%; }
+.import-map, .import-rows { align-self: stretch; border: 1px solid var(--line); border-radius: var(--r-md); max-height: 340px; overflow: auto; }
+.import-map-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); }
+.import-map-row:first-child, .import-row:first-child { border-top: 0; }
+.import-map-row > span:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.import-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 12px; border-top: 1px solid var(--line); }
+.import-counts, .import-dup { gap: 8px; flex-wrap: wrap; }
+.import-history { align-self: stretch; }
+.import-history ul, .import-errors { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }

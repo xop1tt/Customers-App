@@ -448,6 +448,44 @@ impl Core {
         Ok(row)
     }
 
+    // ------------------------------------------------------------ импорт CSV/Excel (B1, docs/IMPORT.md)
+
+    fn import_table(name: &str, data_base64: &str) -> CmdResult<crate::workspace::import::Table> {
+        use base64::Engine;
+        let bytes = base64::engine::general_purpose::STANDARD.decode(data_base64.trim()).map_err(|_| CmdError::msg("Файл не прочитан."))?;
+        crate::workspace::import::parse(name, &bytes).map_err(cmd)
+    }
+
+    /// Таблица из файла и предложенное сопоставление колонок.
+    pub fn ws_import_read(&self, name: &str, data_base64: &str) -> CmdResult<Value> {
+        let t = Self::import_table(name, data_base64)?;
+        let fields: Vec<Value> = crate::workspace::import::FIELDS.iter().map(|(k, l, _)| json!({"key": k, "label": l})).collect();
+        let sample: Vec<&Vec<String>> = t.rows.iter().take(5).collect();
+        Ok(json!({"headers": t.headers, "rows": t.rows.len(), "sample": sample, "mapping": crate::workspace::import::suggest(&t.headers), "fields": fields}))
+    }
+
+    pub fn ws_import_preview(&self, name: &str, data_base64: &str, opts: crate::workspace::import::ImportOptions) -> CmdResult<Value> {
+        let t = Self::import_table(name, data_base64)?;
+        self.with_crm(|st| crate::workspace::import::preview(st, &t, &opts))
+    }
+
+    pub fn ws_import_run(self: &Arc<Self>, name: &str, data_base64: &str, opts: crate::workspace::import::ImportOptions) -> CmdResult<Value> {
+        let t = Self::import_table(name, data_base64)?;
+        let out = self.with_crm(|st| crate::workspace::import::run(st, name, &t, &opts))?;
+        self.ws_changed();
+        Ok(out)
+    }
+
+    pub fn ws_import_history(&self) -> CmdResult<Value> {
+        self.with_crm(crate::workspace::import::history)
+    }
+
+    pub fn ws_import_undo(self: &Arc<Self>, batch: &str) -> CmdResult<Value> {
+        let out = self.with_crm(|st| crate::workspace::import::undo(st, batch))?;
+        self.ws_changed();
+        Ok(out)
+    }
+
     /// «Похоже на: …» до сохранения.
     pub fn ws_duplicates(&self, entity: &str, fields: Map<String, Value>, except: Option<&str>) -> CmdResult<Value> {
         let keys = dedupe::keys(entity, &fields);

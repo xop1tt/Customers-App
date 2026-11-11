@@ -797,6 +797,7 @@ dependencies = [
  "chrono",
  "encoding_rs",
  "fancy-regex",
+ "flate2",
  "fs4",
  "futures-util",
  "hex",
