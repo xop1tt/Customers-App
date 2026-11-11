@@ -7,6 +7,7 @@ import { byTable, can, cellText, columnLabel, STATUS_TONE } from "../../lib/crm"
 import { integer, plural } from "../../lib/format";
 import { Button, EmptyState, Spinner, Tag, TextInput } from "../../ui/kit";
 import { openRecord, useStore } from "../../state/store";
+import { ImportDialog } from "./ImportDialog";
 import { useLookup, useWsQuery } from "./useCrm";
 
 export function CollectionPage() {
@@ -14,6 +15,7 @@ export function CollectionPage() {
   const ws = useStore((s) => s.ws);
   const record = useStore((s) => s.record);
   const [search, setSearch] = useState("");
+  const [importing, setImporting] = useState(false);
   const lk = useLookup();
   const { data, error } = useWsQuery(() => (id ? api.wsCollectionItems(id, { search, limit: 2000 }) : Promise.resolve(null)), [id, search]);
 
@@ -37,8 +39,10 @@ export function CollectionPage() {
       <div className="crm-bar">
         <TextInput value={search} onChange={setSearch} onClear={() => setSearch("")} icon="search" placeholder={`Поиск: ${e.many.toLowerCase()}`} wrapClass="crm-search" aria-label="Поиск в коллекции" />
         <span className="grow" />
+        {creatable && <Button icon="upload" small onClick={() => setImporting(true)}>Импорт</Button>}
         {creatable && <Button icon="plus" small onClick={() => openRecord(e.table, "new")}>{e.one}</Button>}
       </div>
+      {importing && <ImportDialog onClose={() => setImporting(false)} />}
       {data.items.length === 0 ? (
         <EmptyState icon="list" title={search ? "Ничего не найдено" : "Здесь пока пусто"} action={creatable && !search ? <Button icon="plus" onClick={() => openRecord(e.table, "new")}>Создать: {e.one.toLowerCase()}</Button> : undefined}>
           {search ? "Попробуйте изменить запрос." : "Записи появятся, когда подойдут под условия коллекции. Найденный лид можно перенести в CRM из панели сведений."}

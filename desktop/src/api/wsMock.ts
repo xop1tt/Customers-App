@@ -116,6 +116,7 @@ function ensure(): Ws {
 export function resetWsMock() {
   workspaces.length = 0;
   active = null;
+  imports.length = 0;
 }
 
 /** Сменить свою роль в активном Workspace (тесты): например, чтобы стать владельцем. */
@@ -318,6 +319,8 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       return convert(ws, lead, (args.options as { createDeal?: boolean }) ?? {});
     }
     case "ws_collections": return collections(ws);
+    case "ws_import_read": case "ws_import_preview": case "ws_import_run": case "ws_import_history": case "ws_import_undo":
+      return importCall(ws, cmd, args);
     case "ws_collection_items": {
       const c = table(ws, "collections").find((x) => x.id === s("id")) ?? fail("Коллекция не найдена.");
       const cfg = c.config as WsCollection["config"];
@@ -415,4 +418,87 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
     case "ws_accept_invitation": case "ws_leave": return remoteOnly();
     default: return null;
   }
+}
+
+// ------------------------------------------------------------------ импорт таблиц (упрощённо: CSV, компании и контакты)
+
+const IMPORT_FIELDS: [string, string, string[]][] = [
+  ["company.name", "Компания: название", ["компани", "организац", "название", "клиент"]],
+  ["company.website", "Компания: сайт", ["сайт", "website"]],
+  ["company.address", "Компания: адрес", ["адрес", "город"]],
+  ["contact.full_name", "Контакт: имя и фамилия", ["контакт", "фио", "имя"]],
+  ["contact.phone", "Контакт: телефон", ["телефон", "тел"]],
+  ["contact.email", "Контакт: почта", ["почта", "email"]],
+  ["deal.title", "Сделка: название", ["сделка"]],
+  ["deal.amount", "Сделка: сумма", ["сумма", "бюджет"]],
+  ["note", "Заметка", ["заметка", "комментарий"]],
+];
+const imports: { id: string; file: string; createdAt: string; summary: Record<string, unknown>; undoneAt: string | null; created: [string, string][] }[] = [];
+
+function importTable(name: string, data: string): { headers: string[]; rows: string[][] } {
+  if (!/\.(csv|txt)$/i.test(name)) fail("В демо читается только CSV.");
+  const text = new TextDecoder().decode(Uint8Array.from(atob(data), (c) => c.charCodeAt(0))).replace(/^\uFEFF/, "");
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  const sep = (lines[0] ?? "").includes(";") ? ";" : ",";
+  const [head, ...rows] = lines.map((l) => l.split(sep).map((c) => c.trim().replace(/^"|"$/g, "")));
+  if (!head) fail("Файл пустой.");
+  return { headers: head!, rows };
+}
+
+function importCall(ws: Ws, cmd: string, args: Record<string, unknown>): unknown {
+  if (cmd === "ws_import_history") return imports.slice().reverse().map(({ created: _c, ...b }) => b);
+  if (cmd === "ws_import_undo") {
+    const b = imports.find((x) => x.id === args.batch) ?? fail("Импорт не найден.");
+    if (b.undoneAt) return { removed: 0, alreadyUndone: true };
+    for (const [t, id] of [...b.created].reverse()) save(ws, t, id, { deleted_at: now() });
+    b.undoneAt = now();
+    return { removed: b.created.length, failed: 0 };
+  }
+  const t = importTable(args.name as string, args.data as string);
+  if (cmd === "ws_import_read") {
+    const used = new Set<string>();
+    const mapping = t.headers.map((h) => {
+      const f = IMPORT_FIELDS.find(([k, , syn]) => !used.has(k) && syn.some((x) => h.toLowerCase().includes(x)));
+      if (f) used.add(f[0]);
+      return f?.[0] ?? null;
+    });
+    return { headers: t.headers, rows: t.rows.length, sample: t.rows.slice(0, 5), mapping, fields: IMPORT_FIELDS.map(([key, label]) => ({ key, label })) };
+  }
+  const o = args.options as { mapping: (string | null)[]; duplicates: string };
+  if (!o.mapping.some(Boolean)) fail("Сопоставьте хотя бы одну колонку.");
+  const col = (r: string[], key: string) => { const i = o.mapping.indexOf(key); return i >= 0 ? (r[i] ?? "").trim() : ""; };
+  const items = t.rows.map((r, i) => {
+    const company = col(r, "company.name") || null;
+    const contact = col(r, "contact.full_name") || null;
+    const deal = col(r, "deal.title") || null;
+    const found = company ? table(ws, "companies").find((c) => !c.deleted_at && String(c.name).toLowerCase() === company.toLowerCase()) : undefined;
+    const status = !company && !contact && !deal ? "empty" : !company && !contact ? "error" : found ? (o.duplicates === "skip" ? "skip" : o.duplicates === "create" ? "new" : "existing") : "new";
+    return { line: i + 2, company, contact, deal, status, existing: found && o.duplicates === "link" ? String(found.name) : null, messages: status === "error" ? ["Нет компании и контакта"] : [] };
+  });
+  const count = (s: string) => items.filter((x) => x.status === s).length;
+  if (cmd === "ws_import_preview") {
+    return { rows: items.length, new: count("new"), existing: count("existing"), skipped: count("skip"), errors: count("error"), empty: count("empty"),
+      deals: items.filter((x) => x.deal).length, contacts: items.filter((x) => x.contact).length, warnings: 0, items: items.slice(0, 100) };
+  }
+  const created: [string, string][] = [];
+  const sum = { companies: 0, contacts: 0, deals: 0, notes: 0, linked: 0, skipped: count("skip"), errors: count("error"), unknownStages: [] as string[] };
+  t.rows.forEach((r, i) => {
+    const it = items[i]!;
+    if (it.status === "skip" || it.status === "error" || it.status === "empty") return;
+    let companyId: string | null = null;
+    if (it.company) {
+      const found = it.status === "existing" ? table(ws, "companies").find((c) => String(c.name).toLowerCase() === it.company!.toLowerCase()) : undefined;
+      if (found) { companyId = found.id; sum.linked += 1; }
+      else { const c = save(ws, "companies", null, { name: it.company, website: col(r, "company.website") || null, address: col(r, "company.address") || null }); companyId = c.id; created.push(["companies", c.id]); sum.companies += 1; }
+    }
+    if (it.contact) {
+      const [first, ...last] = it.contact.split(/\s+/);
+      const c = save(ws, "contacts", null, { first_name: first, last_name: last.join(" ") || null, company_id: companyId, phones: col(r, "contact.phone") ? [col(r, "contact.phone")] : [], emails: col(r, "contact.email") ? [col(r, "contact.email")] : [] });
+      created.push(["contacts", c.id]);
+      sum.contacts += 1;
+    }
+  });
+  const id = `imp-${uid()}`;
+  if (created.length) imports.push({ id, file: args.name as string, createdAt: now(), summary: sum, undoneAt: null, created });
+  return { ...sum, batchId: created.length ? id : null, errorRows: items.filter((x) => x.status === "error").map((x) => ({ line: x.line, message: x.messages.join("; ") })) };
 }

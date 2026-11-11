@@ -422,6 +422,7 @@ pub fn set_zoom(app: tauri::AppHandle, scale: f64) -> CmdResult<()> {
 // ---------------------------------------------------------------- Customers 2.0: Workspace и CRM
 
 use crate::workspace::convert::ConvertOptions;
+use crate::workspace::import::ImportOptions;
 use crate::workspace::query::Query;
 
 sync_cmds! {
@@ -435,6 +436,11 @@ sync_cmds! {
     ws_restore(entity: String, id: String) -> Value = |c: &Arc<Core>, e: String, id: String| c.ws_restore(&e, &id);
     ws_duplicates(entity: String, fields: serde_json::Map<String, Value>, except: Option<String>) -> Value = |c: &Arc<Core>, e: String, f, x: Option<String>| c.ws_duplicates(&e, f, x.as_deref());
     ws_convert_lead(lead_id: String, options: Option<ConvertOptions>) -> Value = |c: &Arc<Core>, id: String, o: Option<ConvertOptions>| c.ws_convert_lead(&id, o.unwrap_or_default());
+    ws_import_read(name: String, data: String) -> Value = |c: &Arc<Core>, n: String, d: String| c.ws_import_read(&n, &d);
+    ws_import_preview(name: String, data: String, options: ImportOptions) -> Value = |c: &Arc<Core>, n: String, d: String, o: ImportOptions| c.ws_import_preview(&n, &d, o);
+    ws_import_run(name: String, data: String, options: ImportOptions) -> Value = |c: &Arc<Core>, n: String, d: String, o: ImportOptions| c.ws_import_run(&n, &d, o);
+    ws_import_history() -> Value = |c: &Arc<Core>| c.ws_import_history();
+    ws_import_undo(batch: String) -> Value = |c: &Arc<Core>, b: String| c.ws_import_undo(&b);
     ws_collections() -> Value = |c: &Arc<Core>| c.ws_collections();
     ws_collection_items(id: String, query: Option<Query>) -> Value = |c: &Arc<Core>, id: String, q: Option<Query>| c.ws_collection_items(&id, q.unwrap_or_default());
     ws_reorder_collections(ids: Vec<String>) -> () = |c: &Arc<Core>, ids: Vec<String>| c.ws_reorder_collections(ids);

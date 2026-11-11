@@ -718,3 +718,14 @@ export interface MarketSubmission {
   version: string;
   manifest: MarketManifest;
 }
+
+// ------------------------------------------------------------------ импорт таблиц (B1)
+
+export type ImportDuplicates = "link" | "skip" | "create";
+export interface ImportOptions { mapping: (string | null)[]; duplicates: ImportDuplicates; pipelineId?: string | null; ownerId?: string | null }
+export interface ImportFile { headers: string[]; rows: number; sample: string[][]; mapping: (string | null)[]; fields: { key: string; label: string }[] }
+export interface ImportRowPreview { line: number; company: string | null; contact: string | null; deal: string | null; status: "new" | "existing" | "skip" | "empty" | "error"; existing: string | null; messages: string[] }
+export interface ImportPreview { rows: number; new: number; existing: number; skipped: number; errors: number; empty: number; deals: number; contacts: number; warnings: number; items: ImportRowPreview[] }
+export interface ImportSummary { companies: number; contacts: number; deals: number; notes: number; linked: number; skipped: number; errors: number; unknownStages: string[] }
+export interface ImportResult extends ImportSummary { batchId: string | null; errorRows: { line: number; message: string }[] }
+export interface ImportBatch { id: string; file: string; createdAt: string; summary: ImportSummary | null; undoneAt: string | null }

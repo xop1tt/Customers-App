@@ -7,6 +7,7 @@
 pub mod catalog;
 pub mod convert;
 pub mod dedupe;
+pub mod import;
 pub mod query;
 pub mod schema;
 pub mod store;

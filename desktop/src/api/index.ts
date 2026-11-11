@@ -6,6 +6,7 @@ import type {
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
   CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll,
+  ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -122,6 +123,11 @@ export const api = {
   wsDuplicates: (entity: string, fields: Record<string, unknown>, except?: string) => call<CrmRecord[]>("ws_duplicates", { entity, fields, except: except ?? null }),
   wsConvertLead: (leadId: string, options?: { createDeal?: boolean; pipelineId?: string | null; ownerId?: string | null }) => call<WsConverted>("ws_convert_lead", { leadId, options: options ?? null }),
   wsCollections: () => call<WsCollection[]>("ws_collections"),
+  wsImportRead: (name: string, data: string) => call<ImportFile>("ws_import_read", { name, data }),
+  wsImportPreview: (name: string, data: string, options: ImportOptions) => call<ImportPreview>("ws_import_preview", { name, data, options }),
+  wsImportRun: (name: string, data: string, options: ImportOptions) => call<ImportResult>("ws_import_run", { name, data, options }),
+  wsImportHistory: () => call<ImportBatch[]>("ws_import_history"),
+  wsImportUndo: (batch: string) => call<{ removed: number; failed?: number; alreadyUndone?: boolean }>("ws_import_undo", { batch }),
   wsCollectionItems: (id: string, query?: WsQuery) => call<{ collection: WsCollection; entity: string; items: CrmRecord[]; total: number }>("ws_collection_items", { id, query: query ?? null }),
   wsReorderCollections: (list: string[]) => call("ws_reorder_collections", ids(list)),
   wsHideCollection: (id: string, hidden: boolean) => call("ws_hide_collection", { id, hidden }),
