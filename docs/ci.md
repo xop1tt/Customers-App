@@ -15,6 +15,7 @@
 | `release.yml` | вручную или по тегу `v*` (кроме `v*-*`) | Единственный workflow, который публикует Stable-релиз; задача `publish` ждёт подтверждения в окружении `production`. PR и Dependabot его не запускают. |
 | `search.yml`, `diagnose.yml`, `wiki.yml` | вручную / push в `main` | Прежние процессы, не менялись. |
 | `cloud-backup.yml` | каждый день 02:23 UTC, вручную | Снимок облачной базы (`supabase/cloud-backup/backup.py`), проверка восстановления на чистом PostgreSQL 17 со сверкой строк, шифрование gpg, артефакт на 90 дней. Нужны секреты `SUPABASE_DB_URL`, `BACKUP_PASSPHRASE` (docs/BACKUP.md). Только читает базу. |
+| `migrate.yml` | только вручную из `main` | `status` / `push` / `register` миграций рабочего проекта: стенд и `test_migrations.py`, затем подтверждение в окружении `database` и Supabase CLI (`supabase/scripts/migrate.sh`). docs/MIGRATIONS.md. |
 
 **Почему «gate».** У `desktop.yml` и `cloud.yml` нет фильтра путей на уровне workflow: его заменяет задача `changes`. Если PR не трогает `desktop/` (например, обновление pip), тяжёлые задачи пропускаются, а `Desktop gate` всё равно сообщает «успех». Иначе обязательная проверка висела бы в ожидании и PR нельзя было бы слить. Пропущенные матричные задачи отображаются с неразвёрнутым именем, поэтому обязательными делают именно gate, а не отдельные задачи матрицы.
 

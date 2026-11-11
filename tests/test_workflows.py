@@ -303,3 +303,18 @@ def test_cloud_backup_is_daily_read_only_and_encrypts_before_storing():
     # Пароль шифрования не попадает в командную строку gpg.
     assert "--passphrase \"" not in text and "--passphrase $" not in text
 
+
+
+def test_migrations_are_applied_only_manually_after_the_stand_and_approval():
+    wf = load("migrate.yml")
+    on = wf[True]
+    assert list(on) == ["workflow_dispatch"], "миграции рабочего проекта — только ручной запуск"
+    assert on["workflow_dispatch"]["inputs"]["action"]["options"] == ["status", "push", "register"]
+    assert wf["concurrency"]["cancel-in-progress"] is False
+    stand, apply = wf["jobs"]["stand"], wf["jobs"]["apply"]
+    assert stand["if"] == "github.ref == 'refs/heads/main'"
+    assert "secrets." not in str(stand), "стенд работает без секретов"
+    runs = " ".join(s.get("run", "") for s in stand["steps"])
+    assert "supabase/tests/stack/up.sh" in runs and "test_migrations.py" in runs
+    assert apply["needs"] == "stand" and apply["environment"] == "database"
+    assert "supabase/scripts/migrate.sh" in " ".join(s.get("run", "") for s in apply["steps"])
