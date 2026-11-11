@@ -32,7 +32,13 @@ export function TopBar({ narrow }: { narrow: boolean }) {
 
   return (
     <header className="topbar">
-      {(!device.navOpen || narrow) && <IconButton icon="sidebar" tip="Показать панель" onClick={() => (narrow ? setState({ navPeek: !navPeek }) : void patchDevice({ navOpen: true }))} />}
+      {/* Кнопка левой панели всегда на левом краю строки: свернуть или показать. */}
+      <IconButton
+        icon="sidebar"
+        tip={(narrow ? navPeek : device.navOpen) ? "Свернуть панель" : "Показать панель"}
+        aria-label={(narrow ? navPeek : device.navOpen) ? "Свернуть панель" : "Показать панель"}
+        onClick={() => (narrow ? setState({ navPeek: !navPeek }) : void patchDevice({ navOpen: !device.navOpen }))}
+      />
       <div className="topbar-title">
         <span className="topbar-emoji" aria-hidden="true">{collection?.emoji || SECTIONS[section].emoji}</span>
         <h2 className="ellipsis">{collection ? collection.name : SECTIONS[section].title}{sourceTitleKey && section === "all" ? <span className="muted"> · {sourceTitle(sourceTitleKey)}</span> : null}</h2>

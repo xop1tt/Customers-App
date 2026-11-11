@@ -8,7 +8,7 @@ import { can, cellText, type EntityMeta, type Lookup } from "../../lib/crm";
 import { defaultChoice, differences, mergeValues, union, type MergeChoice, type MergeField } from "../../lib/merge";
 import { Button, Notice, Segmented, Spinner, TextInput } from "../../ui/kit";
 import { Dialog } from "../../ui/overlay";
-import { attempt, openRecord, toast, useStore } from "../../state/store";
+import { attempt, openRecord, toast, useStore, NONE } from "../../state/store";
 import { useWsQuery } from "./useCrm";
 
 /** Объединять могут роли, которым можно менять и удалять любые записи. */
@@ -133,7 +133,7 @@ function Compare({ e, record, other, lk, onBack, onClose }: { e: EntityMeta; rec
 
 /** Заметка в карточке оставшейся записи: «Объединено с …» и кнопка отмены. */
 export function MergeUndo({ table, id }: { table: string; id: string }) {
-  const perms = useStore((s) => s.ws?.permissions ?? []);
+  const perms = useStore((s) => s.ws?.permissions ?? NONE);
   const { data } = useWsQuery<CrmMergeInfo | null>(() => api.wsMergeLast(), [table, id]);
   if (!data || data.keep !== id || data.entity !== table || !canMerge(perms)) return null;
   const undo = async () => {

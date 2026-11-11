@@ -97,6 +97,9 @@ export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<Ap
   state = { ...state, ...p };
   subs.forEach((f) => f());
 }
+/** Пустой массив с постоянной ссылкой: селектор `s.ws?.x ?? []` без Workspace иначе возвращал бы новый массив при каждом вызове (бесконечная перерисовка, React #185). */
+export const NONE: never[] = [];
+
 export function useStore<T>(selector: (s: AppState) => T): T {
   return useSyncExternalStore(
     (f) => { subs.add(f); return () => { subs.delete(f); }; },
@@ -275,6 +278,8 @@ const lastIn = new Map<ModuleId, { section: SectionId; collectionId: string | nu
 /** Открыть модуль рейки: последний раздел в нём или его главный раздел. */
 export function openModule(id: ModuleId) {
   const cur = state.section;
+  // «Настроить панель» у каждой вкладки своя: при смене вкладки режим настройки закрывается.
+  if (moduleOf(cur) !== id && state.customizeNav) setState({ customizeNav: false });
   lastIn.set(moduleOf(cur), { section: cur, collectionId: state.collectionId });
   if (moduleOf(cur) === id) return;
   const last = lastIn.get(id);

@@ -12,7 +12,7 @@ import { ENTITIES } from "../../lib/crm";
 import { Button, EmptyState, Field, IconButton, Notice, Select, Spinner, Switch, Tag, TextArea, TextInput } from "../../ui/kit";
 import { Icon } from "../../ui/icons";
 import { Dialog, confirmDialog } from "../../ui/overlay";
-import { attempt, toast, useStore } from "../../state/store";
+import { attempt, toast, useStore, NONE } from "../../state/store";
 import { CATEGORY_TEXT, EVENT_TEXT, SCOPE_TEXT, type MarketPage, closeMarket, openMarket, refreshMarketInstalled } from "../../state/market";
 import { openLink } from "../../state/actions";
 
@@ -158,7 +158,7 @@ function AppTile({ app, onOpen }: { app: MarketApp; onOpen: () => void }) {
 // ---------------------------------------------------------------- страница интеграции
 
 function AppPage({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
-  const perms = useStore((s) => s.ws?.permissions ?? []);
+  const perms = useStore((s) => s.ws?.permissions ?? NONE);
   const remote = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.remote ?? false);
   const wsName = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.name ?? "");
   const [app, setApp] = useState<MarketApp | null>(null);

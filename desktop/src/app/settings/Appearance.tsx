@@ -2,7 +2,8 @@ import { useState } from "react";
 import { ACCENTS, DEFAULT_ACCENT, isHex } from "../../lib/theme";
 import { clampThreshold, explanation } from "../../lib/powerPolicy";
 import { Button, Group, Notice, NumberInput, Select, SettingRow, Switch, TextInput } from "../../ui/kit";
-import { patchDevice, setState, useStore } from "../../state/store";
+import { getState, patchDevice, setState, useStore } from "../../state/store";
+import { moduleOf } from "../../lib/modules";
 
 const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2].map((v) => ({ value: v, label: `${Math.round(v * 100)}%` }));
 
@@ -50,7 +51,7 @@ export function Appearance() {
         <SettingRow title="Числа у разделов"><Switch checked={d.sidebarCounts} onChange={(v) => void patchDevice({ sidebarCounts: v })} /></SettingRow>
         <SettingRow title="Список источников"><Switch checked={d.sidebarSources} onChange={(v) => void patchDevice({ sidebarSources: v })} /></SettingRow>
         <SettingRow title="Показ при наведении" hint="Свёрнутая панель выезжает, когда курсор у левого края окна."><Switch checked={d.sidebarHover} onChange={(v) => void patchDevice({ sidebarHover: v })} /></SettingRow>
-        <SettingRow title="Порядок и видимость разделов"><Button onClick={() => setState({ settings: null, customizeNav: true })}>Настроить панель</Button></SettingRow>
+        <SettingRow title="Порядок и видимость разделов"><Button onClick={() => { const m = moduleOf(getState().section); setState({ settings: null, customizeNav: true, ...(m === "search" || m === "crm" ? {} : { section: "home" as const }) }); }}>Настроить панель</Button></SettingRow>
       </Group>
 
     </>

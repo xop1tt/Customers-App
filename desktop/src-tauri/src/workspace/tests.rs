@@ -379,3 +379,37 @@ fn attachments_keep_metadata_in_the_card_and_files_in_the_database() {
     s.mark_blob_uploaded(&id(&a)).unwrap();
     assert!(s.blobs_to_upload().is_empty());
 }
+
+#[test]
+fn double_seed_is_cleaned_without_touching_deals() {
+    let (_d, s) = open();
+    s.seed_local().unwrap();
+    // Гонка двух открытий базы: шаблон засеян второй раз.
+    s.conn().execute("DELETE FROM local_meta WHERE key='seeded'", []).unwrap();
+    s.seed_local().unwrap();
+    assert_eq!(s.list("collections", &Query::default()).unwrap().len(), 14);
+    assert_eq!(s.list("pipelines", &Query::default()).unwrap().len(), 2);
+    s.dedupe_local_seed().unwrap();
+    assert_eq!(s.list("collections", &Query::default()).unwrap().len(), 7);
+    let pipes = s.list("pipelines", &Query::default()).unwrap();
+    assert_eq!((pipes.len(), pipes.iter().filter(|p| p["is_default"] == true).count()), (1, 1));
+    assert_eq!(s.list("pipeline_stages", &Query::default()).unwrap().len(), 7);
+    // Повторный вызов ничего не меняет.
+    s.dedupe_local_seed().unwrap();
+    assert_eq!(s.list("collections", &Query::default()).unwrap().len(), 7);
+}
+
+#[test]
+fn second_pipeline_with_deals_is_kept() {
+    let (_d, s) = open();
+    s.seed_local().unwrap();
+    s.conn().execute("DELETE FROM local_meta WHERE key='seeded'", []).unwrap();
+    s.seed_local().unwrap();
+    let pipes = s.list("pipelines", &Query::default()).unwrap();
+    let second = pipes.iter().max_by_key(|p| p["created_at"].as_str().map(String::from)).unwrap().clone();
+    let stages = s.list("pipeline_stages", &Query::default()).unwrap();
+    let st = stages.iter().find(|x| x["pipeline_id"] == second["id"] && x["kind"] == "open").unwrap();
+    s.save("deals", None, &m(json!({"title": "Живая", "pipeline_id": second["id"], "stage_id": st["id"]}))).unwrap();
+    s.dedupe_local_seed().unwrap();
+    assert_eq!(s.list("pipelines", &Query::default()).unwrap().len(), 2, "воронку со сделкой не удаляем");
+}

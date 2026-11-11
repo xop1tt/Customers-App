@@ -33,6 +33,8 @@ pub struct Session {
     pub sync: Mutex<SyncState>,
     /// Customers 2.0: выбранный Workspace и его база.
     pub workspace: Mutex<super::workspace::CrmState>,
+    /// Открытие базы Workspace идёт по одному: параллельные команды при запуске иначе открывали бы её дважды и дважды засевали шаблон.
+    pub ws_open: Mutex<()>,
     pub(crate) tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -310,6 +312,7 @@ impl Core {
             search: Mutex::new(SearchState::default()),
             sync: Mutex::new(SyncState::new()),
             workspace: Mutex::default(),
+            ws_open: Mutex::new(()),
             tasks: Mutex::new(vec![]),
         });
         *self.current.lock().unwrap() = Some(session.clone());
