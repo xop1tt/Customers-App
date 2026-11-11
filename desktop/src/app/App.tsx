@@ -29,6 +29,7 @@ import { useViewportWidth } from "../state/hooks";
 import { CollectionPage } from "./crm/CollectionPage";
 import { ModuleRail, RAIL_W } from "./ModuleRail";
 import { DealBoard } from "./crm/DealBoard";
+import { ReportsPage } from "./crm/ReportsPage";
 import { TodayPage } from "./crm/TodayPage";
 import { CrmCard } from "./crm/CrmCard";
 import { CollectionDialog } from "./crm/Collections";
@@ -236,7 +237,7 @@ function Shell() {
   useChatPolling();
   useMarketInstalled();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
-  const crm = section === "collection" || section === "today" || section === "deals";
+  const crm = section === "collection" || section === "today" || section === "deals" || section === "reports";
   const showInsp = (lead && device.inspectorShown && (!floatInsp || selected === 1)) || (crm && !!crmRecord);
   const InspectorBody = crm ? CrmCard : Inspector;
   const inspLabel = crm ? "Карточка записи" : "Сведения о лиде";
@@ -267,6 +268,7 @@ function Shell() {
           {section === "collection" && <CollectionPage />}
           {section === "today" && <TodayPage />}
           {section === "deals" && <DealBoard />}
+          {section === "reports" && <ReportsPage />}
           {section === "profile" && <ProfilePage />}
           {section === "people" && <PeoplePage />}
           {section === "chat" && <ChatPage />}

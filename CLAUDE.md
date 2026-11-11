@@ -76,7 +76,7 @@ Maksim (не программист); код пишет Claude Code. Отвеч�
 * Дизайн Flat Dark: непрозрачные плоские поверхности, без стекла, размытия и градиентов. Цвета и размеры — токены
   `styles/tokens.css`. Тексты интерфейса — русские, английский через `lib/i18n.en.ts` (ключ — русская строка).
 * Существенные изменения интерфейса — сначала макеты на согласование (пакет C1).
-* Демо в браузере: `npm run dev`, флаги URL `?team ?auth ?welcome ?cloud ?local ?update ?whatsnew ?platform=windows`.
+* Демо в браузере: `npm run dev`, флаги URL `?team ?auth ?welcome ?cloud ?local ?update ?whatsnew ?reports ?platform=windows`.
 
 ## 8. Релизы
 

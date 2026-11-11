@@ -301,6 +301,19 @@ impl WorkspaceStore {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// История этапов всех неудалённых сделок (для отчётов воронки), по времени.
+    pub fn stage_history_all(&self) -> AppResult<Vec<Value>> {
+        let mut st = self.conn.prepare(
+            "SELECT h.deal_id, h.from_stage_id, h.to_stage_id, h.changed_at FROM deal_stage_history h
+             JOIN deals d ON d.id = h.deal_id WHERE d.deleted_at IS NULL ORDER BY h.changed_at, h.server_seq",
+        )?;
+        let rows = st.query_map([], |r| {
+            Ok(json!({"deal_id": r.get::<_, String>(0)?, "from_stage_id": r.get::<_, Option<String>>(1)?,
+                      "to_stage_id": r.get::<_, String>(2)?, "changed_at": r.get::<_, String>(3)?}))
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// Похожие записи по ключам дедупликации («Похоже на: …»).
     pub fn duplicates(&self, table: &str, keys: &[String], except: Option<&str>) -> AppResult<Vec<Value>> {
         let e = schema::entity(table).filter(|e| e.has("dedupe_keys")).ok_or_else(|| err("Дедупликация есть только у компаний и контактов."))?;

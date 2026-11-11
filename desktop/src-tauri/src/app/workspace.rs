@@ -476,6 +476,11 @@ impl Core {
         Ok(out)
     }
 
+    /// История этапов всех сделок Workspace — для отчётов (только чтение).
+    pub fn ws_stage_history(&self) -> CmdResult<Value> {
+        self.with_crm(|st| Ok(json!(st.stage_history_all()?)))
+    }
+
     pub fn ws_import_history(&self) -> CmdResult<Value> {
         self.with_crm(crate::workspace::import::history)
     }

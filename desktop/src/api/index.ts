@@ -6,7 +6,7 @@ import type {
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
   CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll,
-  ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult,
+  ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -127,6 +127,7 @@ export const api = {
   wsImportPreview: (name: string, data: string, options: ImportOptions) => call<ImportPreview>("ws_import_preview", { name, data, options }),
   wsImportRun: (name: string, data: string, options: ImportOptions) => call<ImportResult>("ws_import_run", { name, data, options }),
   wsImportHistory: () => call<ImportBatch[]>("ws_import_history"),
+  wsStageHistory: () => call<StageChange[]>("ws_stage_history"),
   wsImportUndo: (batch: string) => call<{ removed: number; failed?: number; alreadyUndone?: boolean }>("ws_import_undo", { batch }),
   wsCollectionItems: (id: string, query?: WsQuery) => call<{ collection: WsCollection; entity: string; items: CrmRecord[]; total: number }>("ws_collection_items", { id, query: query ?? null }),
   wsReorderCollections: (list: string[]) => call("ws_reorder_collections", ids(list)),

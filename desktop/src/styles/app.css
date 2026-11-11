@@ -520,6 +520,26 @@ button.pick-row:hover { background: var(--bg-hover); }
 .today-open.row { flex-direction: row; align-items: center; gap: 10px; }
 .today-empty { padding: 12px 16px; margin: 0; }
 
+/* Отчёты (этап 2) */
+.report-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; padding: 16px 16px 0; }
+.report-stat { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--r-md); min-width: 0; }
+.report-stat b { font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; padding: 16px; align-content: start; }
+.report-wide { grid-column: 1 / -1; }
+.funnel, .report-list { list-style: none; margin: 0; padding: 8px 0; }
+.funnel-row, .report-reason { display: grid; grid-template-columns: minmax(90px, 200px) 1fr 56px 48px; align-items: center; gap: 12px; padding: 6px 16px; }
+.report-reason { grid-template-columns: minmax(90px, 200px) 1fr 40px; }
+.funnel-track { height: 10px; background: var(--bg-hover); border-radius: var(--r-sm); overflow: hidden; }
+.funnel-bar { display: block; height: 100%; background: var(--accent); border-radius: var(--r-sm); }
+.funnel-row.won .funnel-bar { background: var(--green); }
+.funnel-bar.lost { background: var(--orange); }
+.funnel-row .num, .report-reason .num { text-align: right; }
+.report-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.report-table th, .report-table td { padding: 8px 16px; border-top: 1px solid var(--line); text-align: left; font-weight: 400; }
+.report-table th { color: var(--text-2); font-size: 12px; border-top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.report-table th:first-child, .report-table td:first-child { width: 40%; }
+.report-table .num { text-align: right; }
+
 /* Рейка модулей (C2) */
 .rail { flex: none; height: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0 10px; background: var(--bg-rail); border-right: 1px solid var(--line); box-sizing: border-box; }
 .rail-brand { display: flex; margin-bottom: 8px; }

@@ -42,6 +42,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::ws_import_preview,
         commands::ws_import_run,
         commands::ws_import_history,
+        commands::ws_stage_history,
         commands::ws_import_undo,
         commands::ws_collections,
         commands::ws_roles,

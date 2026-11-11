@@ -82,6 +82,7 @@ function seed(id: string, demo: boolean): Map<string, Row[]> {
   const d1 = row(id, { title: "Сайт для «Северного ветра»", pipeline_id: pipe.id, stage_id: stages[2]!.id, amount: 180000, currency: "RUB", expected_close_date: week, company_id: c1.id, status: "open", owner_id: ME, closed_at: null, lost_reason: null });
   const d2 = row(id, { title: "Меню и брендинг", pipeline_id: pipe.id, stage_id: stages[5]!.id, amount: 45000, currency: "RUB", company_id: c2.id, status: "won", closed_at: now(), owner_id: ME, lost_reason: null });
   t.get("deals")!.push(d1, d2);
+  if (demoParams.has("reports")) seedReports(id, t);
   t.get("tasks")!.push(
     row(id, { title: "Позвонить Ольге по смете", status: "todo", priority: "high", due_at: new Date(Date.now() - 3600_000).toISOString(), assignee_id: ME, entity_type: "deal", entity_id: d1.id, completed_at: null }),
     row(id, { title: "Отправить коммерческое предложение", status: "todo", priority: "normal", due_at: new Date(Date.now() + 86400_000).toISOString(), assignee_id: ME, entity_type: "company", entity_id: c1.id, completed_at: null }),
@@ -230,6 +231,37 @@ function save(ws: Ws, name: string, id: string | null, fields: Record<string, un
   return r;
 }
 
+/** Демо для экрана «Отчёты» (флаг ?reports): сделки за два месяца с историей этапов, причинами проигрыша и разными ответственными. */
+function seedReports(id: string, t: Map<string, Row[]>) {
+  const stages = t.get("pipeline_stages")!;
+  const open = stages.filter((x) => x.kind === "open");
+  const won = stages.find((x) => x.kind === "won")!;
+  const lost = stages.find((x) => x.kind === "lost")!;
+  const owners = [ME, "00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000003"];
+  const reasons = ["Дорого", "Выбрали конкурента", "дорого", "Нет бюджета", ""];
+  const day = 86400_000;
+  for (let i = 0; i < 18; i++) {
+    const created = Date.now() - (2 + ((i * 7) % 55)) * day;
+    const outcome = i % 3 === 0 ? "won" : i % 4 === 1 ? "lost" : "open";
+    const depth = outcome === "won" ? open.length : 1 + (i % open.length);
+    const path = open.slice(0, depth).map((x) => x.id as string);
+    const final = outcome === "won" ? won : outcome === "lost" ? lost : open[depth - 1]!;
+    if (outcome !== "open") path.push(final.id as string);
+    const closed = outcome === "open" ? null : new Date(created + (5 + (i % 9) * 2) * day).toISOString();
+    const d = row(id, { title: `Демо-сделка ${i + 1}`, pipeline_id: final.pipeline_id, stage_id: final.id, amount: 20000 + ((i * 37000) % 300000), currency: "RUB",
+      status: outcome, closed_at: closed, owner_id: owners[(i + (i >> 1)) % owners.length], lost_reason: outcome === "lost" ? reasons[i % reasons.length] || null : null, company_id: null });
+    d.created_at = new Date(created).toISOString();
+    t.get("deals")!.push(d);
+    const end = closed ? Date.parse(closed) : Date.now() - day;
+    path.forEach((to, k) => {
+      const at = new Date(created + ((end - created) * k) / Math.max(path.length - 1, 1)).toISOString();
+      const h = history.get(d.id) ?? [];
+      h.push({ from_stage_id: k ? path[k - 1]! : null, to_stage_id: to, changed_by: ME, changed_at: at });
+      history.set(d.id, h);
+    });
+  }
+}
+
 const history = new Map<string, { from_stage_id: string | null; to_stage_id: string; changed_by: string; changed_at: string }[]>();
 function addHistory(_ws: Ws, deal: string, from: string | null, to: string) {
   const h = history.get(deal) ?? [];
@@ -310,6 +342,11 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       return state();
     case "ws_list": return list(ws, s("entity"), (args.query as WsQuery) ?? {});
     case "ws_card": return card(ws, s("entity"), s("id"));
+    case "ws_stage_history": {
+      const alive = new Set(table(ws, "deals").filter((d) => !d.deleted_at).map((d) => d.id));
+      return [...history.entries()].filter(([deal]) => alive.has(deal)).flatMap(([deal_id, h]) => h.map((x) => ({ deal_id, from_stage_id: x.from_stage_id, to_stage_id: x.to_stage_id, changed_at: x.changed_at })))
+        .sort((a, b) => a.changed_at.localeCompare(b.changed_at));
+    }
     case "ws_save": return save(ws, s("entity"), (args.id as string) ?? null, args.fields as Record<string, unknown>);
     case "ws_delete": return save(ws, s("entity"), s("id"), { deleted_at: now() });
     case "ws_restore": return save(ws, s("entity"), s("id"), { deleted_at: null });
