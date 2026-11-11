@@ -167,7 +167,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
   const status = typeof r.status === "string" ? (ENUMS[`${e.table}.status`]?.[r.status] ?? r.status) : null;
 
   const remove = async () => {
-    if (!(await confirmDialog({ title: `Удалить: ${e.title(r)}?`, message: "Запись попадёт в корзину Workspace, её можно восстановить.", confirm: "Удалить", danger: true }))) return;
+    if (!(await confirmDialog({ title: `Удалить: ${e.title(r)}?`, message: "Запись попадёт в корзину, её можно восстановить.", confirm: "Удалить", danger: true }))) return;
     await attempt(() => api.wsDelete(e.table, id));
   };
 

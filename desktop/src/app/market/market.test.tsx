@@ -1,4 +1,4 @@
-// Маркетплейс в демо-режиме облачного Workspace (?team): каталог, установка, кнопки в карточке, подача и модерация.
+// Маркетплейс в демо-режиме облачного рабочего пространства (?team): каталог, установка, кнопки в карточке, подача и модерация.
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -53,7 +53,7 @@ describe("маркетплейс", () => {
     const dlg = await openMarketFromMenu();
     fireEvent.click(await within(dlg).findByText("Звонилка"));
     expect(await within(dlg).findByRole("button", { name: "Установить" })).toBeDisabled();
-    expect(within(dlg).getByText("Устанавливает владелец или администратор Workspace")).toBeInTheDocument();
+    expect(within(dlg).getByText("Устанавливает владелец или администратор рабочего пространства")).toBeInTheDocument();
   });
 
   it("установка с показом прав, кнопка интеграции в карточке, выключение и удаление", async () => {

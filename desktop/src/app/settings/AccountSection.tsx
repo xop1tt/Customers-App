@@ -190,7 +190,7 @@ function ImportDialog({ onClose }: { onClose: () => void }) {
     if (r) { toast(r, "success"); onClose(); }
   };
   return (
-    <Dialog title="Перенести локальный аккаунт" onClose={onClose} width={440} footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" busy={busy} disabled={!name || !password} onClick={() => void go()}>Перенести</Button></>}>
+    <Dialog title="Перенести локальный аккаунт" onClose={onClose} width={440} footer={<><Button variant="ghost" onClick={onClose}>Отмена</Button><Button variant="primary" busy={busy} disabled={!name || !password} onClick={() => void go()}>Перенести</Button></>}>
       {names.length === 0 ? <p className="muted">На этом компьютере нет локальных аккаунтов.</p> : (
         <div className="col" style={{ gap: 12 }}>
           <Field label="Локальный аккаунт"><TextInput value={name} onChange={setName} list="local-accounts" /></Field>
@@ -214,7 +214,7 @@ function DeleteDialog({ onClose }: { onClose: () => void }) {
     if (r) { toast(r, "success"); onClose(); }
   };
   return (
-    <Dialog title="Удалить облачный аккаунт" onClose={onClose} width={440} footer={<><Button onClick={onClose}>Отмена</Button><Button variant="danger" busy={busy} disabled={!password} onClick={() => void go()}>Удалить…</Button></>}>
+    <Dialog title="Удалить облачный аккаунт" onClose={onClose} width={440} footer={<><Button variant="ghost" onClick={onClose}>Отмена</Button><Button variant="danger" busy={busy} disabled={!password} onClick={() => void go()}>Удалить…</Button></>}>
       <div className="col" style={{ gap: 12 }}>
         <Notice tone="warn">Облачные лиды, исключения и настройки будут стёрты. На других устройствах данные тоже исчезнут после синхронизации.</Notice>
         <Field label="Пароль от аккаунта"><PasswordInput value={password} onChange={setPassword} /></Field>

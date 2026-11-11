@@ -71,7 +71,7 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
     ],
   },
   crm_lead: {
-    type: "crm_lead", table: "crm_leads", one: "Лид", create: "Новый лид", many: "Лиды CRM", emoji: "🌱",
+    type: "crm_lead", table: "crm_leads", one: "Заявка", create: "Новая заявка", many: "Заявки", emoji: "🌱",
     title: (r) => text(r, "title") || "Без названия",
     columns: ["title", "company_name", "status", "source", "owner_id", "created_at"],
     fields: [

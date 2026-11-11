@@ -35,7 +35,7 @@ export function DealBoard() {
   const pipe = pipes.find((p) => p.id === pipelineId) ?? pipes.find((p) => p.is_default) ?? pipes[0];
   if (error) return <div className="page"><EmptyState icon="alert" title="Сделки не загрузились">{error}</EmptyState></div>;
   if (!deals || !lk.stages.size) return <div className="page"><div className="boot"><Spinner size={18} /></div></div>;
-  if (!pipe) return <div className="page"><EmptyState icon="list" title="Нет воронки">Создайте воронку в настройках Workspace.</EmptyState></div>;
+  if (!pipe) return <div className="page"><EmptyState icon="list" title="Нет воронки">Создайте воронку в настройках рабочего пространства.</EmptyState></div>;
 
   const perms = ws?.permissions ?? [];
   const me = ws?.me;

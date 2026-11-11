@@ -129,7 +129,7 @@ describe("интерфейс CRM", () => {
     expect(within(card).getByText("Ольга Смирнова")).toBeInTheDocument();
   });
 
-  it("аватары участников видны только в облачном Workspace из нескольких человек", async () => {
+  it("аватары участников видны только в облачном рабочем пространстве из нескольких человек", async () => {
     render(<App />);
     await screen.findByLabelText("Навигация");
     await waitFor(() => expect(getState().ws).not.toBeNull());
@@ -174,7 +174,7 @@ describe("редакторы воронок и ролей (демо-ядро)", 
     await expect(api.wsDeleteStage(to.id, to.id)).rejects.toBeDefined();
   });
 
-  it("локальный Workspace не показывает роли", async () => {
+  it("локальное рабочее пространство не показывает роли", async () => {
     expect(await api.wsRoles()).toEqual({ roles: [], catalog: [] });
   });
 });

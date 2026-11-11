@@ -87,7 +87,7 @@ function Compare({ e, record, other, lk, onBack, onClose }: { e: EntityMeta; rec
       footer={<>
         <Button variant="ghost" onClick={onBack}>Назад</Button>
         <span className="grow" />
-        <Button onClick={onClose}>Отмена</Button>
+        <Button variant="ghost" onClick={onClose}>Отмена</Button>
         <Button variant="primary" busy={busy} onClick={() => void run()}>Объединить</Button>
       </>}>
       <div className="col" style={{ gap: 14 }}>

@@ -36,7 +36,7 @@ function WorkspaceDialogBody() {
   if (!ws) {
     return (
       <Dialog title="Рабочее пространство" onClose={close} width={520}>
-        <Notice tone="error">База Workspace не открылась. Проверьте журнал ошибок в настройках «Отчёты».</Notice>
+        <Notice tone="error">База рабочего пространства не открылась. Проверьте журнал ошибок в настройках «Отчёты».</Notice>
       </Dialog>
     );
   }
@@ -46,7 +46,7 @@ function WorkspaceDialogBody() {
 
   return (
     <Dialog title="Рабочее пространство" onClose={close} width={600} className="ws-dialog">
-      <Group title="Workspace" note={ws.isCloud ? "Данные CRM общие для участников и синхронизируются через облако." : "Локальная учётная запись: Workspace хранится только на этом компьютере. Совместная работа — в облачной учётной записи."}>
+      <Group title="Рабочее пространство" note={ws.isCloud ? "Данные CRM общие для участников и синхронизируются через облако." : "Локальная учётная запись: рабочее пространство хранится только на этом компьютере. Совместная работа — в облачной учётной записи."}>
         <SettingRow title="Текущий">
           <Select value={ws.active ?? ""} width={260} onChange={(id) => void done(api.wsSwitch(id))} options={ws.workspaces.map((w) => ({ value: w.id, label: w.name, hint: w.roleName }))} />
         </SettingRow>
@@ -60,9 +60,9 @@ function WorkspaceDialogBody() {
             )}
           </SettingRow>
         )}
-        <SettingRow title="Новый Workspace" hint="Например, для отдельной команды или компании. Вы станете владельцем.">
+        <SettingRow title="Новое рабочее пространство" hint="Например, для отдельной команды или компании. Вы станете владельцем.">
           <div className="row" style={{ gap: 6 }}>
-            <TextInput value={name} onChange={setName} maxLength={120} placeholder="Название" aria-label="Название нового Workspace" />
+            <TextInput value={name} onChange={setName} maxLength={120} placeholder="Название" aria-label="Название нового рабочего пространства" />
             <Button small icon="plus" disabled={!name.trim()} onClick={() => void done(api.wsCreateWorkspace(name)).then((r) => { if (r) setName(""); })}>Создать</Button>
           </div>
         </SettingRow>
@@ -70,7 +70,7 @@ function WorkspaceDialogBody() {
           <SettingRow title="Приглашение" hint="Вставьте ссылку или код из приглашения.">
             <div className="row" style={{ gap: 6 }}>
               <TextInput value={token} onChange={setToken} placeholder="Ссылка или код из приглашения" aria-label="Код приглашения" />
-              <Button small disabled={!token.trim()} onClick={() => void done(api.wsAcceptInvitation(token)).then((r) => { if (r) { setToken(""); toast("Вы присоединились к Workspace", "success"); } })}>Принять</Button>
+              <Button small disabled={!token.trim()} onClick={() => void done(api.wsAcceptInvitation(token)).then((r) => { if (r) { setToken(""); toast("Вы присоединились к рабочему пространству", "success"); } })}>Принять</Button>
             </div>
           </SettingRow>
         )}
@@ -82,9 +82,9 @@ function WorkspaceDialogBody() {
             <Button small icon="edit" onClick={() => setEditor("pipelines")}>Настроить воронки</Button>
           </SettingRow>
           {ws.isCloud && !current.remote && (
-            <SettingRow title="Загрузить в облако" hint="Создаст облачный Workspace с копией записей этого локального. Локальный останется как есть; повторная загрузка не плодит дубли.">
+            <SettingRow title="Загрузить в облако" hint="Создаст облачное рабочее пространство с копией записей этого локального. Локальный останется как есть; повторная загрузка не плодит дубли.">
               <Button small icon="upload" onClick={async () => {
-                if (!(await confirmDialog({ title: `Загрузить «${current.name}» в облако?`, message: "Записи, задачи и заметки станут доступны участникам нового облачного Workspace.", confirm: "Загрузить" }))) return;
+                if (!(await confirmDialog({ title: `Загрузить «${current.name}» в облако?`, message: "Записи, задачи и заметки станут доступны участникам нового облачного рабочего пространства.", confirm: "Загрузить" }))) return;
                 const r = await attempt(() => api.wsUploadLocal());
                 await refreshWorkspace();
                 if (r) toast(`Загружено записей: ${integer(r.copied)}${r.skipped ? `, пропущено: ${integer(r.skipped)} (см. журнал ошибок)` : ""}`, r.skipped ? "error" : "success");
@@ -110,7 +110,7 @@ function WorkspaceDialogBody() {
 
       {ws.isCloud && current && !current.personal && (
         <Group title="Выход">
-          <SettingRow title="Покинуть Workspace" hint="Локальная копия данных этого Workspace будет удалена с устройства. Владелец не может выйти, пока не передаст владение.">
+          <SettingRow title="Покинуть рабочее пространство" hint="Локальная копия данных этого рабочего пространства будет удалена с устройства. Владелец не может выйти, пока не передаст владение.">
             <Button small variant="danger" onClick={async () => {
               if (await confirmDialog({ title: `Покинуть «${current.name}»?`, message: "Доступ к данным пропадёт. Вернуться можно только по новому приглашению.", confirm: "Покинуть", danger: true })) void done(api.wsLeave());
             }}>Покинуть</Button>
@@ -145,8 +145,8 @@ function Members() {
                 <>
                   <Select small value={m.role} width={150} onChange={(role) => void attempt(() => api.wsSetMemberRole(m.userId, role)).then(() => refreshWorkspace())}
                     options={roleOptions.filter((r) => rankOf(r.value) < myRank)} />
-                  <IconButton icon="x" tip="Удалить из Workspace" onClick={async () => {
-                    if (await confirmDialog({ title: `Удалить ${m.displayName}?`, message: "Участник потеряет доступ к данным Workspace. Его записи останутся.", confirm: "Удалить", danger: true })) {
+                  <IconButton icon="x" tip="Удалить из рабочего пространства" onClick={async () => {
+                    if (await confirmDialog({ title: `Удалить ${m.displayName}?`, message: "Участник потеряет доступ к данным рабочего пространства. Его записи останутся.", confirm: "Удалить", danger: true })) {
                       await attempt(() => api.wsRemoveMember(m.userId));
                       await refreshWorkspace();
                     }

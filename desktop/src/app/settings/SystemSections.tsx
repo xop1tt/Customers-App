@@ -53,7 +53,7 @@ export function ReportsSection() {
 
 function TextDialog({ title, text, onClose }: { title: string; text: string; onClose: () => void }) {
   return (
-    <Dialog title={title} onClose={onClose} width={640} footer={<><Button onClick={() => void copyToClipboard(text, "Скопировано")}>Копировать</Button><Button onClick={onClose}>Закрыть</Button></>}>
+    <Dialog title={title} onClose={onClose} width={640} footer={<><Button onClick={() => void copyToClipboard(text, "Скопировано")}>Копировать</Button><Button variant="ghost" onClick={onClose}>Закрыть</Button></>}>
       <pre className="logbox selectable" style={{ maxHeight: 360 }}>{text}</pre>
     </Dialog>
   );

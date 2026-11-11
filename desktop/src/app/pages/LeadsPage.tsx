@@ -264,7 +264,7 @@ function BulkBar({ ids }: { ids: string[] }) {
       <span className="num bulk-count">Выбрано: {integer(ids.length)}</span>
       <Button small variant="subtle" icon="star" onClick={() => void setFavorite(ids, !allFav)}>{allFav ? "Убрать из избранного" : "В избранное"}</Button>
       <Button small variant="subtle" icon="archive" onClick={() => void setArchived(ids, !allArch)}>{allArch ? "Вернуть" : "В архив"}</Button>
-      <Button small variant="subtle" icon="upload" onClick={() => openExport(ids)}>Экспорт</Button>
+      <Button small variant="subtle" icon="download" onClick={() => openExport(ids)}>Экспорт</Button>
       <Button small variant="subtle" icon="ban" onClick={() => void excludeLeads(ids)}>Исключить</Button>
       <Button small variant="danger" icon="trash" onClick={() => void deleteLeads(ids)}>Удалить</Button>
       <span className="grow" />

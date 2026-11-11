@@ -42,7 +42,7 @@ export function CollectionsGroup({ customize, onOpen }: { customize: boolean; on
   };
 
   const remove = async (c: WsCollection) => {
-    if (!(await confirmDialog({ title: `Удалить коллекцию «${c.name}»?`, message: "Записи не удаляются — пропадёт только подборка. Её можно восстановить из корзины Workspace.", confirm: "Удалить", danger: true }))) return;
+    if (!(await confirmDialog({ title: `Удалить коллекцию «${c.name}»?`, message: "Записи не удаляются — пропадёт только подборка. Её можно восстановить из корзины.", confirm: "Удалить", danger: true }))) return;
     await attempt(() => api.wsDelete("collections", c.id));
   };
 
@@ -162,7 +162,7 @@ export function CollectionDialog() {
           </>
         )}
         <Field label="Кому видна" hint={share ? undefined : "Общие коллекции создают владелец, администраторы и менеджеры."}>
-          <Segmented value={visibility} onChange={(v) => share && setVisibility(v)} options={[{ value: "private", label: "Только мне" }, { value: "workspace", label: "Всем в Workspace" }]} small />
+          <Segmented value={visibility} onChange={(v) => share && setVisibility(v)} options={[{ value: "private", label: "Только мне" }, { value: "workspace", label: "Всем в рабочем пространстве" }]} small />
         </Field>
       </div>
     </Dialog>

@@ -3,7 +3,7 @@ import type { CrmRecord } from "../api/types";
 import { PIPELINE_TEMPLATES, planStages, probabilities, showChecklist, startChecklist } from "./onboarding";
 
 const stage = (id: string, position: number, kind = "open", pipeline_id = "p1"): CrmRecord => ({ id, name: id, position, kind, pipeline_id } as unknown as CrmRecord);
-// Как воронка нового Workspace: пять открытых этапов, выигрыш и проигрыш (SEED_STAGES ядра).
+// Как воронка нового рабочего пространства: пять открытых этапов, выигрыш и проигрыш (SEED_STAGES ядра).
 const seed = [stage("a", 1), stage("b", 2), stage("c", 3), stage("d", 4), stage("e", 5), stage("won", 6, "won"), stage("lost", 7, "lost"), stage("other", 1, "open", "p2")];
 const tpl = (id: string) => PIPELINE_TEMPLATES.find((t) => t.id === id)!;
 

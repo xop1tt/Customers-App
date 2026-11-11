@@ -59,7 +59,7 @@ function announce(chat: ChatPoll) {
   }
 }
 
-/** Опрос, пока открыт облачный Workspace. Смена Workspace начинает заново. */
+/** Опрос, пока открыт облачное рабочее пространство. Смена Workspace начинает заново. */
 export function useChatPolling() {
   const cloud = useStore((s) => s.ws?.isCloud ?? false);
   const active = useStore((s) => s.ws?.active ?? null);

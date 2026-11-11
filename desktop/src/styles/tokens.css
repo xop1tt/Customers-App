@@ -15,17 +15,20 @@
 
   --line: #2b2c33;
   --line-strong: #3a3c45;
+  /* Граница элементов управления (поле, список, флажок): не менее 3 : 1 к фону, WCAG 1.4.11. */
+  --line-control: #70727d;
+  --line-control-hover: #8a8c97;
 
   --text: #ececef;
   --text-2: #a3a4ad;
-  --text-3: #6e6f79;
+  --text-3: #94959f;
   --text-on-accent: #ffffff;
 
   --accent: #4c8dff;
   --accent-hover: #6aa0ff;
   --accent-soft: #1f2d49;
 
-  --red: #e5645c;
+  --red: #ef7a72;
   --red-soft: #3a2224;
   --orange: #dc9a45;
   --orange-soft: #3a2f1f;
@@ -104,21 +107,24 @@
 
   --line: #dcdfe6;
   --line-strong: #c4c8d3;
+  --line-control: #6f7380;
+  --line-control-hover: #5c5f6c;
 
   --text: #1b1c20;
   --text-2: #4f525c;
-  --text-3: #7a7d89;
+  --text-3: #5c5f6c;
 
-  --accent-hover: #3a78e8;
+  --accent: #1a56c4;
+  --accent-hover: #1646a3;
   --accent-soft: #dbe7ff;
 
-  --red: #d23f3a;
+  --red: #a9261f;
   --red-soft: #fbe3e1;
-  --orange: #b36b10;
+  --orange: #7f4c00;
   --orange-soft: #fbefd9;
-  --green: #2a8750;
+  --green: #1c6b3c;
   --green-soft: #dff2e6;
-  --purple: #7653c2;
+  --purple: #6240b0;
   --purple-soft: #ebe5f7;
 
   --line-hover: #aab0bd;

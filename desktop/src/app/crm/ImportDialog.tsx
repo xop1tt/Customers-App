@@ -94,7 +94,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
   const setField = (i: number, v: string) => setMapping((m) => m.map((x, j) => (j === i ? v || null : v && x === v ? null : x)));
 
   const footer = {
-    file: <Button onClick={onClose}>Закрыть</Button>,
+    file: <Button variant="ghost" onClick={onClose}>Закрыть</Button>,
     map: <>
       <Button onClick={() => setStep("file")}>Назад</Button>
       <Button variant="primary" busy={busy} disabled={!mapped} onClick={() => void check()}>Проверить</Button>

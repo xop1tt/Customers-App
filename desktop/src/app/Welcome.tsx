@@ -31,10 +31,10 @@ export async function applyTemplate(id: TemplateId): Promise<string | null> {
   if (!tpl) return null;
   const [pipelines, stages, deals] = await Promise.all([api.wsList("pipelines", { limit: 500 }), api.wsList("pipeline_stages", { limit: 5000 }), api.wsList("deals", { limit: 1 })]);
   // Этапы со сделками не трогаем: мастер не должен перекладывать чужие данные.
-  if (deals.total > 0 || deals.items.length > 0) return "В воронке уже есть сделки, этапы не изменены. Настроить их можно в настройках Workspace.";
+  if (deals.total > 0 || deals.items.length > 0) return "В воронке уже есть сделки, этапы не изменены. Настроить их можно в настройках рабочего пространства.";
   const alive = pipelines.items.filter((p) => !p.deleted_at);
   const pipe = alive.find((p) => p.is_default) ?? alive[0];
-  if (!pipe) return "Воронка ещё загружается. Этапы можно настроить позже в настройках Workspace.";
+  if (!pipe) return "Воронка ещё загружается. Этапы можно настроить позже в настройках рабочего пространства.";
   const plan = planStages(stages.items, pipe.id, tpl);
   for (const u of plan.update) await api.wsSave("pipeline_stages", u.id, u.patch);
   for (const c of plan.create) await api.wsSave("pipeline_stages", null, c);
@@ -149,7 +149,7 @@ function Intro() {
 }
 
 function CompanyStep({ setup, patch, cloud }: { setup: Setup; patch: (p: Partial<Setup>) => void; cloud: boolean }) {
-  // Валюта облачного Workspace задаётся на сервере: мастер меняет её только у Workspace на этом устройстве.
+  // Валюта облачного рабочего пространства задаётся на сервере: мастер меняет её только у Workspace на этом устройстве.
   const currencyHere = !(setup.team && cloud);
   return (
     <div className="col" style={{ gap: 14 }}>
@@ -161,7 +161,7 @@ function CompanyStep({ setup, patch, cloud }: { setup: Setup; patch: (p: Partial
       <p className="faint" style={{ margin: 0, fontSize: "var(--fs-sm)" }}>
         {setup.team
           ? cloud
-            ? "«С командой» создаёт облачный Workspace; пригласить коллег можно позже в разделе «Команда»."
+            ? "«С командой» создаёт облачное рабочее пространство; пригласить коллег можно позже в разделе «Команда»."
             : "Работа командой — в облачной учётной записи. Пока всё будет на этом компьютере; облако можно подключить позже в настройках учётной записи."
           : "Без облака всё работает на этом компьютере."}
       </p>
@@ -172,7 +172,7 @@ function CompanyStep({ setup, patch, cloud }: { setup: Setup; patch: (p: Partial
 function PipelineStep({ value, onChange }: { value: TemplateId; onChange: (v: TemplateId) => void }) {
   return (
     <div className="col" role="radiogroup" aria-label="Шаблон воронки" style={{ gap: 10 }}>
-      <p className="muted" style={{ margin: 0 }}>Готовые этапы под тип бизнеса. Поменять их можно потом в настройках Workspace.</p>
+      <p className="muted" style={{ margin: 0 }}>Готовые этапы под тип бизнеса. Поменять их можно потом в настройках рабочего пространства.</p>
       {PIPELINE_TEMPLATES.map((t) => (
         <button key={t.id} type="button" role="radio" aria-checked={value === t.id} className={`tpl-option${value === t.id ? " on" : ""}`} onClick={() => onChange(t.id)}>
           <span className="tpl-radio" aria-hidden="true" />

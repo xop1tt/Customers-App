@@ -93,7 +93,7 @@ export function WorkspaceAvatars() {
   const canInvite = ws.permissions.includes("invitations.manage");
   return (
     <>
-      <button ref={btn} type="button" className="ws-avatars" aria-haspopup="dialog" aria-label={`Участники: ${ws.members.length}`} data-tip="Участники Workspace"
+      <button ref={btn} type="button" className="ws-avatars" aria-haspopup="dialog" aria-label={`Участники: ${ws.members.length}`} data-tip="Участники рабочего пространства"
         onClick={() => setRect(btn.current?.getBoundingClientRect() ?? null)}>
         {shown.map((m) => <span key={m.userId} className="ws-avatar"><Avatar name={m.displayName} src={m.avatarPath} size={24} /></span>)}
         {rest > 0 && <span className="ws-avatar ws-more num">+{rest}</span>}

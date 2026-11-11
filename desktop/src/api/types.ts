@@ -612,7 +612,7 @@ export interface TeamMember {
   title: string;
   department: string;
   manager_id: string | null;
-  /** Дата прихода в компанию (ГГГГ-ММ-ДД); по умолчанию — дата входа в Workspace. */
+  /** Дата прихода в компанию (ГГГГ-ММ-ДД); по умолчанию — дата входа в рабочее пространство. */
   hired_on: string | null;
   last_seen: string | null;
   online: boolean;
@@ -688,7 +688,7 @@ export interface ChatPoll {
   fresh: ChatFresh[];
   notifications: AppNotification[];
   freshNotifications: AppNotification[];
-  /** Чат работает: облачный Workspace и сервер с миграцией чата. */
+  /** Чат работает: облачное рабочее пространство и сервер с миграцией чата. */
   available: boolean;
   /** Сервер без миграции 20261110170000. */
   missing?: boolean;

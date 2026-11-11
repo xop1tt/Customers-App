@@ -19,7 +19,7 @@ export const SECTIONS: Record<SectionId, { title: string; icon: string; emoji: s
   profile: { title: "Профиль", icon: "user", emoji: "👤" },
   people: { title: "Сотрудники", icon: "users", emoji: "👥" },
   chat: { title: "Сообщения", icon: "chat", emoji: "💬" },
-  notifications: { title: "Уведомления", icon: "bell", emoji: "🔔" },
+  notifications: { title: "Входящие", icon: "bell", emoji: "🔔" },
   today: { title: "Сегодня", icon: "check", emoji: "☀️" },
   calendar: { title: "Календарь", icon: "calendar", emoji: "📅" },
   deals: { title: "Сделки", icon: "chart", emoji: "📊" },

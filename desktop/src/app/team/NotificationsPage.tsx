@@ -25,7 +25,7 @@ export function NotificationsPage() {
     <div className="page scroll">
       <div className="profile">
         {!cloud ? (
-          <EmptyState icon="bell" title="Уведомления работают в облачном Workspace">Здесь будут @упоминания и приглашения в обсуждения от коллег.</EmptyState>
+          <EmptyState icon="bell" title="Уведомления работают в облачном рабочем пространстве">Здесь будут @упоминания и приглашения в обсуждения от коллег.</EmptyState>
         ) : chat?.missing ? (
           <Notice tone="warn">На сервере ещё нет таблиц чата. Владельцу проекта Supabase нужно применить миграцию 20261110170000_team_chat.sql.</Notice>
         ) : (
@@ -37,7 +37,7 @@ export function NotificationsPage() {
             {list.length === 0 ? (
               <EmptyState icon="bell" title="Уведомлений нет">Когда вас упомянут через @имя или по адресу почты в обсуждении, заметке или комментарии, это появится здесь.</EmptyState>
             ) : (
-              <ul className="notif-list" aria-label="Уведомления">
+              <ul className="notif-list" aria-label="Входящие">
                 {list.map((n) => {
                   const actor = team.find((m) => m.user_id === n.actor_id);
                   return (

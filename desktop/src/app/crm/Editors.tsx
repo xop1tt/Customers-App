@@ -1,4 +1,4 @@
-// Редакторы воронок и ролей Workspace. Воронки — обычные записи CRM (синхронизируются как остальные), роли — серверные (облако).
+// Редакторы воронок и ролей рабочего пространства. Воронки — обычные записи CRM (синхронизируются как остальные), роли — серверные (облако).
 
 import { useState } from "react";
 import { api } from "../../api";
@@ -102,7 +102,7 @@ function RemoveStage({ stage, others, onClose, onDone }: { stage: CrmRecord; oth
   const [to, setTo] = useState(others[0]?.id ?? "");
   return (
     <Dialog title={`Удалить этап «${String(stage.name)}»`} onClose={onClose} width={440}
-      footer={<><Button onClick={onClose}>Отмена</Button><Button variant="danger" disabled={!to} onClick={async () => { if (await attempt(() => api.wsDeleteStage(stage.id, to))) onDone(); }}>Удалить</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Отмена</Button><Button variant="danger" disabled={!to} onClick={async () => { if (await attempt(() => api.wsDeleteStage(stage.id, to))) onDone(); }}>Удалить</Button></>}>
       <SettingRow title="Сделки перенести в этап" stack>
         <Select value={to} onChange={setTo} options={others.map((s) => ({ value: s.id, label: String(s.name) }))} />
       </SettingRow>
@@ -110,7 +110,7 @@ function RemoveStage({ stage, others, onClose, onDone }: { stage: CrmRecord; oth
   );
 }
 
-/** Роли Workspace: системные неизменны, свои создаются из разрешений, которые есть у вас, с рангом ниже вашего. */
+/** Роли рабочего пространства: системные неизменны, свои создаются из разрешений, которые есть у вас, с рангом ниже вашего. */
 export function RolesEditor({ onClose }: { onClose: () => void }) {
   const ws = useStore((s) => s.ws)!;
   const myRank = ws.workspaces.find((w) => w.id === ws.active)?.rank ?? 0;
@@ -126,7 +126,7 @@ export function RolesEditor({ onClose }: { onClose: () => void }) {
     <Dialog title="Роли" onClose={onClose} width={640}>
       {error && <Notice tone="error">{error}</Notice>}
       {!can && <Notice tone="warn">Менять роли может участник с правом «Создавать и менять свои роли».</Notice>}
-      <Group title="Роли Workspace" key={saved} action={can ? <Button small icon="plus" onClick={() => setEdit({ key: "", name: "", rank: Math.max(0, myRank - 10), system: false, permissions: ["records.view"], isNew: true })}>Новая роль</Button> : undefined}>
+      <Group title="Роли рабочего пространства" key={saved} action={can ? <Button small icon="plus" onClick={() => setEdit({ key: "", name: "", rank: Math.max(0, myRank - 10), system: false, permissions: ["records.view"], isNew: true })}>Новая роль</Button> : undefined}>
         <ul className="ws-member-list">
           {roles.map((r) => (
             <li key={r.key} className="ws-member">
@@ -162,7 +162,7 @@ function RoleForm({ role, catalog, mine, maxRank, onClose, onSaved }: { role: Ws
   const keyOk = /^[a-z][a-z0-9_]{0,40}$/.test(key) && !["owner", "admin", "manager", "employee", "viewer"].includes(key);
   return (
     <Dialog title={role.isNew ? "Новая роль" : `Роль «${role.name}»`} onClose={onClose} width={520}
-      footer={<><Button onClick={onClose}>Отмена</Button>
+      footer={<><Button variant="ghost" onClick={onClose}>Отмена</Button>
         <Button variant="primary" disabled={!name.trim() || !keyOk} onClick={async () => { if (await attempt(() => api.wsSaveRole(key, name, rank, [...perms]))) onSaved(); }}>Сохранить</Button></>}>
       <SettingRow title="Название"><TextInput value={name} onChange={(v) => { setName(v); if (role.isNew && !role.key) setKey(slug(v)); }} maxLength={60} aria-label="Название роли" /></SettingRow>
       <SettingRow title="Ключ" hint="Латиница, цифры и «_»; после создания не меняется.">

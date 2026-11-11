@@ -1,6 +1,6 @@
 // Демо-реализация справочника сотрудников, чата и уведомлений (ws_team, ws_update_member, ws_chat, ws_chat_poll).
 // Повторяет правила сервера (миграция 20261110170000_team_chat.sql), которые видны в интерфейсе: права на группы,
-// упоминания по имени и почте, непрочитанное, курсор опроса. Без `?team` — локальный Workspace: только вы, чата нет.
+// упоминания по имени и почте, непрочитанное, курсор опроса. Без `?team` — локальное рабочее пространство: только вы, чата нет.
 
 import type { AppNotification, ChatConversation, ChatMessage, TeamMember, WsMember, ChatAttachment } from "./types";
 
@@ -146,7 +146,7 @@ export function teamCall(cmd: string, args: Record<string, unknown>, ctx: TeamCt
   const a = (args.args ?? {}) as Record<string, unknown>;
   if (!ctx.team) {
     if (action === "chat_list") return [];
-    return fail("Сообщения доступны в облачном Workspace: войдите в облачную учётную запись и выберите общий Workspace.", "localWorkspace");
+    return fail("Сообщения доступны в облачном рабочем пространстве: войдите в облачную учётную запись и выберите общее рабочее пространство.", "localWorkspace");
   }
   seed(ctx);
   const people = () => directory(ctx).map((m) => ({ id: m.user_id, name: m.display_name, email: m.email ?? "" }));
@@ -154,7 +154,7 @@ export function teamCall(cmd: string, args: Record<string, unknown>, ctx: TeamCt
     case "chat_list":
       return convs.filter((c) => c.ws === ctx.wsId && c.parts.has(ctx.me)).map((c) => view(ctx, c)).sort((x, y) => y.last_message_at.localeCompare(x.last_message_at));
     case "chat_open_direct": {
-      if (a.user === ctx.me || !ctx.members.some((m) => m.userId === a.user)) fail("Получатель — другой участник Workspace.");
+      if (a.user === ctx.me || !ctx.members.some((m) => m.userId === a.user)) fail("Получатель — другой участник рабочего пространства.");
       const found = convs.find((c) => c.ws === ctx.wsId && c.kind === "direct" && c.parts.has(ctx.me) && c.parts.has(String(a.user)));
       return view(ctx, found ?? conv(ctx, "direct", null, [ctx.me, String(a.user)], ctx.me));
     }

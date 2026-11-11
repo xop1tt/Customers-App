@@ -22,7 +22,7 @@ export function Inspector() {
       <div className="inspector-body">
         <EmptyState icon="list" title={`Выбрано: ${integer(selection.length)} ${plural(selection.length, "лид", "лида", "лидов")}`} action={
           <div className="col" style={{ alignItems: "stretch", width: 220 }}>
-            <Button icon="upload" onClick={() => openExport(selection)}>Экспортировать</Button>
+            <Button icon="download" onClick={() => openExport(selection)}>Экспортировать</Button>
             <Button icon="trash" variant="danger" onClick={() => void deleteLeads(selection)}>Удалить</Button>
             <Button variant="ghost" onClick={() => select([])}>Снять выделение</Button>
           </div>
@@ -50,7 +50,7 @@ function LeadInspector({ lead }: { lead: Lead }) {
           <IconButton icon="star" tip={lead.favorite ? "Убрать из избранного" : "В избранное"} active={lead.favorite} onClick={() => void setFavorite([lead.id], !lead.favorite)} />
           <IconButton icon="archive" tip={lead.archived ? "Вернуть из архива" : "В архив"} active={lead.archived} onClick={() => void setArchived([lead.id], !lead.archived)} />
           {d.url && <IconButton icon="external" tip="Открыть источник" onClick={() => void openLink(d.url)} />}
-          <IconButton icon="upload" tip="Экспортировать" onClick={() => openExport([lead.id])} />
+          <IconButton icon="download" tip="Экспортировать" onClick={() => openExport([lead.id])} />
           <span className="grow" />
           <IconButton icon="ban" tip="Исключить" onClick={() => void excludeLeads([lead.id])} />
           <IconButton icon="trash" tip="Удалить" onClick={() => void deleteLeads([lead.id])} />

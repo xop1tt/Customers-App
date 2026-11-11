@@ -20,17 +20,31 @@ export function resolveTheme(choice: string | null | undefined, systemDark: bool
   return systemDark ? "dark" : "light";
 }
 
+const channel = (v: number) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+const luminance = (c: [number, number, number]) => 0.2126 * channel(c[0]) + 0.7152 * channel(c[1]) + 0.0722 * channel(c[2]);
+/** Контраст двух цветов по WCAG 2.x (1…21). */
+export function contrast(a: [number, number, number], b: [number, number, number]): number {
+  const x = luminance(a), y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+const LIGHT_SIDE = rgb("#ebedf1"); // самая тёмная поверхность светлой темы, на которой бывают ссылки и фокус
+const DARK_TEXT = "#14151a";
+
 export function accentVars(accent: string | null | undefined, theme: Theme = "dark"): Record<string, string> {
-  const base = accent && isHex(accent) ? accent : DEFAULT_ACCENT;
-  const c = rgb(base);
-  const lum = (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
   const dark = theme === "dark";
+  let c = rgb(accent && isHex(accent) ? accent : DEFAULT_ACCENT);
+  // Светлая тема: акцент служит цветом ссылок и кольца фокуса, поэтому темнеет до 4.5 : 1 к поверхности.
+  if (!dark) for (let i = 0; i < 40 && contrast(c, LIGHT_SIDE) < 4.5; i++) c = mix(c, [0, 0, 0], 0.06);
+  const base = toHex(c);
+  // Текст на акценте: белый или тёмный, что контрастнее (не менее 4.5 : 1 для штатных цветов).
+  const onAccent = contrast(c, [255, 255, 255]) >= contrast(c, rgb(DARK_TEXT)) ? "#ffffff" : DARK_TEXT;
   return {
     "--accent": base,
     // В тёмной теме наведение светлее, в светлой темнее.
     "--accent-hover": toHex(dark ? mix(c, [255, 255, 255], 0.18) : mix(c, [0, 0, 0], 0.14)),
     "--accent-soft": toHex(mix(rgb(dark ? "#1b1c20" : "#f5f6f8"), c, dark ? 0.24 : 0.18)),
-    "--text-on-accent": lum > 0.72 ? "#14151a" : "#ffffff",
+    "--text-on-accent": onAccent,
   };
 }
 
