@@ -29,6 +29,9 @@ pub struct SyncState {
     pub message: Option<String>,
     pub last_sync: Option<DateTime<Utc>>,
     pub pending: i64,
+    /// Итоги последней удачной синхронизации: сколько изменений отправлено и получено.
+    pub last_pushed: usize,
+    pub last_pulled: usize,
     running: bool,
     again: bool,
     debounce: u64,
@@ -37,7 +40,18 @@ pub struct SyncState {
 
 impl SyncState {
     pub fn new() -> Self {
-        Self { kind: SyncKind::Idle, message: None, last_sync: None, pending: 0, running: false, again: false, debounce: 0, cancel: CancellationToken::new() }
+        Self {
+            kind: SyncKind::Idle,
+            message: None,
+            last_sync: None,
+            pending: 0,
+            last_pushed: 0,
+            last_pulled: 0,
+            running: false,
+            again: false,
+            debounce: 0,
+            cancel: CancellationToken::new(),
+        }
     }
 }
 
@@ -55,6 +69,8 @@ pub struct SyncStatus {
     pub message: Option<String>,
     pub last_sync: Option<String>,
     pub pending: i64,
+    pub last_pushed: usize,
+    pub last_pulled: usize,
 }
 
 impl Session {
@@ -66,6 +82,8 @@ impl Session {
             message: st.message.clone(),
             last_sync: st.last_sync.as_ref().map(format_date),
             pending: st.pending,
+            last_pushed: st.last_pushed,
+            last_pulled: st.last_pulled,
         }
     }
 }
@@ -90,8 +108,14 @@ impl Core {
         s.sync.lock().unwrap().last_sync = s.with_store(|st| st.value("sync.last_at")).as_deref().and_then(parse_date);
         let (core, session) = (self.clone(), s.clone());
         let handle = tokio::spawn(async move {
+            let mut tick = 0u32;
             loop {
                 core.sync_now(&session);
+                // Список Workspace и участники: созданное или изменённое на другом устройстве появляется без перезапуска.
+                if tick % 2 == 1 {
+                    let _ = core.ws_refresh().await;
+                }
+                tick = tick.wrapping_add(1);
                 tokio::time::sleep(Duration::from_secs(60)).await;
             }
         });
@@ -123,6 +147,16 @@ impl Core {
     pub fn sync_now_command(self: &Arc<Self>) -> super::CmdResult<()> {
         let s = self.require()?;
         self.sync_now(&s);
+        Ok(())
+    }
+
+    /// Кнопка «Синхронизировать»: настройки и лиды, затем Workspace (список, участники, CRM-данные).
+    pub async fn sync_everything_command(self: &Arc<Self>) -> super::CmdResult<()> {
+        self.sync_now_command()?;
+        let s = self.require()?;
+        if s.is_cloud {
+            let _ = self.ws_refresh().await;
+        }
         Ok(())
     }
 
@@ -160,6 +194,8 @@ impl Core {
                     st.message = None;
                     st.last_sync = Some(Utc::now());
                     pulled = r.pulled;
+                    st.last_pushed = r.pushed;
+                    st.last_pulled = r.pulled;
                 }
                 Err(CloudError::SessionExpired) => {
                     st.kind = SyncKind::Failed;
@@ -186,6 +222,8 @@ impl Core {
         }
         if result.is_ok() {
             let _ = s.with_store(|st| st.set_value("sync.last_at", &crate::util::now_string()));
+            let (core, session) = (self.clone(), s.clone());
+            tokio::spawn(async move { core.pull_own_profile(&session).await });
         }
         if pulled > 0 {
             self.env.emit("data-changed", Value::Null);

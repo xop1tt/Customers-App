@@ -234,6 +234,9 @@ export interface SyncStatus {
   message: string | null;
   lastSync: string | null;
   pending: number;
+  /** Итоги последней синхронизации: отправлено и получено изменений. */
+  lastPushed?: number;
+  lastPulled?: number;
 }
 
 export type UpdatePhase =

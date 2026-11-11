@@ -239,7 +239,10 @@ fn setup_tray(app: &AppHandle, core: Arc<Core>) -> tauri::Result<()> {
                 let _ = app.emit("tray-action", json!({"action": "settings"}));
             }
             "sync" => {
-                let _ = core.sync_now_command();
+                let core = core.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = core.sync_everything_command().await;
+                });
             }
             "updates" => {
                 let core = core.clone();

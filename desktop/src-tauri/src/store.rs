@@ -775,6 +775,11 @@ impl LeadStore {
         })
     }
 
+    /// Есть ли в журнале неотправленная правка этой записи.
+    pub fn has_pending(&self, entity: &str, key: &str) -> bool {
+        self.exists("SELECT 1 FROM sync_dirty WHERE entity=?1 AND key=?2", [entity, key])
+    }
+
     pub fn pending_sync_count(&self) -> i64 {
         self.conn.query_row("SELECT COUNT(DISTINCT entity || key) FROM sync_dirty", [], |r| r.get(0)).unwrap_or(0)
     }
