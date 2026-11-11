@@ -124,9 +124,7 @@ pub fn parse_feed(data: &[u8]) -> Option<Vec<FeedEntry>> {
                 if name == "item" || name == "entry" {
                     current = Some(HashMap::new());
                 } else if let Some(cur) = current.as_mut() {
-                    let attr = |k: &str| {
-                        e.attributes().flatten().find(|a| a.key.as_ref() == k.as_bytes()).and_then(|a| a.unescape_value().ok().map(|v| v.into_owned()))
-                    };
+                    let attr = |k: &str| e.attributes().flatten().find(|a| a.key.as_ref() == k.as_bytes()).and_then(|a| crate::xmltext::attr_value(&a));
                     if name == "link" {
                         if let Some(href) = attr("href") {
                             let rel = attr("rel").unwrap_or_else(|| "alternate".into());
@@ -142,10 +140,8 @@ pub fn parse_feed(data: &[u8]) -> Option<Vec<FeedEntry>> {
                 }
                 text.clear();
             }
-            Ok(Event::Text(t)) => match t.unescape() {
-                Ok(s) => text.push_str(&s),
-                Err(_) => text.push_str(&String::from_utf8_lossy(&t)),
-            },
+            Ok(Event::Text(t)) => text.push_str(&crate::xmltext::text(&t)),
+            Ok(Event::GeneralRef(r)) => text.push_str(&crate::xmltext::entity(&r)),
             Ok(Event::CData(t)) => text.push_str(&String::from_utf8_lossy(&t)),
             Ok(Event::End(e)) => {
                 let name = local_name(e.name().as_ref());

@@ -1,7 +1,7 @@
 // Демо-реализация команд ws_* для браузера, тестов и снимков экрана: Workspace и CRM в памяти.
 // Повторяет правила ядра там, где их видно в интерфейсе: версии, производные поля, права, корзина, фильтры коллекций.
 
-import type { CrmRecord, Lead, WorkspaceInfo, WsCollection, WsConflict, WsFilter, WsMember, WsQuery, WsState } from "./types";
+import type { CrmExportRequest, CrmMergeInfo, CrmMergeRequest, CrmRecord, Lead, WorkspaceInfo, WsCollection, WsConflict, WsFilter, WsMember, WsQuery, WsState } from "./types";
 
 type Row = CrmRecord;
 const ALL_PERMS = [
@@ -116,6 +116,7 @@ function ensure(): Ws {
 /** Сбросить демо-данные (тесты). */
 export function resetWsMock() {
   workspaces.length = 0;
+  lastMerge = null;
   active = null;
   imports.length = 0;
 }
@@ -248,7 +249,8 @@ function seedReports(id: string, t: Map<string, Row[]>) {
     const final = outcome === "won" ? won : outcome === "lost" ? lost : open[depth - 1]!;
     if (outcome !== "open") path.push(final.id as string);
     const closed = outcome === "open" ? null : new Date(created + (5 + (i % 9) * 2) * day).toISOString();
-    const d = row(id, { title: `Демо-сделка ${i + 1}`, pipeline_id: final.pipeline_id, stage_id: final.id, amount: 20000 + ((i * 37000) % 300000), currency: "RUB",
+    const expected = outcome === "open" ? new Date(Date.now() + ((i % 5) * 17 - 10) * day).toISOString().slice(0, 10) : null;
+    const d = row(id, { title: `Демо-сделка ${i + 1}`, pipeline_id: final.pipeline_id, stage_id: final.id, amount: 20000 + ((i * 37000) % 300000), currency: "RUB", expected_close_date: expected,
       status: outcome, closed_at: closed, owner_id: owners[(i + (i >> 1)) % owners.length], lost_reason: outcome === "lost" ? reasons[i % reasons.length] || null : null, company_id: null });
     d.created_at = new Date(created).toISOString();
     t.get("deals")!.push(d);
@@ -283,6 +285,53 @@ function card(ws: Ws, name: string, id: string) {
 }
 
 const norm = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-zа-яё0-9@.+]/gi, "");
+/** Объединение дубликатов в демо: то же, что ядро (`workspace/merge.rs`), с отменой последнего объединения. */
+let lastMerge: { ws: string; info: CrmMergeInfo; rows: { table: string; id: string; before: Record<string, unknown>; version: number }[] } | null = null;
+function mergeRun(ws: Ws, req: CrmMergeRequest) {
+  if (!["companies", "contacts"].includes(req.entity)) fail("Объединять можно только компании и контакты.");
+  if (!has(ws, "records.edit") || !has(ws, "records.delete")) fail("Недостаточно прав для объединения записей: нужно право менять и удалять любые записи.");
+  if (req.keep === req.remove) fail("Выберите две разные записи.");
+  const live = (id: string) => table(ws, req.entity).find((r) => r.id === id && !r.deleted_at);
+  const keep = live(req.keep) ?? fail("Запись, которая остаётся, не найдена.");
+  const remove = live(req.remove) ?? fail("Вторая запись не найдена или уже удалена.");
+  const rows: { table: string; id: string; before: Record<string, unknown>; version: number }[] = [];
+  const touch = (t: string, r: Row, fields: Record<string, unknown>) => {
+    const before = Object.fromEntries(Object.keys(fields).map((k) => [k, r[k] ?? null]));
+    const out = save(ws, t, r.id, fields);
+    rows.push({ table: t, id: r.id, before, version: out.version });
+  };
+  const kind = req.entity === "companies" ? "company" : "contact";
+  let moved = 0;
+  if (Object.keys(req.values).length) touch(req.entity, keep, req.values); else rows.push({ table: req.entity, id: keep.id, before: {}, version: keep.version });
+  const direct: [string, string][] = kind === "company" ? [["contacts", "company_id"], ["deals", "company_id"], ["crm_leads", "converted_company_id"]] : [["crm_leads", "converted_contact_id"]];
+  for (const [t, col] of direct) for (const r of table(ws, t).filter((x) => x[col] === remove.id && !x.deleted_at)) { touch(t, r, { [col]: keep.id }); moved++; }
+  if (kind === "contact") {
+    for (const r of table(ws, "deal_contacts").filter((x) => x.contact_id === remove.id && !x.deleted_at)) {
+      if (!table(ws, "deal_contacts").some((x) => x.deal_id === r.deal_id && x.contact_id === keep.id && !x.deleted_at)) {
+        const created = save(ws, "deal_contacts", null, { deal_id: r.deal_id, contact_id: keep.id, role: r.role ?? null });
+        rows.push({ table: "deal_contacts", id: created.id, before: { deleted_at: now() }, version: created.version });
+        moved++;
+      }
+      touch("deal_contacts", r, { deleted_at: now() });
+    }
+  }
+  for (const t of ["tasks", "activities", "notes", "comments", "attachments"]) {
+    for (const r of table(ws, t).filter((x) => x.entity_type === kind && x.entity_id === remove.id && !x.deleted_at)) { touch(t, r, { entity_id: keep.id }); moved++; }
+  }
+  const values = table(ws, "custom_field_values");
+  for (const r of values.filter((x) => x.entity_type === kind && x.entity_id === remove.id && !x.deleted_at)) {
+    const mine = values.find((x) => x.entity_type === kind && x.entity_id === keep.id && x.field_id === r.field_id && !x.deleted_at);
+    if ((mine && mine.value !== null) || r.value === null) touch("custom_field_values", r, { deleted_at: now() });
+    else { if (mine) touch("custom_field_values", mine, { deleted_at: now() }); touch("custom_field_values", r, { entity_id: keep.id }); moved++; }
+  }
+  touch(req.entity, remove, { deleted_at: now() });
+  const title = String((kind === "company" ? remove.name : remove.full_name) || "Без названия");
+  const note = save(ws, "activities", null, { type: "system", occurred_at: now(), summary: `Объединено с «${title}»`, payload: { event: "merged", merged_id: remove.id }, entity_type: kind, entity_id: keep.id });
+  rows.push({ table: "activities", id: note.id, before: { deleted_at: now() }, version: note.version });
+  lastMerge = { ws: ws.info.id, info: { entity: req.entity, keep: keep.id, remove: remove.id, removedTitle: title, at: now() }, rows };
+  return { kept: keep, moved };
+}
+
 function duplicates(ws: Ws, name: string, fields: Record<string, unknown>, except: string | null) {
   const keys = new Set<string>();
   for (const f of ["name", "full_name", "title"]) if (typeof fields[f] === "string" && fields[f]) keys.add(norm(fields[f]));
@@ -316,6 +365,52 @@ function collections(ws: Ws) {
     .sort((a, b) => (a.position as number) - (b.position as number));
 }
 
+// Экспорт (пакет G1): те же ключи и заголовки колонок, что в ядре (workspace/export.rs). Файл в демо не пишется —
+// проверяются права, колонки и число записей, которые попали бы в выгрузку.
+type ExportCol = [key: string, title: string, byDefault?: boolean];
+const EXPORT_TAIL: ExportCol[] = [["created_at", "Создано"], ["updated_at", "Изменено"]];
+const EXPORT_FIELDS: Record<string, ExportCol[]> = {
+  companies: [["name", "Компания", true], ["legal_name", "Юридическое название"], ["inn", "ИНН", true], ["website", "Сайт", true], ["domain", "Домен"], ["phones", "Телефон компании", true],
+    ["emails", "Почта компании", true], ["address", "Адрес", true], ["industry", "Отрасль", true], ["size_range", "Размер"], ["source", "Источник"], ["owner_id", "Ответственный", true], ...EXPORT_TAIL],
+  contacts: [["full_name", "Контакт", true], ["first_name", "Имя"], ["last_name", "Фамилия"], ["position", "Должность", true], ["company_id", "Компания", true], ["phones", "Телефон", true],
+    ["emails", "Почта", true], ["source", "Источник"], ["owner_id", "Ответственный", true], ...EXPORT_TAIL],
+  deals: [["title", "Сделка", true], ["pipeline_id", "Воронка"], ["stage_id", "Этап", true], ["status", "Статус", true], ["amount", "Сумма", true], ["currency", "Валюта", true],
+    ["expected_close_date", "Ожидаемое закрытие", true], ["company_id", "Компания", true], ["contact", "Контакт", true], ["lost_reason", "Причина проигрыша"], ["closed_at", "Закрыта"],
+    ["owner_id", "Ответственный", true], ...EXPORT_TAIL],
+  tasks: [["title", "Задача", true], ["description", "Описание"], ["status", "Статус", true], ["priority", "Приоритет", true], ["due_at", "Срок", true], ["remind_at", "Напомнить"],
+    ["assignee_id", "Исполнитель", true], ["related", "Связано с", true], ["completed_at", "Выполнена"], ...EXPORT_TAIL],
+  crm_leads: [["title", "Лид", true], ["person_name", "Контакт", true], ["company_name", "Компания", true], ["phones", "Телефон", true], ["emails", "Почта", true], ["status", "Статус", true],
+    ["source", "Источник"], ["owner_id", "Ответственный", true], ...EXPORT_TAIL],
+};
+
+function exportFields(ws: Ws, name: string) {
+  const base = EXPORT_FIELDS[name] ?? fail("Эти записи не выгружаются.");
+  const type = Object.entries(TYPE_TABLE).find(([, t]) => t === name)?.[0];
+  const custom = list(ws, "custom_fields", { filters: [{ field: "entity_type", op: "eq", value: type }], sort: [{ field: "position", dir: "asc" }], limit: 5000 }).items;
+  return [
+    ...base.map(([key, title, byDefault]) => ({ key, title, default: !!byDefault, custom: false })),
+    ...custom.map((d) => ({ key: `cf:${d.id}`, title: String(d.label), default: true, custom: true })),
+  ];
+}
+
+function exportRun(ws: Ws, r: CrmExportRequest): { count: number } {
+  if (!has(ws, "records.export")) fail("Недостаточно прав для экспорта записей.");
+  if (r.format !== "csv" && r.format !== "xlsx") fail(`Неизвестный формат файла: ${String(r.format)}`);
+  let name = r.entity;
+  let q: WsQuery = { ...(r.query ?? {}) };
+  if (r.collection) {
+    const c = table(ws, "collections").find((x) => x.id === r.collection) ?? fail("Коллекция не найдена.");
+    const cfg = c.config as WsCollection["config"];
+    name = TYPE_TABLE[c.entity_type as string] ?? fail("Неизвестный тип коллекции.");
+    q = { ...q, filters: [...(cfg.filters ?? []), ...(q.filters ?? [])] };
+  }
+  const known = new Set(exportFields(ws, name).map((f) => f.key));
+  if (!r.fields.length) fail("Выберите хотя бы одну колонку.");
+  const unknown = r.fields.find((k) => !known.has(k));
+  if (unknown) fail(`Неизвестная колонка: ${unknown}`);
+  return { count: list(ws, name, { ...q, deleted: false, limit: 100_000, offset: 0 }).total };
+}
+
 async function remoteOnly(): Promise<never> {
   return fail("Участники и приглашения доступны в облачной учётной записи.");
 }
@@ -339,6 +434,9 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
     }
     case "ws_rename_workspace":
       ws.info = { ...ws.info, name: s("name").trim().slice(0, 120) };
+      return state();
+    case "ws_set_local_details":
+      ws.info = { ...ws.info, name: s("name").trim().slice(0, 120), defaultCurrency: s("currency").trim().toUpperCase() };
       return state();
     case "ws_list": return list(ws, s("entity"), (args.query as WsQuery) ?? {});
     case "ws_card": return card(ws, s("entity"), s("id"));
@@ -364,6 +462,18 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       const q = (args.query as WsQuery) ?? {};
       const t = TYPE_TABLE[c.entity_type as string] ?? fail("Неизвестный тип коллекции.");
       return { collection: c, entity: t, ...list(ws, t, { ...q, filters: [...(cfg.filters ?? []), ...(q.filters ?? [])], sort: q.sort?.length ? q.sort : cfg.sort }) };
+    }
+    case "ws_export_fields": return exportFields(ws, s("entity"));
+    case "ws_export": return exportRun(ws, args.request as CrmExportRequest);
+    case "ws_merge": return mergeRun(ws, args.request as CrmMergeRequest);
+    case "ws_merge_last": return lastMerge && lastMerge.ws === ws.info.id && lastMerge.rows.every((r) => table(ws, r.table).find((x) => x.id === r.id)?.version === r.version) ? lastMerge.info : null;
+    case "ws_merge_undo": {
+      const m = lastMerge;
+      if (!m || m.ws !== ws.info.id) return fail("Нечего отменять.");
+      if (!m.rows.every((r) => table(ws, r.table).find((x) => x.id === r.id)?.version === r.version)) fail("Отменить нельзя: после объединения записи уже изменились или ушли на сервер.");
+      for (const r of [...m.rows].reverse()) save(ws, r.table, r.id, r.before);
+      lastMerge = null;
+      return m.info;
     }
     case "ws_reorder_collections":
       (args.ids as string[]).forEach((id, i) => ws.prefs.set(id, { position: i + 1, hidden: ws.prefs.get(id)?.hidden ?? false }));

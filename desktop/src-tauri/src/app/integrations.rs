@@ -257,17 +257,22 @@ impl Core {
 
     /// Выгружает файл (копию базы) на диск. OAuth-токен при необходимости обновляется.
     pub async fn upload_to_drive(&self, service: &str, path: &Path) -> CmdResult<String> {
+        let data = std::fs::read(path).map_err(|e| CmdError::msg(format!("Не удалось прочитать файл: {e}")))?;
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "backup.db".into());
+        self.upload_data_to_drive(service, &name, &data).await
+    }
+
+    /// Выгружает данные файлом `name` на диск (копию базы или переносимую копию).
+    pub async fn upload_data_to_drive(&self, service: &str, name: &str, data: &[u8]) -> CmdResult<String> {
         let s = self.require()?;
         let d = DriveService::parse(service).ok_or("Неизвестный сервис")?;
         let conn = self.connection(&s, d).ok_or_else(|| CmdError::msg(format!("{} не подключён", d.title())))?;
-        let data = std::fs::read(path).map_err(|e| CmdError::msg(format!("Не удалось прочитать файл: {e}")))?;
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "backup.db".into());
         let _guard = self.begin_drive(d)?;
         let client = match d.auth() {
             DriveAuth::OAuth(p) => self.oauth_client(p),
             _ => None,
         };
-        let result = drives::upload_file(&conn, client.as_ref(), &name, &data, self.env.transport.as_ref()).await;
+        let result = drives::upload_file(&conn, client.as_ref(), name, data, self.env.transport.as_ref()).await;
         self.end_drive();
         let updated = result.map_err(|e| CmdError::msg(format!("{}: {e}", d.title())))?;
         if updated.token != conn.token {

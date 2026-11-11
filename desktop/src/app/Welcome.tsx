@@ -1,55 +1,129 @@
+// Мастер первого запуска (пакет G7, ADR-063, макеты одобрены Maksim): компания, воронка, клиенты, звонки и письма.
+// Каждый шаг можно пропустить; всё, что он настраивает, меняется потом в настройках.
+
 import { useState } from "react";
-import { back, canGoBack, canSkip, finish, isLast, newFlow, next, position, progress, skip, stepOf } from "../lib/welcomeFlow";
-import { ACCENTS, DEFAULT_ACCENT } from "../lib/theme";
-import { feedUrl, region, telegramChannel } from "../lib/sourceInput";
-import { Button, Group, ProgressBar, Select, SettingRow, Switch, ValueList } from "../ui/kit";
+import { api } from "../api";
+import { back, canGoBack, canSkip, finish, isLast, newFlow, next, position, progress, skip, stepOf, type WelcomeFlow } from "../lib/welcomeFlow";
+import { PIPELINE_TEMPLATES, planStages, type TemplateId } from "../lib/onboarding";
+import { Button, Field, Group, ProgressBar, Segmented, Select, Tag, TextArea, TextInput } from "../ui/kit";
 import { Icon } from "../ui/icons";
-import { patchAccount, patchDevice, setState, updateSettings, useStore } from "../state/store";
-import { DrivesPanel } from "./panels/DrivesPanel";
+import { attempt, getState, openSettings, patchAccount, refreshWorkspace, setSection, setState, toast, useStore } from "../state/store";
 import { MailPanel } from "./panels/MailPanel";
-import { CrmPanel } from "./panels/CrmPanel";
 import { CallApps } from "./settings/OutreachSection";
+import { ImportDialog } from "./crm/ImportDialog";
 import { Brand } from "./Auth";
 
-const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2].map((v) => ({ value: v, label: `${Math.round(v * 100)}%` }));
+export const CURRENCIES = [
+  { value: "RUB", label: "₽ Российский рубль" },
+  { value: "USD", label: "$ Доллар США" },
+  { value: "EUR", label: "€ Евро" },
+  { value: "KZT", label: "₸ Казахстанский тенге" },
+  { value: "BYN", label: "Br Белорусский рубль" },
+  { value: "UZS", label: "сум Узбекский сум" },
+];
+
+/** Название по умолчанию: имя Workspace, если пользователь уже его менял. */
+const PERSONAL = /^Личное пространство/;
+
+/** Шаблон воронки к воронке по умолчанию активного Workspace. Возвращает текст для пользователя или null. */
+export async function applyTemplate(id: TemplateId): Promise<string | null> {
+  const tpl = PIPELINE_TEMPLATES.find((t) => t.id === id);
+  if (!tpl) return null;
+  const [pipelines, stages, deals] = await Promise.all([api.wsList("pipelines", { limit: 500 }), api.wsList("pipeline_stages", { limit: 5000 }), api.wsList("deals", { limit: 1 })]);
+  // Этапы со сделками не трогаем: мастер не должен перекладывать чужие данные.
+  if (deals.total > 0 || deals.items.length > 0) return "В воронке уже есть сделки, этапы не изменены. Настроить их можно в настройках Workspace.";
+  const alive = pipelines.items.filter((p) => !p.deleted_at);
+  const pipe = alive.find((p) => p.is_default) ?? alive[0];
+  if (!pipe) return "Воронка ещё загружается. Этапы можно настроить позже в настройках Workspace.";
+  const plan = planStages(stages.items, pipe.id, tpl);
+  for (const u of plan.update) await api.wsSave("pipeline_stages", u.id, u.patch);
+  for (const c of plan.create) await api.wsSave("pipeline_stages", null, c);
+  for (const r of plan.remove) await api.wsDelete("pipeline_stages", r);
+  return null;
+}
+
+interface Setup {
+  name: string;
+  currency: string;
+  team: boolean;
+  template: TemplateId;
+  thenSearch: boolean;
+  added: number;
+  signature: string;
+}
 
 export function Welcome() {
-  const [flow, setFlow] = useState(newFlow());
+  const [flow, setFlow] = useState<WelcomeFlow>(newFlow());
+  const [busy, setBusy] = useState(false);
   const step = stepOf(flow);
   const name = useStore((s) => s.session?.displayName);
+  const ws = useStore((s) => s.ws);
+  const account = useStore((s) => s.account);
+  const active = ws?.workspaces.find((w) => w.id === ws.active);
+  const [setup, setSetup] = useState<Setup>(() => ({
+    name: active && !PERSONAL.test(active.name) ? active.name : "",
+    currency: active?.defaultCurrency || "RUB",
+    team: false,
+    template: "services",
+    thenSearch: false,
+    added: 0,
+    signature: account?.signature ?? "",
+  }));
+  const patch = (p: Partial<Setup>) => setSetup((s) => ({ ...s, ...p }));
+
   const done = async () => {
     await patchAccount({ welcomeDone: true });
     setState({ phase: "ready" });
+    if (setup.thenSearch) { setSection("home"); openSettings("search"); } else if (getState().ws) setSection("today");
   };
-  const go = async (f: typeof flow) => { setFlow(f); if (f.finished) await done(); };
+
+  /** Что сохраняет шаг при «Далее». false — остаться на шаге (ошибка показана). */
+  const save = async (): Promise<boolean> => {
+    if (step.id === "company") {
+      const title = setup.name.trim();
+      if (!title) return true;
+      const cloudTeam = setup.team && ws?.isCloud;
+      const r = await attempt(() => (cloudTeam ? api.wsCreateWorkspace(title) : active?.remote ? api.wsRenameWorkspace(title) : api.wsSetLocalDetails(title, setup.currency)));
+      if (!r) return false;
+      await refreshWorkspace();
+    }
+    if (step.id === "pipeline") {
+      const note = await attempt(() => applyTemplate(setup.template));
+      if (note === undefined) return false;
+      if (note) toast(note);
+      await refreshWorkspace();
+    }
+    if (step.id === "comms" && setup.signature !== (account?.signature ?? "")) await patchAccount({ signature: setup.signature });
+    return true;
+  };
+  const go = async (f: WelcomeFlow) => { setFlow(f); if (f.finished) await done(); };
+  const forward = async () => {
+    setBusy(true);
+    const ok = await save();
+    setBusy(false);
+    if (ok) await go(isLast(flow) ? finish(flow) : next(flow));
+  };
 
   return (
     <div className="welcome">
       <div className="welcome-card">
         <header className="welcome-head">
           <div className="row"><Brand size={32} /><span className="faint">{position(flow)}</span><span className="grow" /><Button variant="ghost" small onClick={() => void done()}>Пропустить настройку</Button></div>
-          <ProgressBar value={progress(flow)} />
+          <ProgressBar value={progress(flow)} label="Ход настройки" />
           <h1>{step.id === "intro" ? `Добро пожаловать${name ? `, ${name}` : ""}` : step.title}</h1>
         </header>
         <div className="welcome-body">
           {step.id === "intro" && <Intro />}
-          {step.id === "sources" && <SourcesStep />}
-          {step.id === "integrations" && (
-            <>
-              <p className="muted" style={{ marginBottom: 12 }}>Здесь всё, с чем приложение умеет работать. Подключайте только нужное: остальное можно пропустить и настроить позже в настройках.</p>
-              <Group title="Почта"><MailPanel /></Group>
-              <Group title="Выгрузка лидов" note="Битрикс24, Notion и вебхук: после подключения лиды можно отправлять кнопкой «Экспорт»."><CrmPanel /></Group>
-              <Group title="Звонки"><CallApps /></Group>
-            </>
-          )}
-          {step.id === "drives" && <><p className="muted" style={{ marginBottom: 12 }}>Копии базы можно хранить на вашем облачном диске. Этот шаг можно пропустить и вернуться к нему позже в настройках.</p><Group><DrivesPanel /></Group></>}
-          {step.id === "appearance" && <AppearanceStep />}
+          {step.id === "company" && <CompanyStep setup={setup} patch={patch} cloud={!!ws?.isCloud} />}
+          {step.id === "pipeline" && <PipelineStep value={setup.template} onChange={(template) => patch({ template })} />}
+          {step.id === "clients" && <ClientsStep setup={setup} patch={patch} />}
+          {step.id === "comms" && <CommsStep signature={setup.signature} onSignature={(signature) => patch({ signature })} />}
         </div>
         <footer className="welcome-foot">
           {canGoBack(flow) && <Button onClick={() => setFlow(back(flow))}>Назад</Button>}
           <span className="grow" />
-          {canSkip(flow) && <Button variant="ghost" onClick={() => void go(skip(flow))}>Пропустить</Button>}
-          <Button variant="primary" onClick={() => void go(isLast(flow) ? finish(flow) : next(flow))}>{isLast(flow) ? "Начать работу" : "Далее"}</Button>
+          {canSkip(flow) && <Button variant="ghost" onClick={() => void go(skip(flow))}>Позже</Button>}
+          <Button variant="primary" busy={busy} onClick={() => void forward()}>{step.id === "intro" ? "Начать" : isLast(flow) ? "Начать работу" : "Далее"}</Button>
         </footer>
       </div>
     </div>
@@ -58,54 +132,112 @@ export function Welcome() {
 
 function Intro() {
   const items: [string, string, string][] = [
-    ["search", "Находит клиентов", "Проверяет RSS-ленты, Telegram, VK и карты и показывает заказы и организации, которым нужен сайт, бот или реклама."],
-    ["star", "Оценивает и объясняет", "У каждого лида есть оценка и список причин: бюджет, срочность, нет сайта, нет мобильной версии."],
-    ["lock", "Хранит данные у вас", "База зашифрована на вашем компьютере. Облачный аккаунт нужен только для синхронизации между устройствами."],
+    ["list", "Клиенты и сделки", "Компании, контакты, сделки на доске этапов, задачи, календарь и отчёты."],
+    ["search", "Поиск новых клиентов", "Заказы из RSS, Telegram и VK, организации с карт — с оценкой и переносом в CRM в один клик."],
+    ["lock", "Данные у вас", "База зашифрована на компьютере. Облако нужно только для работы командой."],
   ];
   return (
-    <ul className="intro">
-      {items.map(([icon, title, text]) => (
-        <li key={title}><span className="intro-ico"><Icon name={icon} size={18} /></span><div className="col" style={{ gap: 2 }}><strong>{title}</strong><span className="muted">{text}</span></div></li>
-      ))}
-    </ul>
+    <>
+      <p className="muted" style={{ marginBottom: 12 }}>Customers — CRM для небольшой компании: клиенты, сделки, задачи и звонки в одном окне. За пару минут настроим всё под вас.</p>
+      <ul className="intro">
+        {items.map(([icon, title, text]) => (
+          <li key={title}><span className="intro-ico"><Icon name={icon} size={18} /></span><div className="col" style={{ gap: 2 }}><strong>{title}</strong><span className="muted">{text}</span></div></li>
+        ))}
+      </ul>
+    </>
   );
 }
 
-function SourcesStep() {
-  const o = useStore((s) => s.overview);
-  if (!o) return null;
-  const s = o.settings;
+function CompanyStep({ setup, patch, cloud }: { setup: Setup; patch: (p: Partial<Setup>) => void; cloud: boolean }) {
+  // Валюта облачного Workspace задаётся на сервере: мастер меняет её только у Workspace на этом устройстве.
+  const currencyHere = !(setup.team && cloud);
   return (
-    <div className="col" style={{ gap: 4 }}>
-      <Group title="Где искать">
-        <SettingRow title="RSS-ленты" hint="Заказы с бирж фриланса"><Switch checked={s.rss.enabled} onChange={(v) => void updateSettings((x) => { x.rss.enabled = v; })} /></SettingRow>
-        <SettingRow title="Telegram-каналы" hint="Публичные каналы с заказами"><Switch checked={s.telegram.enabled} onChange={(v) => void updateSettings((x) => { x.telegram.enabled = v; })} /></SettingRow>
-        <SettingRow title="OpenStreetMap" hint="Организации в вашем городе без сайта или с устаревшим сайтом"><Switch checked={s.osm.enabled} onChange={(v) => void updateSettings((x) => { x.osm.enabled = v; })} /></SettingRow>
-      </Group>
-      <Group title="Города и регионы">
-        <div style={{ paddingTop: 12 }}><ValueList items={s.osm.regions} onChange={(r) => void updateSettings((x) => { x.osm.regions = r; })} normalize={region} placeholder="Например, Казань" emptyText="Добавьте город, чтобы искать организации." /></div>
-      </Group>
-      <Group title="Telegram-каналы">
-        <div style={{ paddingTop: 12 }}><ValueList items={s.telegram.channels} prefix="@" onChange={(c) => void updateSettings((x) => { x.telegram.channels = c; })} normalize={telegramChannel} placeholder="@канал или ссылка t.me" /></div>
-      </Group>
-      <Group title="Ленты">
-        <div style={{ paddingTop: 12 }}><ValueList items={s.rss.feeds} onChange={(f) => void updateSettings((x) => { x.rss.feeds = f; })} normalize={feedUrl} placeholder="Адрес RSS-ленты" /></div>
-      </Group>
+    <div className="col" style={{ gap: 14 }}>
+      <Field label="Название"><TextInput value={setup.name} onChange={(name) => patch({ name })} placeholder="Например, Студия «Пиксель»" maxLength={120} autoFocus /></Field>
+      {currencyHere && <Field label="Основная валюта сделок"><Select value={setup.currency} options={CURRENCIES} onChange={(currency) => patch({ currency })} /></Field>}
+      <Field label="Как вы работаете">
+        <Segmented value={setup.team ? "team" : "solo"} onChange={(v) => patch({ team: v === "team" })} options={[{ value: "solo", label: "Один" }, { value: "team", label: "С командой" }]} />
+      </Field>
+      <p className="faint" style={{ margin: 0, fontSize: "var(--fs-sm)" }}>
+        {setup.team
+          ? cloud
+            ? "«С командой» создаёт облачный Workspace; пригласить коллег можно позже в разделе «Команда»."
+            : "Работа командой — в облачной учётной записи. Пока всё будет на этом компьютере; облако можно подключить позже в настройках учётной записи."
+          : "Без облака всё работает на этом компьютере."}
+      </p>
     </div>
   );
 }
 
-function AppearanceStep() {
-  const d = useStore((s) => s.device);
-  const current = d.accent ?? DEFAULT_ACCENT;
+function PipelineStep({ value, onChange }: { value: TemplateId; onChange: (v: TemplateId) => void }) {
   return (
-    <Group>
-      <SettingRow title="Акцентный цвет">
-        <div className="swatches">{ACCENTS.map((c) => <button key={c} type="button" className={`swatch${current.toLowerCase() === c ? " on" : ""}`} style={{ background: c }} aria-label={c} onClick={() => void patchDevice({ accent: c === DEFAULT_ACCENT ? null : c })} />)}</div>
-      </SettingRow>
-      <SettingRow title="Масштаб интерфейса" hint="Подберите удобный размер для вашего экрана."><Select width={110} value={SCALES.find((s) => Math.abs(s.value - d.uiScale) < 0.01)?.value ?? 1} options={SCALES} onChange={(v) => void patchDevice({ uiScale: v })} /></SettingRow>
-      <SettingRow title="Компактные строки"><Switch checked={d.compactRows} onChange={(v) => void patchDevice({ compactRows: v })} /></SettingRow>
-      <SettingRow title="Анимации"><Switch checked={d.animations} onChange={(v) => void patchDevice({ animations: v })} /></SettingRow>
-    </Group>
+    <div className="col" role="radiogroup" aria-label="Шаблон воронки" style={{ gap: 10 }}>
+      <p className="muted" style={{ margin: 0 }}>Готовые этапы под тип бизнеса. Поменять их можно потом в настройках Workspace.</p>
+      {PIPELINE_TEMPLATES.map((t) => (
+        <button key={t.id} type="button" role="radio" aria-checked={value === t.id} className={`tpl-option${value === t.id ? " on" : ""}`} onClick={() => onChange(t.id)}>
+          <span className="tpl-radio" aria-hidden="true" />
+          <span className="col grow" style={{ gap: 6, alignItems: "flex-start" }}>
+            <strong>{t.title}</strong>
+            <span className="muted">{t.hint}</span>
+            <span className="tpl-stages">{t.open.map((s) => <Tag key={s}>{s}</Tag>)}<Tag tone="green">{t.won}</Tag></span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ClientsStep({ setup, patch }: { setup: Setup; patch: (p: Partial<Setup>) => void }) {
+  const [importing, setImporting] = useState(false);
+  const [manual, setManual] = useState(false);
+  const [company, setCompany] = useState("");
+  const add = async () => {
+    const title = company.trim();
+    if (!title) return;
+    if (await attempt(() => api.wsSave("companies", null, { name: title }))) { setCompany(""); patch({ added: setup.added + 1 }); toast(`Компания «${title}» добавлена`, "success"); }
+  };
+  return (
+    <div className="col" style={{ gap: 10 }}>
+      <div className="start-option">
+        <span className="intro-ico"><Icon name="upload" size={18} /></span>
+        <div className="col grow" style={{ gap: 2 }}><strong>Из Excel или CSV</strong><span className="muted">Перенесите клиентов из таблицы или другой CRM. Колонки сопоставятся сами.</span></div>
+        <Button onClick={() => setImporting(true)}>Выбрать файл</Button>
+      </div>
+      <div className="start-option">
+        <span className="intro-ico"><Icon name="plus" size={18} /></span>
+        <div className="col grow" style={{ gap: 6 }}>
+          <strong>Вручную</strong>
+          <span className="muted">Добавьте первую компанию и контакт.{setup.added ? ` Добавлено: ${setup.added}.` : ""}</span>
+          {manual && (
+            <form className="row" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); void add(); }}>
+              <TextInput value={company} onChange={setCompany} placeholder="Название компании" aria-label="Название компании" autoFocus wrapClass="grow" />
+              <Button type="submit" variant="primary" disabled={!company.trim()}>Сохранить</Button>
+            </form>
+          )}
+        </div>
+        {!manual && <Button onClick={() => setManual(true)}>Добавить</Button>}
+      </div>
+      <div className="start-option">
+        <span className="intro-ico"><Icon name="search" size={18} /></span>
+        <div className="col grow" style={{ gap: 2 }}><strong>Найти новых</strong><span className="muted">Выбрать город и каналы для поиска заказов и организаций.</span></div>
+        {setup.thenSearch ? <Button variant="ghost" icon="check" onClick={() => patch({ thenSearch: false })}>После мастера</Button> : <Button onClick={() => patch({ thenSearch: true })}>Настроить поиск</Button>}
+      </div>
+      <p className="faint" style={{ margin: 0, fontSize: "var(--fs-sm)" }}>После импорта или добавления мастер продолжится с этого шага.</p>
+      {importing && <ImportDialog onClose={() => setImporting(false)} />}
+    </div>
+  );
+}
+
+function CommsStep({ signature, onSignature }: { signature: string; onSignature: (v: string) => void }) {
+  return (
+    <div className="col" style={{ gap: 4 }}>
+      <p className="muted" style={{ marginBottom: 8 }}>Чтобы «Позвонить» и «Написать» в карточке клиента работали сразу.</p>
+      <h2 className="welcome-sub">Письма</h2>
+      <Group><MailPanel /></Group>
+      <h2 className="welcome-sub">Подпись в письмах</h2>
+      <TextArea value={signature} onChange={onSignature} rows={3} placeholder={"Анна Смирнова, Студия «Пиксель»\n+7 900 000-00-00"} aria-label="Подпись в письмах" />
+      <h2 className="welcome-sub">Звонки</h2>
+      <Group><CallApps /></Group>
+    </div>
   );
 }

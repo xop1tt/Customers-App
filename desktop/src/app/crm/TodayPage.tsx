@@ -10,6 +10,8 @@ import { matchesSection } from "../../lib/leads";
 import { Button, Checkbox, EmptyState, Score, Segmented, Spinner } from "../../ui/kit";
 import { attempt, openRecord, select, setSection, useStore } from "../../state/store";
 import { useLookup, useWsQuery } from "./useCrm";
+import { BackupReminder } from "../BackupReminder";
+import { StartChecklist } from "./StartChecklist";
 
 const time = (iso: unknown) => new Date(String(iso)).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const day = (iso: unknown) => new Date(String(iso)).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
@@ -70,6 +72,8 @@ export function TodayPage() {
         {can(perms, "create") && <Button small onClick={() => openRecord("tasks", "new")}>Новая задача</Button>}
         {can(perms, "create") && <Button small variant="primary" icon="plus" onClick={() => openRecord("deals", "new")}>Новая сделка</Button>}
       </div>
+      <StartChecklist tick={tick} />
+      <BackupReminder />
       <div className="today-grid">
         {section("Просрочено", g.overdue.length, "warn", g.overdue.map((t) => taskRow(t, `${day(t.due_at)}, ${time(t.due_at)}`)), "Просроченных задач нет.")}
         {section(`Сделки без движения ${STALE_DAYS}+ дней`, g.stale.length, "", g.stale.slice(0, 20).map(({ deal, days }) => (

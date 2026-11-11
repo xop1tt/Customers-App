@@ -150,3 +150,157 @@ export function byOwner(deals: CrmRecord[], pipelineId: string | null, from: Dat
 
 /** Проценты без дробной части: 0.4567 → «46 %». */
 export const percent = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)} %`);
+
+// ---------------------------------------------------------------- прогноз и отчёты руководителя (G3)
+
+const dateKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const monthKey = (d: Date) => dateKey(d).slice(0, 7);
+
+/** Взвешенные суммы: сумма сделки × вероятность её этапа. */
+function weighted(deals: CrmRecord[], prob: (d: CrmRecord) => number): [string, number][] {
+  return sums(deals.map((d) => (typeof d.amount === "number" ? { ...d, amount: (d.amount * prob(d)) / 100 } : d)));
+}
+
+export type ForecastBucket = "overdue" | "m0" | "m1" | "m2" | "later" | "none";
+
+export interface ForecastRow {
+  bucket: ForecastBucket;
+  /** Первый день месяца для m0–m2. */
+  month: Date | null;
+  count: number;
+  sums: [string, number][];
+  /** Ожидаемые суммы: сумма × вероятность этапа. */
+  weighted: [string, number][];
+}
+
+export interface Forecast {
+  rows: ForecastRow[];
+  weighted: [string, number][];
+  /** Открытые сделки без суммы: в прогнозе денег их нет. */
+  noAmount: number;
+}
+
+/**
+ * Прогноз по открытым сделкам воронки: по месяцу ожидаемой даты закрытия (`expected_close_date`), с весом —
+ * вероятностью этапа (`pipeline_stages.probability`, 0–100). Дата в прошлом — «срок прошёл», без даты — отдельно.
+ */
+export function forecast(deals: CrmRecord[], stages: CrmRecord[], pipelineId: string | null, now: Date = new Date()): Forecast {
+  const prob = new Map(stages.map((s) => [s.id, Math.min(100, Math.max(0, Number(s.probability) || 0))]));
+  const p = (d: CrmRecord) => prob.get(String(d.stage_id)) ?? 0;
+  const open = deals.filter((d) => live(d) && d.status === "open" && (!pipelineId || d.pipeline_id === pipelineId));
+  const today = dateKey(now);
+  const months = [0, 1, 2].map((i) => new Date(now.getFullYear(), now.getMonth() + i, 1));
+  const keys = months.map(monthKey);
+  const bucketOf = (d: CrmRecord): ForecastBucket => {
+    const v = typeof d.expected_close_date === "string" ? d.expected_close_date.slice(0, 10) : "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return "none";
+    if (v < today) return "overdue";
+    const i = keys.indexOf(v.slice(0, 7));
+    return i === 0 ? "m0" : i === 1 ? "m1" : i === 2 ? "m2" : "later";
+  };
+  const order: ForecastBucket[] = ["overdue", "m0", "m1", "m2", "later", "none"];
+  const rows = order.map((bucket, i) => {
+    const list = open.filter((d) => bucketOf(d) === bucket);
+    return { bucket, month: i >= 1 && i <= 3 ? months[i - 1]! : null, count: list.length, sums: sums(list), weighted: weighted(list, p) };
+  });
+  return { rows, weighted: weighted(open, p), noAmount: open.filter((d) => typeof d.amount !== "number").length };
+}
+
+export interface MonthRow {
+  month: Date;
+  created: number;
+  won: number;
+  lost: number;
+  wonSums: [string, number][];
+}
+
+/** Динамика за последние `count` месяцев (старые первыми): создано, выиграно и проиграно по месяцу события. */
+export function monthly(deals: CrmRecord[], pipelineId: string | null, now: Date = new Date(), count = 6): MonthRow[] {
+  const own = deals.filter((d) => live(d) && (!pipelineId || d.pipeline_id === pipelineId));
+  const at = (v: unknown) => (typeof v === "string" && v ? monthKey(new Date(v)) : "");
+  return Array.from({ length: count }, (_, i) => {
+    const month = new Date(now.getFullYear(), now.getMonth() - (count - 1 - i), 1);
+    const key = monthKey(month);
+    const won = own.filter((d) => d.status === "won" && at(d.closed_at) === key);
+    return {
+      month,
+      created: own.filter((d) => at(d.created_at) === key).length,
+      won: won.length,
+      lost: own.filter((d) => d.status === "lost" && at(d.closed_at) === key).length,
+      wonSums: sums(won),
+    };
+  });
+}
+
+export const MANUAL_SOURCE = "Вручную";
+export const IMPORT_SOURCE = "Импорт из таблиц";
+
+/** Читаемое имя источника клиента: `import:файл` — импорт, `leadgen:telegram` — поиск клиентов, пусто — вручную. */
+export function sourceName(v: unknown): string {
+  const s = typeof v === "string" ? v.trim() : "";
+  if (!s) return MANUAL_SOURCE;
+  if (s.startsWith("import:")) return IMPORT_SOURCE;
+  if (s.startsWith("leadgen:")) return `Поиск клиентов · ${s.slice(8) || "—"}`;
+  return s;
+}
+
+export interface SourceRow {
+  source: string;
+  /** Новых клиентов (компаний) в периоде. */
+  clients: number;
+  /** Выиграно сделок в периоде у клиентов этого источника. */
+  won: number;
+  wonSums: [string, number][];
+}
+
+/** Источники клиентов: новые компании периода и выигранные в периоде сделки их источника. Больше клиентов — выше. */
+export function sources(companies: CrmRecord[], deals: CrmRecord[], pipelineId: string | null, from: Date | null): SourceRow[] {
+  const sourceOf = new Map(companies.map((c) => [c.id, sourceName(c.source)]));
+  const rows = new Map<string, { source: string; clients: number; won: CrmRecord[] }>();
+  const get = (source: string) => {
+    let r = rows.get(source);
+    if (!r) rows.set(source, (r = { source, clients: 0, won: [] }));
+    return r;
+  };
+  for (const c of companies) if (live(c) && since(c.created_at, from)) get(sourceName(c.source)).clients += 1;
+  for (const d of deals) {
+    if (!live(d) || d.status !== "won" || (pipelineId && d.pipeline_id !== pipelineId) || !since(d.closed_at, from)) continue;
+    const s = d.company_id ? sourceOf.get(String(d.company_id)) : undefined;
+    get(s ?? "Без клиента").won.push(d);
+  }
+  return [...rows.values()]
+    .map((r) => ({ source: r.source, clients: r.clients, won: r.won.length, wonSums: sums(r.won) }))
+    .filter((r) => r.clients + r.won > 0)
+    .sort((a, b) => b.clients - a.clients || b.won - a.won || a.source.localeCompare(b.source, "ru"));
+}
+
+export interface TeamRow extends OwnerRow {
+  /** Задач выполнено в периоде (по `completed_at`). */
+  tasksDone: number;
+  /** Открытых задач с прошедшим сроком сейчас. */
+  overdue: number;
+  /** Звонков, писем, встреч и других событий, записанных в периоде (кроме служебных). */
+  activities: number;
+}
+
+/** Показатели сотрудников: сделки (как `byOwner`), задачи по исполнителю, события по автору. */
+export function team(deals: CrmRecord[], tasks: CrmRecord[], activities: CrmRecord[], pipelineId: string | null, from: Date | null, now: Date = new Date()): TeamRow[] {
+  const rows = new Map<string | null, TeamRow>();
+  const empty = (owner: string | null): TeamRow => ({ owner, open: 0, won: 0, lost: 0, wonSums: [], winRate: null, tasksDone: 0, overdue: 0, activities: 0 });
+  const get = (owner: unknown) => {
+    const k = typeof owner === "string" && owner ? owner : null;
+    let r = rows.get(k);
+    if (!r) rows.set(k, (r = empty(k)));
+    return r;
+  };
+  for (const o of byOwner(deals, pipelineId, from)) rows.set(o.owner, { ...empty(o.owner), ...o });
+  for (const t of tasks) {
+    if (!live(t)) continue;
+    if (t.status === "done" && t.completed_at && since(t.completed_at, from)) get(t.assignee_id).tasksDone += 1;
+    if (t.status !== "done" && t.status !== "cancelled" && time(t.due_at) < now.getTime()) get(t.assignee_id).overdue += 1;
+  }
+  for (const a of activities) if (live(a) && a.type !== "system" && since(a.occurred_at, from)) get(a.created_by).activities += 1;
+  return [...rows.values()]
+    .filter((r) => r.open + r.won + r.lost + r.tasksDone + r.overdue + r.activities > 0)
+    .sort((a, b) => b.won - a.won || b.open - a.open || b.tasksDone - a.tasksDone || (a.owner === null ? 1 : b.owner === null ? -1 : 0));
+}

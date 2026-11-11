@@ -240,6 +240,23 @@ fn search_filters_and_collections_run_locally() {
 }
 
 #[test]
+fn search_ignores_case_of_russian_letters() {
+    let (_d, s) = open();
+    s.save("companies", None, &m(json!({"name": "ООО «Ромашка»", "industry": "Ритейл"}))).unwrap();
+    s.save("companies", None, &m(json!({"name": "Бета"}))).unwrap();
+    for text in ["ромашка", "РОМАШКА", "Ромашка"] {
+        let q = Query { search: Some(text.into()), ..Default::default() };
+        assert_eq!(s.list("companies", &q).unwrap().len(), 1, "поиск «{text}»");
+    }
+    let contains = Filter { field: "industry".into(), op: "contains".into(), value: json!("ритейл") };
+    assert_eq!(s.list("companies", &Query { filters: vec![contains], ..Default::default() }).unwrap().len(), 1);
+    // Числа и пустые значения функция не трогает.
+    let n: i64 = s.conn().query_row("SELECT lower(42)", [], |r| r.get(0)).unwrap();
+    let none: Option<String> = s.conn().query_row("SELECT lower(NULL)", [], |r| r.get(0)).unwrap();
+    assert_eq!((n, none), (42, None));
+}
+
+#[test]
 fn duplicates_are_found_before_saving() {
     let (_d, s) = open();
     let a = s.save("companies", None, &m(json!({"name": "ООО «Ромашка»", "website": "https://romashka.ru"}))).unwrap();

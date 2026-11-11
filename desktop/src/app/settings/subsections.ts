@@ -11,7 +11,7 @@ export function subsectionsOf(section: SettingsSection, cloud: boolean): SubSect
         { id: "security", title: "Вход и безопасность" },
         ...(cloud ? [{ id: "cloud", title: "Данные" }] : []),
       ];
-    case "data": return [{ id: "db", title: "База данных" }, { id: "backups", title: "Резервные копии" }, { id: "drives", title: "Облачные диски" }];
+    case "data": return [{ id: "db", title: "База данных" }, { id: "backups", title: "Резервные копии" }, { id: "portable", title: "Перенос на другой компьютер" }, { id: "drives", title: "Облачные диски" }];
     case "appearance": return [{ id: "look", title: "Внешний вид" }, { id: "sidebar", title: "Боковая панель" }];
     case "system": return [{ id: "startup", title: "Запуск и фон" }, { id: "power", title: "Экономия энергии" }];
     case "updates": return [{ id: "version", title: "Версия" }, { id: "history", title: "История версий" }];

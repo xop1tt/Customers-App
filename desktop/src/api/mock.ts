@@ -206,6 +206,9 @@ function patchLeads(ids: string[], f: (l: Lead) => void) {
   emit("data-changed");
 }
 
+/** Ключ восстановления переносимой копии в демо (G8). */
+let portableKey: string | null = null;
+
 const drives: DrivesState = {
   redirect: "http://127.0.0.1:47811/callback", busy: null,
   providers: [
@@ -255,7 +258,7 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
   }
   if (cmd.startsWith("ws_")) {
     const out = await wsCall(cmd, args, () => leads);
-    if (["ws_save", "ws_delete", "ws_restore", "ws_convert_lead", "ws_switch", "ws_create_workspace", "ws_rename_workspace", "ws_reorder_collections", "ws_hide_collection", "ws_resolve_conflict"].includes(cmd)) {
+    if (["ws_save", "ws_delete", "ws_restore", "ws_merge", "ws_merge_undo", "ws_convert_lead", "ws_switch", "ws_create_workspace", "ws_rename_workspace", "ws_set_local_details", "ws_reorder_collections", "ws_hide_collection", "ws_resolve_conflict"].includes(cmd)) {
       setTimeout(() => emit("workspace-changed", null), 0);
       if (cmd === "ws_convert_lead") {
         const c = out as { workspaceId: string; companyId: string; contactId: string | null; dealId: string | null };
@@ -363,6 +366,19 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
     case "backup_now":
       emit("toast", { kind: "info", text: "Резервная копия сохранена" });
       return "/b/new";
+    case "portable_state":
+      return { hasKey: portableKey !== null, extension: "customers", keyLength: 30 };
+    case "create_portable_key":
+      if (portableKey && !args.replace) throw { code: "error", message: "Ключ восстановления уже создан. Чтобы получить новый, замените ключ." };
+      portableKey = "7KQ2M-XW9RT-4HBNC-P3VZE-6GJ8S-YD5FA";
+      return portableKey;
+    case "export_portable":
+      if (!portableKey) throw { code: "error", message: "Сначала создайте ключ восстановления: «Настройки → Данные → Перенос на другой компьютер»." };
+      return `Переносимая копия сохранена: ${String(args.path)}. Баз CRM: 1`;
+    case "import_portable":
+      return "Данные перенесены из копии. Текущая база сохранена в резервных копиях.";
+    case "upload_portable_to_drive":
+      return `Копия «customers-2026-11-11_10-00.customers» выгружена в ${String(args.service)}`;
     case "restore_backup":
     case "move_database":
       return "Готово";

@@ -6,6 +6,8 @@ name: Release
 # GitHub Release с заметками из .github/release-notes/<тег>.md и прикладывает все файлы.
 # При ручном запуске тег ставится на выбранный коммит ветки; обе сборки берут этот же коммит.
 # Если одна из сборок упала, релиз не создаётся.
+# Сначала задача guard: релиз собирается только из коммита ветки main и только при готовых заметках
+# .github/release-notes/<тег>.md (пакет G8, ADR-060). Иначе сборки не запускаются.
 on:
   push:
     # Только теги из чисел: v1.2.0, v1.2.0.1. Теги с суффиксом (v1.3.0-beta.1) не собираются: Beta нет (ADR-034).
@@ -29,9 +31,44 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
+  guard:
+    name: Release from main with notes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: The tag looks like vX.Y.Z
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG. Нужен вид vX.Y.Z или vX.Y.Z.W, например v1.2.0" >&2; exit 1; fi
+
+      # Ручной запуск — только с ветки main; тег — только на коммите, который уже есть в main.
+      - name: The commit is on main
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Релиз запускается только с ветки main (выбрана $GITHUB_REF_NAME): Run workflow → Use workflow from → main." >&2; exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Коммит $GITHUB_SHA не входит в main: сначала слейте исправление в main, потом выпускайте релиз." >&2; exit 1
+          fi
+
+      - name: Release notes exist
+        run: |
+          notes=".github/release-notes/${TAG}.md"
+          if [ ! -s "$notes" ] || ! grep -q '[^[:space:]]' "$notes"; then
+            echo "Нет заметок релиза $notes: добавьте файл в main (что нового для пользователей) и запустите релиз снова." >&2; exit 1
+          fi
+          echo "Заметки: $notes"
+
   # Сборки идут без прав на запись: токен не достаётся ни сборочным скриптам, ни установщику Inno Setup, ни чужим пакетам.
   macos:
     name: Build macOS app
+    needs: guard
     runs-on: macos-15
     timeout-minutes: 60
     defaults:
@@ -136,6 +173,7 @@ jobs:
 
   windows:
     name: Build Windows installer
+    needs: guard
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -266,6 +304,6 @@ jobs:
             gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" >/dev/null
           fi
           notes=".github/release-notes/${TAG}.md"
-          args=(--title "Customers ${TAG#v}" --verify-tag)
-          if [ -f "$notes" ]; then args+=(--notes-file "$notes"); else args+=(--generate-notes); fi
-          gh release create "$TAG" "${files[@]}" "${args[@]}" --repo "$GITHUB_REPOSITORY"
+          # Заметки обязательны (задача guard проверила их до сборки).
+          if [ ! -s "$notes" ]; then echo "Нет заметок релиза $notes" >&2; exit 1; fi
+          gh release create "$TAG" "${files[@]}" --title "Customers ${TAG#v}" --verify-tag --notes-file "$notes" --repo "$GITHUB_REPOSITORY"

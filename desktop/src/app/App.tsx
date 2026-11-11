@@ -1,3 +1,4 @@
+import { QuickSearch, toggleQuick } from "./QuickSearch";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { isLeadList } from "../lib/leads";
@@ -26,6 +27,7 @@ import { ReportDialog } from "./settings/SystemSections";
 import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
 import { useViewportWidth } from "../state/hooks";
+import { CalendarPage } from "./crm/CalendarPage";
 import { CollectionPage } from "./crm/CollectionPage";
 import { ModuleRail, RAIL_W } from "./ModuleRail";
 import { DealBoard } from "./crm/DealBoard";
@@ -102,6 +104,10 @@ export function App() {
       } else if (e.key.toLowerCase() === "f" && st.phase === "ready") {
         const input = document.querySelector<HTMLInputElement>(".topbar-search input");
         if (input) { e.preventDefault(); input.focus(); input.select(); }
+      } else if (e.key.toLowerCase() === "k" && !e.shiftKey && st.phase === "ready") {
+        // ⇧⌘K занято пунктом меню «Отметить все как просмотренные».
+        e.preventDefault();
+        toggleQuick();
       } else if (e.key.toLowerCase() === "b" && st.phase === "ready") {
         e.preventDefault();
         void patchDevice({ navOpen: !st.device.navOpen });
@@ -120,6 +126,7 @@ export function App() {
       {phase === "ready" && <Shell />}
       <Settings />
       <Marketplace />
+      {phase === "ready" && <QuickSearch />}
       <MenuHost />
       <ConfirmHost />
       <TooltipHost />
@@ -237,7 +244,7 @@ function Shell() {
   useChatPolling();
   useMarketInstalled();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
-  const crm = section === "collection" || section === "today" || section === "deals" || section === "reports";
+  const crm = section === "collection" || section === "today" || section === "calendar" || section === "deals" || section === "reports";
   const showInsp = (lead && device.inspectorShown && (!floatInsp || selected === 1)) || (crm && !!crmRecord);
   const InspectorBody = crm ? CrmCard : Inspector;
   const inspLabel = crm ? "Карточка записи" : "Сведения о лиде";
@@ -267,6 +274,7 @@ function Shell() {
           {section === "runs" && <RunsPage />}
           {section === "collection" && <CollectionPage />}
           {section === "today" && <TodayPage />}
+          {section === "calendar" && <CalendarPage />}
           {section === "deals" && <DealBoard />}
           {section === "reports" && <ReportsPage />}
           {section === "profile" && <ProfilePage />}

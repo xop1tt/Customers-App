@@ -78,9 +78,9 @@ describe("мастер первого запуска", () => {
     expect(canSkip(f)).toBe(false);
     f = skip(f); // intro нельзя пропустить: это обычное «Далее»
     expect(f.skipped).toEqual([]);
-    expect(stepOf(f).id).toBe("sources");
+    expect(stepOf(f).id).toBe("company");
     f = skip(f);
-    expect(f.skipped).toEqual(["sources"]);
+    expect(f.skipped).toEqual(["company"]);
     f = back(f);
     f = next(f);
     expect(f.skipped).toEqual([]);
@@ -89,8 +89,8 @@ describe("мастер первого запуска", () => {
     expect(canSkip(f)).toBe(false);
     expect(next(f).finished).toBe(true);
     expect(finish(newFlow()).finished).toBe(true);
-    expect(stateOf(skip(next(newFlow())), "sources", false)).toBe("skipped");
-    expect(stateOf(newFlow(), "sources", true)).toBe("configured");
+    expect(stateOf(skip(next(newFlow())), "company", false)).toBe("skipped");
+    expect(stateOf(newFlow(), "company", true)).toBe("configured");
   });
   it("подсказывает регион без служебных слов", () => {
     expect(regionName("город Казань")).toBe("Казань");

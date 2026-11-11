@@ -48,6 +48,7 @@ Maksim (не программист); код пишет Claude Code. Отвеч�
 | только интерфейс | `npm run typecheck && npm test` |
 | только ядро | `npm run test:core` |
 | стиль Rust | `cargo fmt --check` и `cargo clippy --lib --bins -D warnings` (в `src-tauri`) |
+| зависимости Rust | `cargo deny check` (в `src-tauri`, настройки `deny.toml`; в CI обязательно) |
 
 Из корня: `python -m pytest` (проверки репозитория, `requirements-dev.txt`). Облачные тесты: `python -m pytest supabase/tests` при запущенном
 стенде. В контейнере нет Docker: стенд поднимается без него (Postgres 16 + бинарники GoTrue/PostgREST/Deno в
@@ -86,7 +87,7 @@ Maksim (не программист); код пишет Claude Code. Отвеч�
 * Версия берётся из тега `vX.Y.Z` (`release.yml`, ручной запуск или тег от Maksim); файлы между релизами не
   обязаны совпадать с версией релиза.
 * Публикация ждёт подтверждения в окружении `production`. Сначала слияние исправления, потом релиз.
-* Заметки релиза — `.github/release-notes/vX.Y.Z.md`.
+* Заметки релиза — `.github/release-notes/vX.Y.Z.md`, обязательны: без них и вне `main` `release.yml` не собирает (ADR-060).
 
 ## 9. Известные ловушки
 

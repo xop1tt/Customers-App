@@ -92,6 +92,14 @@ export function Segmented<T extends string | number>({ value, options, onChange,
 
 // ------------------------------------------------------------------ поля ввода
 
+/** Подпись поля «Field» для полей ввода внутри него (доступность: у поля есть имя, ADR-060). */
+const FieldLabel = createContext<string | undefined>(undefined);
+/** aria-labelledby из Field, если у поля нет своего aria-label / aria-labelledby. */
+function useFieldLabel(rest: { "aria-label"?: string; "aria-labelledby"?: string }) {
+  const id = useContext(FieldLabel);
+  return id && !rest["aria-label"] && !rest["aria-labelledby"] ? { "aria-labelledby": id } : {};
+}
+
 interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange"> {
   value: string;
   onChange: (v: string) => void;
@@ -101,10 +109,11 @@ interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChan
   wrapClass?: string;
 }
 export const TextInput = forwardRef<HTMLInputElement, InputProps>(function TextInput({ value, onChange, icon, onClear, invalid, className = "", wrapClass = "", ...rest }, ref) {
+  const labelled = useFieldLabel(rest);
   return (
     <div className={`input${invalid ? " invalid" : ""} ${wrapClass}`}>
       {icon && <Icon name={icon} size={14} className="input-icon" />}
-      <input ref={ref} value={value} onChange={(e) => onChange(e.target.value)} className={className} spellCheck={false} autoComplete="off" {...rest} />
+      <input ref={ref} value={value} onChange={(e) => onChange(e.target.value)} className={className} spellCheck={false} autoComplete="off" {...labelled} {...rest} />
       {onClear && value !== "" && (
         <button type="button" className="input-clear" onClick={onClear} aria-label="Очистить" tabIndex={-1}>
           <Icon name="x" size={12} />
@@ -116,9 +125,10 @@ export const TextInput = forwardRef<HTMLInputElement, InputProps>(function TextI
 
 export function PasswordInput({ value, onChange, ...rest }: Omit<InputProps, "type" | "icon">) {
   const [shown, setShown] = useState(false);
+  const labelled = useFieldLabel(rest);
   return (
     <div className="input">
-      <input value={value} onChange={(e) => onChange(e.target.value)} type={shown ? "text" : "password"} spellCheck={false} autoComplete="off" {...rest} />
+      <input value={value} onChange={(e) => onChange(e.target.value)} type={shown ? "text" : "password"} spellCheck={false} autoComplete="off" {...labelled} {...rest} />
       <button type="button" className="input-clear" onClick={() => setShown(!shown)} aria-label={shown ? "Скрыть пароль" : "Показать пароль"} data-tip={shown ? "Скрыть" : "Показать"} tabIndex={-1}>
         <Icon name={shown ? "eyeOff" : "eye"} size={14} />
       </button>
@@ -131,7 +141,8 @@ interface AreaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "o
   onChange: (v: string) => void;
 }
 export function TextArea({ value, onChange, className = "", ...rest }: AreaProps) {
-  return <textarea className={`textarea ${className}`} value={value} onChange={(e) => onChange(e.target.value)} spellCheck={false} {...rest} />;
+  const labelled = useFieldLabel(rest);
+  return <textarea className={`textarea ${className}`} value={value} onChange={(e) => onChange(e.target.value)} spellCheck={false} {...labelled} {...rest} />;
 }
 
 interface NumberProps { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; suffix?: string; width?: number }
@@ -237,9 +248,9 @@ export function Score({ value, big }: { value: number; big?: boolean }) {
   return <span className={`score score-${tone}${big ? " score-big" : ""} num`}>{Math.round(value)}</span>;
 }
 
-export function ProgressBar({ value, tone }: { value: number; tone?: "good" | "mid" | "low" }) {
+export function ProgressBar({ value, tone, label = "Ход выполнения" }: { value: number; tone?: "good" | "mid" | "low"; label?: string }) {
   return (
-    <div className="bar" role="progressbar" aria-valuenow={Math.round(value * 100)} aria-valuemin={0} aria-valuemax={100}>
+    <div className="bar" role="progressbar" aria-label={label} aria-valuenow={Math.round(value * 100)} aria-valuemin={0} aria-valuemax={100}>
       <div className={`bar-fill ${tone ?? ""}`} style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }} />
     </div>
   );
@@ -271,8 +282,8 @@ export function Field({ label, hint, error, children }: { label?: string; hint?:
   const id = useId();
   return (
     <div className="field" id={id}>
-      {label && <div className="field-label">{label}</div>}
-      {children}
+      {label && <div className="field-label" id={`${id}-label`}>{label}</div>}
+      <FieldLabel.Provider value={label ? `${id}-label` : undefined}>{children}</FieldLabel.Provider>
       {error ? <div className="field-error" role="alert">{error}</div> : hint ? <div className="field-hint">{hint}</div> : null}
     </div>
   );

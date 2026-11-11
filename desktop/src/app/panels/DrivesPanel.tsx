@@ -7,6 +7,7 @@ import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, toast } from "../../state/store";
 import { useEvent } from "../../state/hooks";
 import { copyToClipboard, openLink } from "../../state/actions";
+import { useCreateKey } from "../settings/PortableCopy";
 
 export function DrivesPanel() {
   const [state, setState] = useState<DrivesState | null>(null);
@@ -14,6 +15,7 @@ export function DrivesPanel() {
   const [keyFor, setKeyFor] = useState<ProviderInfo | null>(null);
   const [dav, setDav] = useState<DriveInfo | null>(null);
   const [bind, setBind] = useState<DriveInfo | null>(null);
+  const { create: createKey, dialog: keyDialog } = useCreateKey(() => {});
 
   const load = useCallback(() => { void api.drivesState().then(setState).catch(() => {}); }, []);
   useEffect(load, [load]);
@@ -39,6 +41,19 @@ export function DrivesPanel() {
     setBusy(null);
     if (r) toast(r, "success");
   };
+  /** Переносимая копия под ключом восстановления: её можно скачать с диска и открыть на другом компьютере. */
+  const uploadPortable = async (d: DriveInfo) => {
+    setBusy(d.service);
+    const r = await attempt(() => api.uploadPortableToDrive(d.service));
+    setBusy(null);
+    if (r) toast(r, "success");
+  };
+  const portable = async (d: DriveInfo) => {
+    const st = await attempt(() => api.portableState());
+    if (!st) return;
+    if (st.hasKey) await uploadPortable(d);
+    else await createKey(false, () => void uploadPortable(d));
+  };
   const disconnect = async (d: DriveInfo) => {
     const ok = await confirmDialog({ title: `Отключить ${d.title}?`, message: "Сохранённые данные доступа будут удалены с этого устройства. Файлы на диске останутся.", confirm: "Отключить", danger: true });
     if (!ok) return;
@@ -55,6 +70,7 @@ export function DrivesPanel() {
           ) : d.connected ? (
             <>
               <Button icon="upload" onClick={() => void upload(d)}>Загрузить копию</Button>
+              <Button onClick={() => void portable(d)}>Для переноса…</Button>
               <Button variant="ghost" onClick={() => void disconnect(d)}>Отключить</Button>
             </>
           ) : (
@@ -65,6 +81,7 @@ export function DrivesPanel() {
       {busy && <Notice tone="info">Завершите вход в открывшемся окне браузера. Приложение ждёт ответа.</Notice>}
       {bind && <BindDialog drive={bind} provider={state.providers.find((x) => x.provider === bind.provider) ?? null} onClose={() => setBind(null)} onConfirm={() => void bindNow(bind)} onKey={(p) => { setBind(null); setKeyFor(p); }} />}
       {keyFor && <OAuthKeyDialog provider={keyFor} redirect={state.redirect} onClose={() => { setKeyFor(null); load(); }} />}
+      {keyDialog}
       {dav && <WebdavDialog drive={dav} onClose={(ok) => { setDav(null); if (ok) load(); }} />}
     </>
   );
