@@ -1,96 +1,105 @@
-# Personal & Internal Business Use License (PIBUL) 1.0
+# Functional Source License, Version 1.1, ALv2 Future License
 
-Copyright (c) 2026 [xop1tt]
+## Abbreviation
 
-All rights reserved.
+FSL-1.1-ALv2
 
-## 1. Definitions
+## Notice
 
-"Software" means this software, including its source code, object code, documentation, associated files, modifications and derivative works.
+Copyright 2026 xop1tt
 
-"Author" means the original copyright holder or any person or entity legally authorized to grant permissions under this License.
+## Terms and Conditions
 
-"User" means any individual or legal entity accessing, downloading or using the Software.
+### Licensor ("We")
 
-"Commercial Use" means any use of the Software intended to generate revenue, profit, financial benefit or other commercial advantage through the distribution, sale, licensing, sublicensing, rental, hosting or provision of access to the Software or its derivatives to third parties.
+The party offering the Software under these Terms and Conditions.
 
-## 2. Permitted Use
+### The Software
 
-Subject to the terms of this License, the Author grants Users a limited, non-exclusive, worldwide, royalty-free, non-transferable and revocable license to:
+The "Software" is each version of the software that we make available under
+these Terms and Conditions, as indicated by our inclusion of these Terms and
+Conditions with the Software.
 
-- Download and use the Software for personal purposes.
-- Use the Software within an organization for its own internal business operations.
-- View, study and inspect the source code.
-- Modify and adapt the source code for personal use or internal organizational use.
-- Create private builds and modifications for personal or internal organizational use.
-- Make internal copies necessary for permitted use.
+### License Grant
 
-Organizations may provide access to the Software to their employees and authorized contractors solely for internal organizational purposes, provided that such access does not constitute distribution or commercial provision of the Software to third parties.
+Subject to your compliance with this License Grant and the Patents,
+Redistribution and Trademark clauses below, we hereby grant you the right to
+use, copy, modify, create derivative works, publicly perform, publicly display
+and redistribute the Software for any Permitted Purpose identified below.
 
-## 3. Restrictions
+### Permitted Purpose
 
-Without prior express written permission from the Author, Users are strictly prohibited from:
+A Permitted Purpose is any purpose other than a Competing Use. A Competing Use
+means making the Software available to others in a commercial product or
+service that:
 
-- Selling, reselling or commercially distributing the Software or any part thereof.
-- Offering the Software or its derivatives as a paid product or service.
-- Charging third parties for access to or use of the Software.
-- Providing the Software as a paid SaaS, hosted service or other commercial offering.
-- Publishing, distributing or sublicensing modified or unmodified versions of the Software to third parties.
-- Creating commercial products or services based on the Software.
-- Using the Software or its derivatives to develop and commercially distribute competing products.
-- Removing or altering copyright notices, attribution statements or this License.
-- Claiming ownership of the original Software or its underlying intellectual property.
+1. substitutes for the Software;
 
-These restrictions apply to both the original Software and all modified versions and derivative works.
+2. substitutes for any other product or service we offer using the Software
+   that exists as of the date we make the Software available; or
 
-## 4. Distribution
+3. offers the same or substantially similar functionality as the Software.
 
-Public redistribution of the Software, including modified versions, is not permitted without prior written authorization from the Author.
+Permitted Purposes specifically include using the Software:
 
-Internal copying and sharing within an organization are permitted solely to the extent necessary for the organization's own internal use.
+1. for your internal use and access;
 
-The publication of source code on public repositories, websites, package registries or other distribution platforms is considered redistribution and requires prior written authorization, except for the original repository published by the Author.
+2. for non-commercial education;
 
-## 5. Ownership and Intellectual Property
+3. for non-commercial research; and
 
-The Software and all associated intellectual property rights remain the property of the Author and/or their respective copyright holders.
+4. in connection with professional services that you provide to a licensee
+   using the Software in accordance with these Terms and Conditions.
 
-This License does not transfer ownership of the Software or grant any trademark, patent or other intellectual property rights beyond the limited permissions expressly stated herein.
+### Patents
 
-## 6. Third-Party Components
+To the extent your use for a Permitted Purpose would necessarily infringe our
+patents, the license grant above includes a license under our patents. If you
+make a claim against any party that the Software infringes or contributes to
+the infringement of any patent, then your patent license to the Software ends
+immediately.
 
-The Software may contain or depend on third-party components, libraries and other materials distributed under separate licenses.
+### Redistribution
 
-Such components remain subject to their respective licenses. This License does not override or restrict rights independently granted by third-party licensors.
+The Terms and Conditions apply to all copies, modifications and derivatives of
+the Software.
 
-## 7. Termination
+If you redistribute any copies, modifications or derivatives of the Software,
+you must include a copy of or a link to these Terms and Conditions and not
+remove any copyright notices provided in or with the Software.
 
-Any violation of this License automatically terminates the permissions granted to the violating User, to the extent permitted by applicable law.
+### Disclaimer
 
-Upon termination, the User must cease all use of the Software and destroy copies in their possession or control, except where retention is required by applicable law.
+THE SOFTWARE IS PROVIDED "AS IS" AND WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WITHOUT LIMITATION WARRANTIES OF FITNESS FOR A PARTICULAR
+PURPOSE, MERCHANTABILITY, TITLE OR NON-INFRINGEMENT.
 
-## 8. Disclaimer of Warranty
+IN NO EVENT WILL WE HAVE ANY LIABILITY TO YOU ARISING OUT OF OR RELATED TO THE
+SOFTWARE, INCLUDING INDIRECT, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES,
+EVEN IF WE HAVE BEEN INFORMED OF THEIR POSSIBILITY IN ADVANCE.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+### Trademarks
 
-THE AUTHOR SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE, TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
+Except for displaying the License Details and identifying us as the origin of
+the Software, you have no right under these Terms and Conditions to use our
+trademarks, trade names, service marks or product names.
 
-## 9. Permission Requests
+## Grant of Future License
 
-Users wishing to obtain permission for commercial use, redistribution, sublicensing, hosting or other activities prohibited by this License must obtain prior written authorization from the Author.
+We hereby irrevocably grant you an additional license to use the Software under
+the Apache License, Version 2.0 that is effective on the second anniversary of
+the date we make the Software available. On or after that date, you may use the
+Software under the Apache License, Version 2.0, in which case the following
+will apply:
 
-The Author reserves the right to grant additional permissions under separate agreements.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License.
 
-## 10. Entire Agreement
+You may obtain a copy of the License at
 
-This License constitutes the terms governing the use of the Software, subject to applicable law.
+http://www.apache.org/licenses/LICENSE-2.0
 
-If any provision of this License is found to be unenforceable, the remaining provisions shall remain in effect to the fullest extent permitted by law.
-
----
-
-**License:** Personal & Internal Business Use License (PIBUL) 1.0
-
-**Copyright Holder:** [xop1tt]
-
-**Year:** 2026
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
