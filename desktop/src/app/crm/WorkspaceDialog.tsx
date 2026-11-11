@@ -69,7 +69,7 @@ function WorkspaceDialogBody() {
         {ws.isCloud && (
           <SettingRow title="Приглашение" hint="Вставьте ссылку или код из приглашения.">
             <div className="row" style={{ gap: 6 }}>
-              <TextInput value={token} onChange={setToken} placeholder="customers://invite?token=…" aria-label="Код приглашения" />
+              <TextInput value={token} onChange={setToken} placeholder="Ссылка или код из приглашения" aria-label="Код приглашения" />
               <Button small disabled={!token.trim()} onClick={() => void done(api.wsAcceptInvitation(token)).then((r) => { if (r) { setToken(""); toast("Вы присоединились к Workspace", "success"); } })}>Принять</Button>
             </div>
           </SettingRow>

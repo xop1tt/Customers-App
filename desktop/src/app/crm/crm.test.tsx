@@ -38,7 +38,7 @@ describe("описание CRM-сущностей", () => {
   });
 
   it("подписывает значения перечислений и суммы", () => {
-    expect(cellText(ENTITIES.deal, rec({ status: "won" }), "status", lookup)).toBe("Успешна");
+    expect(cellText(ENTITIES.deal, rec({ status: "won" }), "status", lookup)).toBe("Выиграна");
     expect(cellText(ENTITIES.task, rec({ priority: "urgent" }), "priority", lookup)).toBe("Срочный");
     expect(cellText(ENTITIES.deal, rec({ amount: 1500, currency: "RUB" }), "amount", lookup)).toMatch(/1\s?500/);
   });

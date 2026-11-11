@@ -26,7 +26,7 @@ describe("канбан сделок", () => {
     const first = await screen.findByRole("listitem", { name: String(stages[0]!.name) });
     await within(first).findByText("Тестовая сделка");
     expect(within(first).getAllByText(/70\s?000 ₽/).length).toBeGreaterThan(0);
-    fireEvent.click(within(first).getAllByRole("button", { name: "Перенести в этап" })[0]!);
+    fireEvent.click(within(first).getAllByRole("button", { name: "Сменить этап" })[0]!);
     fireEvent.click(within(await screen.findByRole("menuitem", { name: String(stages[1]!.name) })).getByRole("button"));
     const second = screen.getByRole("listitem", { name: String(stages[1]!.name) });
     await within(second).findByText("Тестовая сделка");

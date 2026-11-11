@@ -57,7 +57,7 @@ export function MailPanel() {
     setBusy(null);
   };
   const forget = async () => {
-    const ok = await confirmDialog({ title: "Забыть почтовый сервер?", message: "Пароль и настройки сервера будут удалены с этого устройства.", confirm: "Забыть", danger: true });
+    const ok = await confirmDialog({ title: "Удалить настройки почтового сервера?", message: "Пароль и настройки сервера будут удалены с этого устройства.", confirm: "Удалить", danger: true });
     if (!ok) return;
     await attempt(() => api.mailForget());
     setAcc(blank());
@@ -92,7 +92,7 @@ export function MailPanel() {
             <Button variant="primary" busy={busy === "save"} disabled={!valid} onClick={() => void save()}>Сохранить</Button>
             <Button busy={busy === "test"} disabled={!state.smtpReady} onClick={() => void test()}>Проверить отправку</Button>
             <span className="grow" />
-            {(state.account || state.hasPassword) && <Button variant="danger" onClick={() => void forget()}>Забыть сервер</Button>}
+            {(state.account || state.hasPassword) && <Button variant="danger" onClick={() => void forget()}>Удалить настройки сервера</Button>}
           </div>
         </div>
       )}

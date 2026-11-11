@@ -270,7 +270,7 @@ function History({ lead }: { lead: Lead }) {
   );
 }
 
-/** «Перенести в CRM»: компания, контакт и (по желанию) сделка в активном Workspace. Повторно не дублирует. */
+/** «Добавить в CRM»: компания, контакт и (по желанию) сделка в активном Workspace. Повторно не дублирует. */
 function ToCrm({ lead }: { lead: Lead }) {
   const ws = useStore((s) => s.ws);
   const collections = useStore((s) => s.collections);
@@ -299,7 +299,7 @@ function ToCrm({ lead }: { lead: Lead }) {
   };
   return (
     <div className="row crm-convert">
-      <Button icon="upload" busy={busy} onClick={() => void go()}>Перенести в CRM</Button>
+      <Button icon="upload" busy={busy} onClick={() => void go()}>Добавить в CRM</Button>
       <Checkbox checked={deal} onChange={setDeal} label="со сделкой" />
     </div>
   );

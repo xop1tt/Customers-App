@@ -24,7 +24,7 @@ export const ENUMS: Record<string, Record<string, string>> = {
   "crm_leads.status": { new: "Новый", in_progress: "В работе", qualified: "Квалифицирован", disqualified: "Отклонён", converted: "Переведён" },
   "tasks.priority": { low: "Низкий", normal: "Обычный", high: "Высокий", urgent: "Срочный" },
   "tasks.status": { todo: "К выполнению", in_progress: "В работе", done: "Готово", cancelled: "Отменена" },
-  "deals.status": { open: "Открыта", won: "Успешна", lost: "Потеряна" },
+  "deals.status": { open: "Открыта", won: "Выиграна", lost: "Проиграна" },
   "activities.type": {
     call: "Звонок", email: "Письмо", meeting: "Встреча", follow_up: "Повторный контакт", reminder: "Напоминание", agreement: "Договорённость",
     payment: "Оплата", custom: "Событие", system: "Система",

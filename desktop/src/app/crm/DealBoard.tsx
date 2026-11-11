@@ -110,7 +110,7 @@ export function DealBoard() {
                       </span>
                       {c.stage.kind === "open" && dealTasks && <NextLine n={next.get(d.id)} />}
                     </button>
-                    {editable && <IconButton icon="chevronDown" size={14} tip="Перенести в этап" className="board-move" onClick={(e) => stageMenu(d, e.currentTarget.getBoundingClientRect())} />}
+                    {editable && <IconButton icon="chevronDown" size={14} tip="Сменить этап" className="board-move" onClick={(e) => stageMenu(d, e.currentTarget.getBoundingClientRect())} />}
                   </article>
                 );
               })}
