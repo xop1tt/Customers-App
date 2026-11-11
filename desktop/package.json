@@ -10,16 +10,11 @@
     "test": "vitest run",
     "tauri": "tauri",
     "shots": "node scripts/screenshots.cjs",
-    "dev:beta": "tauri dev --features beta --config src-tauri/tauri.beta.conf.json",
     "test:core": "cargo test --manifest-path src-tauri/Cargo.toml --locked",
-    "debug:build": "tauri build --features beta --config src-tauri/tauri.beta.conf.json",
-    "debug:test": "cargo test --manifest-path src-tauri/Cargo.toml --locked --features beta",
-    "debug:scenario": "cargo test --manifest-path src-tauri/Cargo.toml --locked --features beta --test scenarios -- --nocapture",
-    "debug:isolation": "cargo test --manifest-path src-tauri/Cargo.toml --locked --lib -- channel:: paths:: other_channel beta_ crash_reports_of_channels stable_never_picks_beta secrets::tests::stable_secrets",
     "database:test": "cargo test --manifest-path src-tauri/Cargo.toml --locked --lib -- db:: store::",
     "release:check": "node scripts/release-check.cjs",
     "release:build": "tauri build",
-    "check": "npm run typecheck && npm test && npm run test:core && npm run debug:test && npm run release:check"
+    "check": "npm run typecheck && npm test && npm run test:core && npm run release:check"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

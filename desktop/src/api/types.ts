@@ -201,8 +201,6 @@ export interface BootInfo {
   session: SessionInfo | null;
   device: DevicePrefs;
   error: string | null;
-  /** Канал сборки: Stable (обычная версия) или Beta (Debug/Beta, своя база и настройки). */
-  channel: "stable" | "beta";
 }
 
 export interface SourceReport {

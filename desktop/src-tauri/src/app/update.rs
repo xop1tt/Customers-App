@@ -123,9 +123,7 @@ impl Core {
         let was = self.updates.lock().unwrap().phase.clone();
         self.updates.lock().unwrap().last_attempt = Some(Utc::now());
         self.set_phase(Phase::Checking);
-        // Beta не проверяет обычные релизы: иначе она предложила бы установщик Stable и тем самым изменила бы
-        // установленную Stable-версию. Beta-сборки ставятся вручную со страницы Pre-release (docs/DEBUG_BUILD.md).
-        let result = if self.env.channel.is_beta() { Ok(None) } else { updates::check(self.env.transport.as_ref(), &self.env.version, platform()).await };
+        let result = updates::check(self.env.transport.as_ref(), &self.env.version, platform()).await;
         match result {
             Ok(found) => {
                 self.env.patch_device(&json!({"lastUpdateCheck": updates::stamp(&Utc::now())}));

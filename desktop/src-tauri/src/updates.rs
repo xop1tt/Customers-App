@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 pub const REPOSITORY: &str = "xop1tt/CLIENTS";
-/// Начало имён файлов Beta-сборок: Customers-Beta-v1.3.0-beta.1-macOS.dmg.
+/// Начало имён файлов снятых с выпуска Beta-сборок (Customers-Beta-v1.3.0-beta.1-macOS.dmg): их приложение не ставит.
 pub const BETA_ASSET_PREFIX: &str = "Customers-Beta-";
 pub const RELEASES_PAGE: &str = "https://github.com/xop1tt/CLIENTS/releases";
 pub const WIKI_PAGE: &str = "https://github.com/xop1tt/CLIENTS/wiki";
@@ -148,7 +148,7 @@ impl ReleaseInfo {
     pub fn installer(&self, platform: Platform) -> Option<&ReleaseAsset> {
         match platform {
             Platform::MacOs => {
-                // Файлы Beta (Customers-Beta-…) Stable не устанавливает, даже если они оказались в обычном релизе.
+                // Файлы старых Beta-сборок (Customers-Beta-…) не устанавливаются, даже если оказались в обычном релизе.
                 let dmgs: Vec<&ReleaseAsset> =
                     self.assets.iter().filter(|a| a.name.to_lowercase().ends_with(".dmg") && !a.name.starts_with(BETA_ASSET_PREFIX)).collect();
                 dmgs.iter().find(|a| a.name.contains("macOS")).or(dmgs.first()).copied()
@@ -670,7 +670,7 @@ mod tests {
     }
 
     #[test]
-    fn stable_never_picks_beta_installers() {
+    fn never_picks_old_beta_installers() {
         let assets = [asset("Customers-Beta-v1.3.0-beta.1-macOS.dmg", None), asset("Customers-Beta-v1.3.0-beta.1-Windows-x64-Setup.exe", None)].join(",");
         let r = ReleaseInfo::parse(release_json("v1.3.0", &assets).as_bytes()).unwrap();
         assert!(r.installer(Platform::MacOs).is_none());

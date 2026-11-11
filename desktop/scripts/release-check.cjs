@@ -1,16 +1,15 @@
-// Проверка готовности сборки канала: версии, разделение Stable и Beta, отсутствие отладочных возможностей в Stable.
+// Проверка готовности сборки: версии, идентичность приложения, отсутствие отладочных возможностей.
 // Все проверки читают реальные файлы проекта; при любой ошибке код выхода 1 и список проблем.
 //
-//   node scripts/release-check.cjs                     — общие проверки (каждый PR)
-//   node scripts/release-check.cjs --tag v1.3.0        — плюс тег Stable (сравнивается с версией в файлах)
-//   node scripts/release-check.cjs --tag v1.3.0-beta.1 — плюс тег Beta
+//   node scripts/release-check.cjs                — общие проверки (каждый PR)
+//   node scripts/release-check.cjs --tag v1.3.0   — плюс тег релиза (сравнивается с версией в файлах)
 //
-// Описание: docs/RELEASE_PROCESS.md, docs/DEBUG_BUILD.md.
+// Канал один (ADR-034): предварительных версий, Beta-сборок и Debug Menu нет. Описание: docs/RELEASE_PROCESS.md.
 const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const read = (f) => fs.readFileSync(path.join(root, f), "utf8").replace(/^﻿/, "");
+const read = (f) => fs.readFileSync(path.join(root, f), "utf8").replace(/^\uFEFF/, "");
 const problems = [];
 const ok = [];
 const check = (cond, okText, badText) => (cond ? ok.push(okText) : problems.push(badText));
@@ -21,100 +20,57 @@ const tag = tagIdx >= 0 ? args[tagIdx + 1] : null;
 
 // ---------------------------------------------------------------- версии
 const pkg = JSON.parse(read("package.json"));
-const stable = JSON.parse(read("src-tauri/tauri.conf.json"));
-const beta = JSON.parse(read("src-tauri/tauri.beta.conf.json"));
+const conf = JSON.parse(read("src-tauri/tauri.conf.json"));
 const cargo = read("src-tauri/Cargo.toml");
 const cargoVersion = (cargo.match(/\[package\][^[]*?\nversion\s*=\s*"([^"]+)"/) || [])[1];
-const versions = { "package.json": pkg.version, "tauri.conf.json": stable.version, "Cargo.toml": cargoVersion };
+const versions = { "package.json": pkg.version, "tauri.conf.json": conf.version, "Cargo.toml": cargoVersion };
 check(new Set(Object.values(versions)).size === 1, `версия ${pkg.version} одинакова в package.json, tauri.conf.json, Cargo.toml`, `версии расходятся: ${JSON.stringify(versions)}`);
-check(beta.version === undefined, "tauri.beta.conf.json не задаёт свою версию (берётся общая)", "tauri.beta.conf.json задаёт version: версия должна быть одна");
-const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+)|-beta\.(\d+))?$/;
-check(SEMVER.test(pkg.version), `версия ${pkg.version} допустимого вида`, `версия ${pkg.version} не вида X.Y.Z или X.Y.Z-beta.N`);
+const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$/;
+check(SEMVER.test(pkg.version), `версия ${pkg.version} вида X.Y.Z`, `версия ${pkg.version} не вида X.Y.Z (предварительных версий нет)`);
 
 if (tag) {
   const m = /^v(.+)$/.exec(tag);
   const v = m ? m[1] : "";
-  const isBeta = /-beta\.\d+$/.test(v);
-  check(SEMVER.test(v), `тег ${tag} допустимого вида`, `тег ${tag}: нужен vX.Y.Z (Stable) или vX.Y.Z-beta.N (Beta)`);
+  check(SEMVER.test(v), `тег ${tag} вида vX.Y.Z`, `тег ${tag}: нужен vX.Y.Z без суффикса (Beta и Preview не выпускаются)`);
   check(v === pkg.version, `тег ${tag} совпадает с версией в файлах`, `тег ${tag} не совпадает с версией ${pkg.version} (сначала node scripts/set-version.cjs ${v})`);
-  if (!isBeta) check(!/-/.test(v), "Stable-тег без суффикса предварительной версии", `Stable-тег ${tag} содержит суффикс`);
 }
 
-// ---------------------------------------------------------------- идентичность каналов
-// Значения Stable записаны у пользователей: их изменение потеряло бы данные, ключи или обновления.
-const channelRs = read("src-tauri/src/channel.rs");
-const ident = (name) => {
-  const block = channelRs.split(`const ${name}: Identity = Identity {`)[1]?.split("};")[0] ?? "";
-  const field = (f) => (block.match(new RegExp(`${f}:\\s*b?"([^"]*)"`)) || [])[1];
-  return { identifier: field("identifier"), product: field("product_name"), scheme: field("url_scheme"), binary: field("binary") };
-};
-const S = ident("STABLE");
-const B = ident("BETA");
-check(S.identifier === "local.leadgenerator.app" && stable.identifier === S.identifier, "Stable: идентификатор local.leadgenerator.app (как у установленных версий)", `Stable: идентификатор изменён (${stable.identifier} / ${S.identifier})`);
-check(stable.productName === "Customers" && S.product === "Customers", "Stable: имя Customers", `Stable: имя изменено (${stable.productName})`);
-const schemes = (c) => c.plugins?.["deep-link"]?.desktop?.schemes ?? [];
-check(JSON.stringify(schemes(stable)) === JSON.stringify(["leadgenerator"]) && S.scheme === "leadgenerator", "Stable: ссылки leadgenerator://", `Stable: схема ссылок изменена (${schemes(stable)})`);
-check(stable.mainBinaryName === undefined || stable.mainBinaryName === S.binary, "Stable: исполняемый файл customers", `Stable: mainBinaryName = ${stable.mainBinaryName}`);
+// ---------------------------------------------------------------- идентичность приложения
+// Значения записаны у пользователей: их изменение потеряло бы данные, ключи или обновления.
+const identityRs = read("src-tauri/src/identity.rs");
+const block = identityRs.split("pub const APP: Identity = Identity {")[1]?.split("};")[0] ?? "";
+const field = (f) => (block.match(new RegExp(`${f}:\\s*b?"([^"]*)"`)) || [])[1];
+const A = { identifier: field("identifier"), product: field("product_name"), scheme: field("url_scheme"), binary: field("binary") };
+check(A.identifier === "local.leadgenerator.app" && conf.identifier === A.identifier, "идентификатор local.leadgenerator.app (как у установленных версий)", `идентификатор изменён (${conf.identifier} / ${A.identifier})`);
+check(conf.productName === "Customers" && A.product === "Customers", "имя Customers", `имя изменено (${conf.productName} / ${A.product})`);
+const schemes = (conf.plugins?.["deep-link"]?.desktop?.schemes ?? []);
+check(JSON.stringify(schemes) === JSON.stringify(["leadgenerator"]) && A.scheme === "leadgenerator", "ссылки leadgenerator://", `схема ссылок изменена (${schemes} / ${A.scheme})`);
+check(A.binary === "customers" && (conf.mainBinaryName === undefined || conf.mainBinaryName === A.binary), "исполняемый файл customers", `исполняемый файл изменён (${conf.mainBinaryName} / ${A.binary})`);
+const otherConfs = fs.readdirSync(path.join(root, "src-tauri")).filter((f) => /^tauri\..+\.conf\.json$/.test(f));
+check(otherConfs.length === 0, "одна конфигурация Tauri (без конфигураций других каналов)", `лишние конфигурации Tauri: ${otherConfs.join(", ")}`);
 
-check(beta.identifier === B.identifier && B.identifier !== S.identifier, `Beta: свой идентификатор ${beta.identifier}`, `Beta: идентификатор ${beta.identifier} не совпадает с channel.rs (${B.identifier}) или равен Stable`);
-check(beta.productName === B.product && B.product !== S.product, `Beta: своё имя «${beta.productName}»`, `Beta: имя ${beta.productName} не совпадает с channel.rs (${B.product})`);
-check(beta.mainBinaryName === B.binary && B.binary !== S.binary, `Beta: исполняемый файл ${beta.mainBinaryName}`, `Beta: mainBinaryName ${beta.mainBinaryName} не совпадает с channel.rs (${B.binary})`);
-check(JSON.stringify(schemes(beta)) === JSON.stringify([B.scheme]) && B.scheme !== S.scheme, `Beta: свои ссылки ${B.scheme}://`, `Beta: схема ссылок ${schemes(beta)} не совпадает с channel.rs (${B.scheme})`);
-const betaWin = (beta.app?.windows ?? [])[0] ?? {};
-const stableWin = (stable.app?.windows ?? [])[0] ?? {};
-check(betaWin.label === stableWin.label && betaWin.title === B.product, "Beta: окно main с заголовком Beta", `Beta: окно ${JSON.stringify(betaWin)} не соответствует`);
-const sameWindow = Object.keys(stableWin).every((k) => k === "title" || JSON.stringify(stableWin[k]) === JSON.stringify(betaWin[k]));
-check(sameWindow, "Beta: параметры окна совпадают со Stable (кроме заголовка)", "Beta: параметры окна отличаются от Stable — обновите tauri.beta.conf.json");
-
-// ---------------------------------------------------------------- Stable без отладочных возможностей
-const features = cargo.split("[features]")[1]?.split("\n[")[0] ?? "";
-// Признак beta включает только необязательные зависимости Debug Menu (`dep:…`), а они не попадают в Stable.
-const betaLine = features.match(/^beta\s*=\s*\[([^\]]*)\]/m);
-const betaItems = betaLine ? [...betaLine[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : null;
-check(betaItems !== null && betaItems.every((i) => i.startsWith("dep:")), "Cargo: признак beta включает только зависимости Debug Menu", `Cargo: признак beta не объявлен или включает другие признаки (${betaItems})`);
-const depsSection = cargo.split("[dependencies]")[1]?.split("\n[")[0] ?? "";
-const notOptional = (betaItems ?? []).map((i) => i.slice(4)).filter((name) => {
-  const line = (depsSection.match(new RegExp(`^${name}\\s*=.*$`, "m")) || [""])[0];
-  return !/optional\s*=\s*true/.test(line);
-});
-check(notOptional.length === 0, "Cargo: зависимости Debug Menu необязательные (в Stable их нет)", `Cargo: зависимости Debug Menu попадут в Stable: ${notOptional.join(", ")}`);
-check(!/^default\s*=.*beta/m.test(features), "Cargo: beta не входит в default (обычная сборка — Stable)", "Cargo: beta включён по умолчанию — Stable собралась бы как Beta");
+// ---------------------------------------------------------------- без отладочных возможностей
+check(!/^\[features\]/m.test(cargo) || !/^beta\s*=/m.test(cargo.split("[features]")[1] ?? ""), "Cargo: признака beta нет", "Cargo: объявлен признак beta — Beta-сборки удалены (ADR-034)");
 const tauriDep = (cargo.match(/^tauri\s*=\s*\{[^}]*\}/m) || [""])[0];
-check(!/devtools/.test(tauriDep), "Stable: инструменты разработчика WebView не включены", "tauri собран с devtools — их не должно быть в Stable");
-// Отладочный код (Debug Menu, сценарии, тестовые данные) живёт только под cfg(feature = "beta").
-const debugDir = path.join(root, "src-tauri/src/debug");
+check(!/devtools/.test(tauriDep), "инструменты разработчика WebView не включены", "tauri собран с devtools — их не должно быть в релизе");
 const lib = read("src-tauri/src/lib.rs");
-const debugMods = lib.match(/^[ \t]*pub mod debug;/gm) ?? [];
-if (fs.existsSync(debugDir) || debugMods.length) {
-  const guarded = lib.match(/#\[cfg\(feature = "beta"\)\]\s*pub mod debug;/g) ?? [];
-  check(debugMods.length === 1 && guarded.length === 1, "Debug-модуль подключается только в Beta", "src/debug подключён без #[cfg(feature = \"beta\")]");
-  // Команды Debug Menu: все с префиксом debug_ (по нему вызов уходит в обработчик Beta), все зарегистрированы
-  // в debug_handler, а среди команд Stable таких нет.
-  const cmdFile = path.join(debugDir, "commands.rs");
-  const declared = fs.existsSync(cmdFile) ? [...fs.readFileSync(cmdFile, "utf8").matchAll(/#\[tauri::command\]\s*pub (?:async )?fn (\w+)/g)].map((m) => m[1]) : [];
-  const section = (name) => (lib.split(`fn ${name}(`)[1] ?? "").split("generate_handler![")[1]?.split("]")[0] ?? "";
-  const listed = (name) => [...section(name).matchAll(/(\w+),/g)].map((m) => m[1]);
-  const debugListed = listed("debug_handler");
-  const appListed = listed("app_handler");
-  check(
-    declared.every((c) => c.startsWith("debug_") && debugListed.includes(c)) && debugListed.every((c) => declared.includes(c)),
-    `Debug Menu: ${declared.length} команд, все debug_* и зарегистрированы только в Beta`,
-    `Debug Menu: команды ${declared.join(", ")} не совпадают с debug_handler (${debugListed.join(", ")}) или без префикса debug_`,
-  );
-  check(appListed.length > 50 && appListed.every((c) => !c.startsWith("debug_")), "Stable: среди команд нет debug_*", "Stable: команда debug_* в обычном обработчике");
-}
+check(!fs.existsSync(path.join(root, "src-tauri/src/debug")) && !/pub mod debug;/.test(lib), "отладочного модуля debug нет", "src-tauri/src/debug или pub mod debug вернулись");
+check(!fs.existsSync(path.join(root, "src/debug")), "Debug Menu в интерфейсе нет", "desktop/src/debug вернулся");
+const handlerSection = (lib.split("generate_handler![")[1] ?? "").split("]")[0];
+const commands = [...handlerSection.matchAll(/(\w+),/g)].map((m) => m[1]);
+check(commands.length > 50 && commands.every((c) => !c.startsWith("debug_")), `${commands.length} команд, среди них нет debug_*`, "среди команд есть debug_* или обработчик не найден");
+check((lib.match(/generate_handler!\[/g) ?? []).length === 1, "один обработчик команд", "обработчиков команд больше одного");
 
 // ---------------------------------------------------------------- установщик Windows
 const iss = read("installer/Customers.iss");
 const guids = [...iss.matchAll(/#define AppGuid "\{\{([0-9A-F-]+)\}"/g)].map((m) => m[1]);
-check(guids.length === 2 && guids[1] === "6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30", "Inno: AppId Stable прежний", `Inno: AppId Stable изменён или не найден (${guids})`);
-check(guids.length === 2 && guids[0] !== guids[1], "Inno: у Beta свой AppId", "Inno: AppId Beta совпадает со Stable");
-check(/#define UrlScheme "customers-beta"/.test(iss) && /#define UrlScheme "leadgenerator"/.test(iss), "Inno: схемы ссылок каналов разные", "Inno: схемы ссылок не соответствуют каналам");
-check(/#define AppExe "Customers Beta\.exe"/.test(iss), "Inno: Beta ставится как «Customers Beta.exe»", "Inno: имя exe Beta не задано");
+check(guids.length === 1 && guids[0] === "6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30", "Inno: AppId прежний", `Inno: AppId изменён или их несколько (${guids})`);
+check(/#define UrlScheme "leadgenerator"/.test(iss) && !/#ifdef Beta/.test(iss), "Inno: ссылки leadgenerator:, без варианта Beta", "Inno: схема ссылок изменена или остался вариант Beta");
+check(/#define AppExe "Customers\.exe"/.test(iss), "Inno: ставится как Customers.exe", "Inno: имя exe изменено");
 
 // ---------------------------------------------------------------- облако
 const cloudCfg = read("src-tauri/src/cloud/config.rs");
-check(/SUPABASE_BETA_URL/.test(cloudCfg) && /SUPABASE_BETA_ANON_KEY/.test(cloudCfg), "Beta: своё облако (SUPABASE_BETA_*), рабочий проект не встраивается", "Beta: облако не отделено от Stable");
+check(!/SUPABASE_BETA_/.test(cloudCfg), "облако одно (SUPABASE_URL / SUPABASE_ANON_KEY)", "в cloud/config.rs остались SUPABASE_BETA_*");
 
 // ---------------------------------------------------------------- секреты в клиенте
 // В приложение попадает только публичный ключ. Серверный ключ Supabase, секретный ключ или его переменная в коде

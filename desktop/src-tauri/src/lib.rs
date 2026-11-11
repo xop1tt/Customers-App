@@ -1,18 +1,15 @@
 pub mod accounts;
 pub mod app;
-pub mod channel;
 pub mod cloud;
 pub mod commands;
 pub mod contact;
 pub mod crm;
 pub mod csvfmt;
 pub mod db;
-// Debug Menu — только в Beta (docs/DEBUG_MENU.md). release-check.cjs проверяет, что строка стоит под этим условием.
-#[cfg(feature = "beta")]
-pub mod debug;
 pub mod drives;
 pub mod error;
 pub mod export;
+pub mod identity;
 pub mod mail;
 pub mod models;
 pub mod paths;
@@ -30,46 +27,6 @@ pub mod whatsnew;
 pub mod workspace;
 
 pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
-    let app = app_handler();
-    #[cfg(feature = "beta")]
-    {
-        let debug = debug_handler();
-        move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
-            if invoke.message.command().starts_with(debug::COMMAND_PREFIX) {
-                debug(invoke)
-            } else {
-                app(invoke)
-            }
-        }
-    }
-    #[cfg(not(feature = "beta"))]
-    app
-}
-
-/// Команды Debug Menu (только Beta).
-#[cfg(feature = "beta")]
-fn debug_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
-    use debug::commands::*;
-    tauri::generate_handler![
-        debug_dashboard,
-        debug_logs,
-        debug_log,
-        debug_clear_logs,
-        debug_export_logs,
-        debug_diagnostics,
-        debug_export_diagnostics,
-        debug_test_data_state,
-        debug_mark_test_account,
-        debug_generate_test_data,
-        debug_clear_test_data,
-        debug_reset_test_account,
-        debug_scenarios,
-        debug_run_scenarios,
-        debug_set_window_size,
-    ]
-}
-
-fn app_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         commands::account_prefs,
         commands::ws_state,

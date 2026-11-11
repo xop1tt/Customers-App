@@ -2,7 +2,6 @@
 //! и по кнопке открывает в браузере новое обращение в Issues репозитория. Отправляет его сам пользователь
 //! со своей учётной записью GitHub, поэтому в приложении нет ни ключей, ни сервера.
 
-use crate::channel::Channel;
 use crate::updates::REPOSITORY;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -92,21 +91,14 @@ pub fn system_report_dirs(home: &Path) -> Vec<PathBuf> {
 }
 
 /// Отчёт относится к этому приложению: macOS называет файлы по имени процесса.
+/// Отчёты снятой с выпуска Customers Beta («customers-beta…», «Customers Beta…») сюда не попадают.
 pub fn is_ours(file_name: &str) -> bool {
-    is_ours_for(Channel::Stable, file_name)
-}
-
-/// То же для канала: отчёты Beta («customers-beta…», «Customers Beta…») не попадают в Stable, и наоборот.
-pub fn is_ours_for(channel: Channel, file_name: &str) -> bool {
     let ext = Path::new(file_name).extension().and_then(|e| e.to_str()).map(str::to_lowercase).unwrap_or_default();
     if !SYSTEM_EXTENSIONS.contains(&ext.as_str()) {
         return false;
     }
     let beta = ["customers-beta", "Customers Beta", "Customers-Beta"].iter().any(|p| file_name.starts_with(p));
-    match channel {
-        Channel::Beta => beta,
-        Channel::Stable => !beta && ["LeadGenerator", "Lead Generator", "Customers", "customers"].iter().any(|p| file_name.starts_with(p)),
-    }
+    !beta && ["LeadGenerator", "Lead Generator", "Customers", "customers"].iter().any(|p| file_name.starts_with(p))
 }
 
 fn modified(path: &Path) -> DateTime<Utc> {
@@ -115,16 +107,12 @@ fn modified(path: &Path) -> DateTime<Utc> {
 
 /// Отчёты этого приложения, новые сначала: системные (macOS) и собственные (`crash-*.txt` после паники).
 pub fn find(system_dirs: &[PathBuf], own_dir: Option<&Path>, newer_than: Option<DateTime<Utc>>) -> Vec<CrashFile> {
-    find_for(Channel::Stable, system_dirs, own_dir, newer_than)
-}
-
-pub fn find_for(channel: Channel, system_dirs: &[PathBuf], own_dir: Option<&Path>, newer_than: Option<DateTime<Utc>>) -> Vec<CrashFile> {
     let mut found = vec![];
     let mut scan = |dir: &Path, own: bool| {
         let Ok(entries) = fs::read_dir(dir) else { return };
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().into_owned();
-            let ok = if own { name.starts_with("crash-") && name.ends_with(".txt") } else { is_ours_for(channel, &name) };
+            let ok = if own { name.starts_with("crash-") && name.ends_with(".txt") } else { is_ours(&name) };
             if !ok {
                 continue;
             }
@@ -278,17 +266,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn crash_reports_of_channels_do_not_mix() {
+    fn crash_reports_of_old_beta_are_not_ours() {
         for n in ["customers-beta-2026-11-09-120000.ips", "Customers Beta_2026-11-09.hang"] {
-            assert!(is_ours_for(Channel::Beta, n), "{n}");
-            assert!(!is_ours_for(Channel::Stable, n), "{n}");
             assert!(!is_ours(n), "{n}");
         }
         for n in ["customers-2026-11-09-120000.ips", "LeadGenerator-2026-11-06-120000.ips", "Customers-2026-11-07.ips"] {
-            assert!(is_ours_for(Channel::Stable, n), "{n}");
-            assert!(!is_ours_for(Channel::Beta, n), "{n}");
+            assert!(is_ours(n), "{n}");
         }
-        assert!(!is_ours_for(Channel::Beta, "customers-beta-notes.txt"));
+        assert!(!is_ours("customers-notes.txt"));
     }
     use chrono::Duration;
 

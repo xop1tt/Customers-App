@@ -9,45 +9,32 @@
 | Категория | Что | Где | Запуск |
 |---|---|---|---|
 | Unit | чистая логика Rust и TypeScript | `#[cfg(test)]` в модулях, `desktop/src/**/*.test.ts(x)` | `npm run test:core`, `npm test` |
-| Integration (ядро) | `Core` целиком на временной папке, секреты в памяти, сеть — заглушка | `app/*` тесты (`app::testing::fixture`, `fixture_channel`) | `npm run test:core` |
+| Integration (ядро) | `Core` целиком на временной папке, секреты в памяти, сеть — заглушка | `app/*` тесты (`app::testing::fixture`) | `npm run test:core` |
 | Database | SQLCipher, миграции локальной схемы, восстановление, перенос | `db::`, `store::` | `npm run database:test` |
 | Backend (Supabase) | миграции, RLS, RPC, функции писем на одноразовом стенде | `supabase/tests/*.py`, `src-tauri/tests/stack.rs` | только CI `cloud.yml` (нужен Docker) |
 | Frontend | компоненты и состояние | Vitest + Testing Library | `npm test` |
-| UI | раскладка при размерах окна и масштабах | Debug Menu → «Интерфейс» (размеры, масштаб, поиск переполнения), `scripts/screenshots.cjs` (сравнение снимков — позже) | Debug Menu, `npm run shots` |
-| E2E | сценарии пользователя на настоящем ядре | Scenario Runner (`debug/scenarios.rs`, `src-tauri/tests/scenarios.rs`) | Debug Menu → «Сценарии», `npm run debug:scenario` |
-| Build | сборка Stable и Beta для macOS universal и Windows x64, проверка пакета | `desktop.yml`, `beta.yml`, `release.yml` | CI |
-| Security | изоляция каналов, release-check, RLS-тесты стенда, CodeQL, dependency review | `channel::`, `tests/test_channels.py`, `supabase/tests`, `codeql.yml` | `npm run debug:isolation`, `npm run release:check`, CI |
+| UI | раскладка при размерах окна и масштабах | `scripts/screenshots.cjs` на демо-интерфейсе (сравнение снимков — позже) | `npm run shots` |
+| E2E | сценарии на настоящем ядре и стенде Supabase | `src-tauri/tests/stack.rs` (Scenario Runner удалён вместе с Beta, ADR-034) | CI `cloud.yml` |
+| Build | сборка для macOS universal и Windows x64, проверка пакета и установщика | `desktop.yml`, `release.yml` | CI |
+| Security | идентичность приложения, release-check, RLS-тесты стенда, CodeQL, dependency review | `identity::`, `tests/test_release_check.py`, `supabase/tests`, `codeql.yml` | `npm run test:core`, `npm run release:check`, CI |
 | Regression | весь набор выше на каждом PR | `Desktop gate`, `Cloud gate`, `test`, `review`, `Analyze` | CI |
 
-## 2. Тесты этапа 1 (разделение Stable и Beta)
+## 2. Идентичность и готовность релиза (после удаления Beta, ADR-034)
+
+Тесты Beta, Debug Menu и Scenario Runner удалены вместе с кодом по решению Maksim 2026-11-11. Остались и
+добавлены проверки того, что у пользователей ничего не сломается:
 
 | Тест | Проверяет |
 |---|---|
-| `channel::tests::*` (11) | различие всех изолирующих значений; значения Stable прежние; отладочная сборка — всегда Beta; отказ при чужом идентификаторе; совпадение/вложенность папок, `..`, символьные ссылки; пути пользователя в данные другого канала; метка канала (Beta пишет, Stable не пишет, обе отказываются от чужой) |
-| `paths::tests::stable_channel_is_the_previous_layout_and_beta_is_separate` | Stable = прежние папки, Beta — свои, без файла настроек прежней версии |
-| `secrets::tests::stable_secrets_keep_previous_names_and_beta_gets_its_own` | прежние имя Связки ключей и энтропия DPAPI у Stable; Beta не видит секреты Stable |
-| `cloud::config::tests::beta_links_return_to_beta` | ссылки писем Beta ведут в Beta |
-| `reports::tests::crash_reports_of_channels_do_not_mix` | отчёты о сбоях каналов не смешиваются |
-| `updates::tests::stable_never_picks_beta_installers` | Stable не ставит файлы Beta |
-| `app::data::tests::paths_into_other_channel_are_refused_and_nothing_changes` | перенос, восстановление, экспорт, копия в данные другого канала отклоняются в обоих каналах, файл не меняется |
-| `app::data::tests::beta_keeps_backups_in_its_own_folder` | копии Beta — в своей папке, прежняя папка Stable не используется |
-| `app::data::tests::beta_refuses_plaintext_database_without_touching_it` | Beta не переписывает незашифрованную базу |
-| `src/app/channel.test.tsx` | метка Beta в левой панели только в Beta |
-| `tests/test_channels.py` (21) | `release-check.cjs` проходит на проекте и ловит 14 видов порчи конфигурации; `set-version.cjs` принимает Beta-версии |
-| `tests/test_workflows.py` (новые 3) | Beta публикует только Pre-release по тегу Beta; Stable-релиз игнорирует теги Beta и ждёт окружение `production`; CI запускает тесты Beta и release-check |
-
-## 3. Тесты этапа 2 (Debug Menu)
-
-| Тест | Проверяет |
-|---|---|
-| `debug::log::tests` (3) | маскирование токенов, ключей, паролей, почты, телефонов и путей до записи в память и файл; даты и числа не портятся; кольцевой буфер, фильтры, сохранение после перезапуска, очистка; экспорт текстом и JSON Lines |
-| `debug::zip::tests` (2) | CRC-32 по эталону; архив читается обратно, порча содержимого обнаруживается (дополнительно вручную: `unzip -t` и Python `zipfile`) |
-| `debug::dashboard::tests` (1) | настоящие версия, канал, Tauri, PID, память; состояния компонентов до и после входа; CPU со второго замера |
-| `debug::diagnostics::tests` (3) | без входа проверки базы — SKIPPED, после входа — PASS; пробные файлы удаляются; чужая метка канала — FAIL; проверка Supabase идёт в `/auth/v1/health`, ответ 503 — FAIL; ZIP содержит отчёты, не содержит пароль и базы; в папку другого канала не сохраняется |
-| `debug::testdata::tests` (4) | детерминированность; отказ без отметки «тестовая»; генерация, повторная генерация, удаление только тестовых, сброс со словом; 10 000 лидов одной транзакцией |
-| `tests/scenarios.rs` (2) | все 13 сценариев PASS на настоящем ядре, временная папка удалена, в папке другого канала ничего нет; запуск одного сценария, отказ на неизвестный |
-| `src/debug/debug.test.tsx` (4) | в Stable нет пункта меню и сочетания клавиш; в Beta открывается из меню и `Ctrl/Cmd+Shift+D`; запуск сценариев и итог; фильтр журнала |
-| `tests/test_channels.py` (новые 5 поломок) | `release-check` ловит признак `beta` с лишними признаками, зависимость Debug Menu без `optional`, незарегистрированную команду, команду без префикса `debug_` и команду Debug Menu в обработчике Stable |
+| `identity::tests::*` (3) | идентификатор, имя, схема ссылок, сервис Связки ключей, энтропия DPAPI и папки — как у прежних версий; идентификатор совпадает с `tauri.conf.json`; запуск с чужим идентификатором останавливается |
+| `paths::tests::standard_folders_match_previous_versions` | папки данных и журналов прежние на macOS, Windows и Linux |
+| `secrets::tests::secrets_keep_previous_names` | прежние имя Связки ключей и энтропия DPAPI |
+| `cloud::config::tests::links_from_emails_return_to_the_app` | ссылки из писем ведут в приложение (`leadgenerator://`) |
+| `reports::tests::crash_reports_of_old_beta_are_not_ours` | отчёты о сбоях старой Customers Beta не попадают в отчёты приложения |
+| `updates::tests::never_picks_old_beta_installers` | файлы старых Beta-сборок не устанавливаются, даже если оказались в релизе |
+| `app::data::tests::backups_go_to_default_folder_or_keep_using_the_legacy_one` | резервные копии — в «Документах», прежняя папка копий продолжает использоваться |
+| `tests/test_release_check.py` (25) | `release-check.cjs` проходит на проекте и ловит 20 видов порчи (идентичность, конфигурация Beta, признак `beta`, модуль `debug`, команды `debug_*`, devtools, AppId и вариант Beta установщика, облако Beta, ключи сервера); тег с суффиксом отклоняется; `set-version.cjs` принимает только X.Y.Z |
+| `tests/test_workflows.py::test_no_beta_channel_workflows` | ни один workflow не собирает и не публикует Beta и Pre-release |
 
 ## 3a. Тесты этапов 3–7 (Workspace и CRM)
 

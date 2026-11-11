@@ -8,7 +8,7 @@ name: Release
 # Если одна из сборок упала, релиз не создаётся.
 on:
   push:
-    # Только Stable-теги: v1.2.0, v1.2.0.1. Теги Beta (v1.3.0-beta.1) собирает beta.yml как Pre-release.
+    # Только теги из чисел: v1.2.0, v1.2.0.1. Теги с суффиксом (v1.3.0-beta.1) не собираются: Beta нет (ADR-034).
     tags: ["v*", "!v*-*"]
   workflow_dispatch:
     inputs:
@@ -59,7 +59,7 @@ jobs:
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: node scripts/set-version.cjs "${TAG#v}"
-      # Готовность Stable: версии и тег совпадают, идентификаторы прежние, Beta отделена, нет отладочных возможностей.
+      # Готовность релиза: версии и тег совпадают, идентификаторы прежние, нет отладочных возможностей.
       - name: Release check
         env:
           TAG: ${{ inputs.tag || github.ref_name }}

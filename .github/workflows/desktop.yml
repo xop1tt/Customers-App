@@ -72,8 +72,8 @@ jobs:
         run: npm run typecheck
       - name: Tests
         run: npm test
-      # Версии согласованы, у Stable прежние идентификаторы, Beta отделена, в Stable нет отладочных возможностей.
-      - name: Stable and Beta separation (release-check)
+      # Версии согласованы, идентификаторы прежние, отладочных возможностей нет, ключей сервера в клиенте нет.
+      - name: Release readiness (release-check)
         run: npm run release:check
       - name: Production build
         run: npm run build
@@ -140,10 +140,6 @@ jobs:
 
       - name: Tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
-
-      # Канал Beta: свои пути, секреты (Связка ключей / DPAPI) и облако — код под cfg проверяется на каждой системе.
-      - name: Tests (Beta channel)
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --features beta
 
   build:
     name: Production build (${{ matrix.name }})

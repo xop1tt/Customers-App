@@ -12,7 +12,7 @@ Maksim (не программист); код пишет Claude Code. Отвеч�
 | `supabase/migrations` | схема PostgreSQL: RLS, RPC, триггеры. Источник истины для прав и инвариантов CRM |
 | `supabase/functions` | Edge Functions на Deno (письма, удаление аккаунта, неактивные аккаунты) |
 | `supabase/tests` | pytest на одноразовом стенде Supabase (`supabase/tests/stack/up.sh`) |
-| `tests/` | pytest: workflow, каналы, иконки и наследие Python-генератора (`src/leadgen`, удаляется пакетом D2) |
+| `tests/` | pytest: workflow, release-check, иконки и наследие Python-генератора (`src/leadgen`, удаляется пакетом D2) |
 | `docs/` | для разработки: ARCHITECTURE, DECISIONS (журнал ADR), ROADMAP, SECURITY_MODEL, TESTING, ci |
 | `wiki/` | для пользователей, публикуется workflow `wiki.yml` |
 

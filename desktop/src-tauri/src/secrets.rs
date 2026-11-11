@@ -100,7 +100,7 @@ impl SecretStore for FileSecretStore {
 
 #[cfg(target_os = "macos")]
 pub struct KeychainSecretStore {
-    /// Сервис записей: у Stable прежний «LeadGenerator», у Beta свой, поэтому Beta не видит ключей Stable.
+    /// Сервис записей: прежний «LeadGenerator» (identity::APP), иначе приложение потеряло бы сохранённые ключи.
     service: &'static str,
 }
 
@@ -148,7 +148,7 @@ pub mod dpapi {
     use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
 
-    /// Энтропия Stable (прежние версии). У Beta своя: файлы секретов разных каналов не расшифровываются друг другом.
+    /// Энтропия прежних версий (identity::APP): с другой файлы секретов не расшифруются.
     pub const ENTROPY: &[u8] = b"Customers.Secrets.v1";
 
     fn blob(data: &[u8]) -> CRYPT_INTEGER_BLOB {
@@ -223,15 +223,10 @@ pub mod dpapi {
     }
 }
 
-/// Хранилище секретов этой платформы. `root` — папка данных приложения.
+/// Хранилище секретов этой платформы: Связка ключей «LeadGenerator» (macOS), DPAPI с прежней энтропией (Windows),
+/// файлы в папке данных (Linux, только разработка и тесты). `root` — папка данных приложения.
 pub fn platform_store(root: &Path) -> AppResult<Arc<dyn SecretStore>> {
-    channel_store(crate::channel::Channel::Stable, root)
-}
-
-/// Хранилище секретов канала. Stable — прежнее (Связка ключей «LeadGenerator», DPAPI с прежней энтропией);
-/// Beta — своё: свой сервис Связки ключей, своя энтропия DPAPI, файлы в своей папке данных.
-pub fn channel_store(channel: crate::channel::Channel, root: &Path) -> AppResult<Arc<dyn SecretStore>> {
-    let id = channel.identity();
+    let id = &crate::identity::APP;
     #[cfg(target_os = "macos")]
     {
         let _ = root;
@@ -301,21 +296,19 @@ impl DatabaseKeys {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn stable_secrets_keep_previous_names_and_beta_gets_its_own() {
-        use crate::channel::Channel;
+    fn secrets_keep_previous_names() {
         #[cfg(target_os = "macos")]
-        assert_eq!(Channel::Stable.identity().keychain_service, KeychainSecretStore::SERVICE);
+        assert_eq!(crate::identity::APP.keychain_service, KeychainSecretStore::SERVICE);
         #[cfg(windows)]
-        assert_eq!(Channel::Stable.identity().dpapi_entropy, dpapi::ENTROPY);
-        assert_ne!(Channel::Beta.identity().keychain_service, Channel::Stable.identity().keychain_service);
-        // Файловое хранилище (Linux) и DPAPI (Windows) лежат в папке данных канала: у Beta она своя.
+        assert_eq!(crate::identity::APP.dpapi_entropy, dpapi::ENTROPY);
+        assert_eq!(crate::identity::APP.keychain_service, "LeadGenerator");
+        // Файловое хранилище (Linux) и DPAPI (Windows) лежат в папке данных приложения.
         let dir = tempfile::tempdir().unwrap();
-        let stable = channel_store(Channel::Stable, &dir.path().join("s")).unwrap();
-        let beta = channel_store(Channel::Beta, &dir.path().join("b")).unwrap();
+        let store = platform_store(&dir.path().join("s")).unwrap();
         if cfg!(not(target_os = "macos")) {
-            stable.set("isolation-probe", "stable").unwrap();
-            assert_eq!(beta.get("isolation-probe").unwrap(), None, "Beta не видит секреты Stable");
-            stable.delete("isolation-probe").unwrap();
+            store.set("probe", "1").unwrap();
+            assert_eq!(store.get("probe").unwrap().as_deref(), Some("1"));
+            store.delete("probe").unwrap();
         }
     }
 
