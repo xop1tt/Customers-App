@@ -1,5 +1,4 @@
--r requirements.txt
+# Проверки репозитория на Python: workflow, release-check, иконки, миграции (tests/). Генератора на Python больше нет (D2).
 pytest==9.2.0
-respx==0.23.1
-pytest-cov==7.1.0
+PyYAML==6.0.3
 pillow==13.0.0

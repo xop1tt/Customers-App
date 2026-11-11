@@ -7,7 +7,7 @@ import { on } from "../api/backend";
 import type {
   AccountPrefs, AuthCallback, BootInfo, ChatPoll, MarketInstalled, TeamMember, DevicePrefs, SearchOverview, SearchStatus, SessionInfo, Snapshot, SyncStatus, UpdateInfo, WsCollection, WsState,
 } from "../api/types";
-import { type LeadFilter, type SectionId, emptyFilter, isLeadList } from "../lib/leads";
+import { type LeadFilter, type SectionId, emptyFilter } from "../lib/leads";
 import { type LightModeReason, evaluate } from "../lib/powerPolicy";
 
 export type Phase = "loading" | "error" | "auth" | "welcome" | "ready";
@@ -314,7 +314,6 @@ export async function patchAccount(changes: Partial<AccountPrefs>) {
   } catch (e) { toast(errText(e), "error"); }
 }
 
-export const isListSection = () => isLeadList(state.section);
 
 /** Изменить настройки поиска: сразу в интерфейсе, затем в ядре. */
 export async function updateSettings(mutate: (s: import("../api/types").SearchSettings) => void) {

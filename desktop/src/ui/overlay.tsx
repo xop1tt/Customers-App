@@ -1,6 +1,6 @@
 // Всплывающие слои: поповеры, меню, подсказки, диалоги. Все слои непрозрачные и рисуются в одном месте поверх приложения.
 
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
@@ -180,15 +180,6 @@ export function MenuHost() {
 }
 
 /** Кнопка с меню: меню открывается у якоря, закрывается при выборе. */
-export function useMenuButton(items: () => MenuItem[], placement: MenuState["placement"] = "bottom-start") {
-  return useCallback(
-    (e: React.MouseEvent<HTMLElement>) => {
-      const r = e.currentTarget.getBoundingClientRect();
-      showMenu(items(), r, placement);
-    },
-    [items, placement],
-  );
-}
 
 // ------------------------------------------------------------------ подсказки
 

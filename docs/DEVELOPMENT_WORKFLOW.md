@@ -42,7 +42,7 @@
 | `npm run release:build` | сборка Customers |
 | `npm run check` | всё быстрое подряд: типы, тесты интерфейса, ядро, release-check |
 
-Из корня: `python -m pytest` — тесты Python, workflow и release-check (`tests/test_release_check.py`).
+Из корня: `python -m pytest` — проверки репозитория: workflow, release-check (`tests/test_release_check.py`).
 Новых команд-заглушек нет: команда появляется вместе с кодом, который она запускает.
 
 Сборка из исходников работает как установленное приложение. Перед `npm run tauri dev` на рабочем компьютере

@@ -336,6 +336,45 @@ pub mod input {
 mod tests {
     use super::*;
 
+    // Каталог OpenStreetMap (data/osm_catalog.json; раньше проверялся тестом на Python, пакет D2). Его читают ядро
+    // и интерфейс, настройки синхронизируются через облако: ключи, названия, группы и условия должны быть корректны.
+    #[test]
+    fn osm_catalog_is_large_enough_and_groups_are_titled() {
+        let items = osm_categories();
+        assert!(items.len() >= 40, "в каталоге {} категорий", items.len());
+        let titles = osm_group_titles();
+        for c in &items {
+            assert!(titles.contains_key(&c.group), "у группы {} нет названия", c.group);
+        }
+    }
+
+    #[test]
+    fn osm_catalog_has_no_duplicates_and_valid_filters() {
+        let items = osm_categories();
+        let rx = regex::Regex::new(r#"^(\["[a-z_:]+"(=|!=)"[a-z_]+"\])+$"#).unwrap();
+        let mut keys = std::collections::HashSet::new();
+        let mut labels = std::collections::HashSet::new();
+        let mut filters = std::collections::HashSet::new();
+        for c in &items {
+            assert!(keys.insert(c.key.clone()), "повтор ключа {}", c.key);
+            assert!(labels.insert(c.label.clone()), "повтор названия {}", c.label);
+            assert!(!c.filters.is_empty() && c.weight > 0.0, "{}: пустые условия или вес", c.key);
+            for f in &c.filters {
+                assert!(filters.insert(f.clone()), "повтор условия {f}");
+                assert!(rx.is_match(f), "неверное условие {f}");
+            }
+        }
+    }
+
+    #[test]
+    fn osm_catalog_original_eight_stay_first_and_enabled() {
+        let items = osm_categories();
+        let first: Vec<&str> = items.iter().take(8).map(|c| c.key.as_str()).collect();
+        assert_eq!(first, ["beauty", "dance", "restaurant", "cafe", "education", "medical", "fitness", "shops"]);
+        assert!(items.iter().take(8).all(|c| c.enabled));
+        assert!(!items.iter().skip(8).any(|c| c.enabled), "новые категории выключены по умолчанию");
+    }
+
     #[test]
     fn catalog_has_original_eight_first() {
         let cats = osm_categories();

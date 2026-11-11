@@ -117,7 +117,6 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
 
 export const ENTITY_TYPES = Object.keys(ENTITIES) as EntityType[];
 export const byTable = (table: string): EntityMeta | undefined => Object.values(ENTITIES).find((e) => e.table === table);
-export const metaOf = (type: string): EntityMeta | undefined => ENTITIES[type as EntityType];
 
 const COLUMN_LABELS: Record<string, string> = {
   updated_at: "Изменено", created_at: "Создано", full_name: "Имя", status: "Статус", source: "Источник", closed_at: "Закрыта",

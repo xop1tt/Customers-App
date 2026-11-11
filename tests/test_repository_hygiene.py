@@ -37,3 +37,13 @@ def test_coverage_report_is_not_tracked():
     files = tracked()
     assert ".coverage" not in files
     assert ".coverage" in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+def test_python_generator_is_gone():
+    """D2: поиск клиентов работает только в приложении (Rust-ядро); генератора на Python и его workflow нет."""
+    files = tracked()
+    assert not any(f.startswith("src/leadgen/") for f in files)
+    for name in ("search.yml", "diagnose.yml"):
+        assert not (ROOT / ".github/workflows" / name).exists(), name
+    for f in (ROOT / ".github/workflows").glob("*.yml"):
+        assert "leadgen" not in f.read_text(encoding="utf-8").replace("leadgenerator", ""), f.name

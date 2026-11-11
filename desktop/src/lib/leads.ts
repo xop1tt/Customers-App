@@ -1,7 +1,7 @@
 // Разделы, фильтры, сортировка и подписи таблицы лидов (порт AppModel/LeadsView).
 
 import type { Lead, LeadKind } from "../api/types";
-import { integer, money } from "./format";
+import { money } from "./format";
 
 export type SectionId = "home" | "all" | "new" | "favorites" | "archive" | "excluded" | "sources" | "runs" | "collection" | "profile" | "people" | "chat" | "notifications" | "today" | "deals";
 
@@ -183,4 +183,3 @@ export function dailyCounts(leads: Lead[], days: number, now: Date = new Date())
   return points;
 }
 
-export const countText = (n: number) => integer(n);

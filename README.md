@@ -83,9 +83,9 @@ Customers ищет потенциальных клиентов в открыты
 
 | Пользователям | Продвинутым |
 |---|---|
-| [Установка](https://github.com/xop1tt/Customers-App/wiki/Установка) | [Поиск в GitHub Actions](https://github.com/xop1tt/Customers-App/wiki/Поиск-в-GitHub-Actions) (Python, Notion, Telegram) |
-| [Работа с приложением](https://github.com/xop1tt/Customers-App/wiki/Работа-с-приложением) | [Внешние интеграции и бесплатные лимиты](https://github.com/xop1tt/Customers-App/wiki/Внешние-интеграции) |
-| [Источники](https://github.com/xop1tt/Customers-App/wiki/Источники) | [Разработка и сборка](https://github.com/xop1tt/Customers-App/wiki/Разработка-и-сборка) |
+| [Установка](https://github.com/xop1tt/Customers-App/wiki/Установка) | [Разработка и сборка](https://github.com/xop1tt/Customers-App/wiki/Разработка-и-сборка) |
+| [Работа с приложением](https://github.com/xop1tt/Customers-App/wiki/Работа-с-приложением) | [Интеграции приложения](https://github.com/xop1tt/Customers-App/wiki/Интеграции-приложения) |
+| [Источники](https://github.com/xop1tt/Customers-App/wiki/Источники) | [Импорт из таблиц](https://github.com/xop1tt/Customers-App/wiki/Импорт-из-таблиц) |
 | [Оценка и фильтры](https://github.com/xop1tt/Customers-App/wiki/Оценка-и-фильтры) | [Безопасность и конфиденциальность](https://github.com/xop1tt/Customers-App/wiki/Безопасность-и-конфиденциальность) |
 | [Учётные записи и облако](https://github.com/xop1tt/Customers-App/wiki/Учётные-записи-и-облако) | [Ограничения и планы](https://github.com/xop1tt/Customers-App/wiki/Ограничения-и-планы) |
 | [Резервные копии и экспорт](https://github.com/xop1tt/Customers-App/wiki/Резервные-копии-и-экспорт) · [Экспорт в CRM](https://github.com/xop1tt/Customers-App/wiki/Экспорт-в-CRM) | [Настройка облака Supabase](docs/cloud-setup.md) · [устройство облака](docs/cloud.md) |
@@ -111,7 +111,7 @@ Kwork, Habr Freelance, Яндекс Карты, 2ГИС и поисковые с
 desktop/      приложение для macOS и Windows (Tauri 2): src/ интерфейс (React, TypeScript), src-tauri/ ядро (Rust:
               поиск, шифрованная база, учётные записи, облако, диски, почта), installer/ установщик для Windows
 supabase/     необязательное облако: миграции Postgres, Edge Functions, тесты
-src/leadgen/  Python-версия для поиска по расписанию в GitHub Actions (Notion + Telegram)
+tests/        проверки репозитория (pytest): workflow, release-check, иконки
 docs/         облако и аудит источников
 wiki/         исходники Wiki: публикуются в Wiki workflow после слияния в main
 ```
@@ -120,7 +120,7 @@ wiki/         исходники Wiki: публикуются в Wiki workflow �
 
 Один workflow `Release` (`.github/workflows/release.yml`) по тегу `vX.Y.Z` или `vX.Y.Z.W` (или вручную из Actions) параллельно
 собирает dmg для macOS и установщик для Windows и создаёт **один** GitHub Release с обоими файлами и контрольными суммами SHA-256.
-Если любая сборка упала, релиз не создаётся. Проверки на каждый PR: `Tests` (Python), `Desktop`
+Если любая сборка упала, релиз не создаётся. Проверки на каждый PR: `Tests` (проверки репозитория), `Desktop`
 (типы и тесты интерфейса, тесты ядра на Linux, macOS и Windows, сборка приложения для обеих систем), `Cloud`, CodeQL.
 
 ## 🔒 Безопасность

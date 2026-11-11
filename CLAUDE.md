@@ -12,7 +12,7 @@ Maksim (не программист); код пишет Claude Code. Отвеч�
 | `supabase/migrations` | схема PostgreSQL: RLS, RPC, триггеры. Источник истины для прав и инвариантов CRM |
 | `supabase/functions` | Edge Functions на Deno (письма, удаление аккаунта, неактивные аккаунты) |
 | `supabase/tests` | pytest на одноразовом стенде Supabase (`supabase/tests/stack/up.sh`) |
-| `tests/` | pytest: workflow, release-check, иконки и наследие Python-генератора (`src/leadgen`, удаляется пакетом D2) |
+| `tests/` | pytest-проверки репозитория: workflow, release-check, иконки, миграции, гигиена (генератор на Python удалён, ADR-051) |
 | `docs/` | для разработки: ARCHITECTURE, DECISIONS (журнал ADR), ROADMAP, SECURITY_MODEL, TESTING, ci |
 | `wiki/` | для пользователей, публикуется workflow `wiki.yml` |
 
@@ -46,7 +46,7 @@ Maksim (не программист); код пишет Claude Code. Отвеч�
 | только ядро | `npm run test:core` |
 | стиль Rust | `cargo fmt --check` и `cargo clippy --lib --bins -D warnings` (в `src-tauri`) |
 
-Из корня: `python -m pytest` (покрытие ≥ 90 %). Облачные тесты: `python -m pytest supabase/tests` при запущенном
+Из корня: `python -m pytest` (проверки репозитория, `requirements-dev.txt`). Облачные тесты: `python -m pytest supabase/tests` при запущенном
 стенде. В контейнере нет Docker: стенд поднимается без него (Postgres 16 + бинарники GoTrue/PostgREST/Deno в
 `/var/tmp`, см. память проекта) или проверяется только в CI `cloud.yml`. macOS/Windows-код (Keychain, DPAPI,
 установщик) проверяется только в CI.

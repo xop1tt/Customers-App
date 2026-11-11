@@ -19,7 +19,6 @@ export const SOURCES: SourceMeta[] = [
 ];
 
 export const sourceTitle = (key: string) => SOURCES.find((s) => s.key === key)?.title ?? key;
-export const sourceMeta = (key: string) => SOURCES.find((s) => s.key === key);
 
 export function sourceSettings(s: SearchSettings, group: SourceMeta["group"]) {
   return group === "rss" ? s.rss : group === "telegram" ? s.telegram : group === "vk" ? s.vk : s.osm;
