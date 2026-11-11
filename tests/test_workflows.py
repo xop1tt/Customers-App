@@ -268,38 +268,32 @@ def test_stable_release_ignores_beta_tags_and_waits_for_approval():
     wf = load("release.yml")
     assert wf[True]["push"]["tags"] == ["v*", "!v*-*"]
     assert wf["jobs"]["publish"]["environment"] == "production"
-    steps = " ".join(s.get("run", "") for s in wf["jobs"]["macos"]["steps"])
-    assert "release-check.cjs --tag" in steps
     for job in ("macos", "windows"):
         text = str(wf["jobs"][job])
         assert "--features beta" not in text and "tauri.beta.conf.json" not in text, f"{job}: Stable собирается как Beta"
 
 
-def test_release_builds_only_from_main_with_release_notes():
-    # Пакет G8 (ADR-060): задача guard идёт до сборок; без коммита в main или без заметок релиза ничего не собирается.
+def test_release_is_only_build_and_installers_published_from_main():
+    # ADR-068: релиз ускорен — нет задачи guard, тестов, release-check, проверки установщика и обязательных заметок.
+    # Защита «только из main» осталась в задаче publish (она после сборок и ждёт подтверждения).
     wf = load("release.yml")
     jobs = wf["jobs"]
-    assert jobs["macos"]["needs"] == "guard" and jobs["windows"]["needs"] == "guard"
+    assert set(jobs) == {"macos", "windows", "publish"}
     assert set(jobs["publish"]["needs"]) == {"macos", "windows"}
-    guard = jobs["guard"]
-    assert "permissions" not in guard and "environment" not in guard
-    checkout = guard["steps"][0]
-    assert checkout["uses"].startswith("actions/checkout@") and checkout["with"]["fetch-depth"] == 0
-    assert checkout["with"]["persist-credentials"] is False
-    steps = " ".join(s.get("run", "") for s in guard["steps"])
-    assert 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in steps
-    assert '"$GITHUB_REF" != "refs/heads/main"' in steps
-    assert '.github/release-notes/${TAG}.md' in steps
+    for job in ("macos", "windows"):
+        text = str(jobs[job])
+        assert "npm test" not in text and "cargo test" not in text and "release-check" not in text and "needs" not in jobs[job]
     publish = " ".join(s.get("run", "") for s in jobs["publish"]["steps"])
-    assert "--generate-notes" not in publish and "--notes-file" in publish
+    assert 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in publish
+    # Заметки не обязательны: свой файл, если он есть, иначе заметки собирает GitHub.
+    assert "--notes-file" in publish and "--generate-notes" in publish
 
 
-def test_release_guard_rejects_commits_outside_main_and_missing_notes(tmp_path):
+def test_release_publish_rejects_commits_outside_main(tmp_path):
     if not shutil.which("bash") or not shutil.which("git"):
         pytest.skip("нужны bash и git")
-    steps = load("release.yml")["jobs"]["guard"]["steps"]
+    steps = load("release.yml")["jobs"]["publish"]["steps"]
     on_main = next(s["run"] for s in steps if s.get("name") == "The commit is on main")
-    notes = next(s["run"] for s in steps if s.get("name") == "Release notes exist")
     repo = tmp_path / "repo"
     git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True).stdout.strip()
     repo.mkdir()
@@ -311,21 +305,11 @@ def test_release_guard_rejects_commits_outside_main_and_missing_notes(tmp_path):
     git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "feature")
     feature_sha = git("rev-parse", "HEAD")
 
-    def run(script, **env):
-        base = {**os.environ, "GITHUB_EVENT_NAME": "push", "GITHUB_REF": "refs/tags/v9.9.9", "GITHUB_REF_NAME": "v9.9.9", "TAG": "v9.9.9"}
-        return subprocess.run(["bash", "-c", script], cwd=repo, env={**base, **env}, capture_output=True, text=True).returncode
+    def run(sha):
+        return subprocess.run(["bash", "-c", on_main], cwd=repo, env={**os.environ, "GITHUB_SHA": sha}, capture_output=True, text=True).returncode
 
-    assert run(on_main, GITHUB_SHA=main_sha) == 0
-    assert run(on_main, GITHUB_SHA=feature_sha) == 1
-    assert run(on_main, GITHUB_SHA=main_sha, GITHUB_EVENT_NAME="workflow_dispatch", GITHUB_REF="refs/heads/feature", GITHUB_REF_NAME="feature") == 1
-    assert run(on_main, GITHUB_SHA=main_sha, GITHUB_EVENT_NAME="workflow_dispatch", GITHUB_REF="refs/heads/main", GITHUB_REF_NAME="main") == 0
-
-    assert run(notes) == 1
-    (repo / ".github/release-notes").mkdir(parents=True)
-    (repo / ".github/release-notes/v9.9.9.md").write_text("  \n\n", encoding="utf-8")
-    assert run(notes) == 1
-    (repo / ".github/release-notes/v9.9.9.md").write_text("Что нового: исправления.\n", encoding="utf-8")
-    assert run(notes) == 0
+    assert run(main_sha) == 0
+    assert run(feature_sha) == 1
 
 
 def test_ci_runs_core_tests_and_release_check():
