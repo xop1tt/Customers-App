@@ -5,7 +5,7 @@ import { toggled } from "../lib/sidebarPrefs";
 import { Icon } from "../ui/icons";
 import { getState, patchDevice, useStore } from "../state/store";
 
-export type SidebarGroupId = "collections" | "sources" | "scores" | "work" | "team";
+export type SidebarGroupId = "crm" | "collections" | "sources" | "scores" | "work" | "team";
 
 /** Свёрнута ли группа. В режиме настройки панели все группы раскрыты. */
 export function useCollapsed(id: SidebarGroupId): boolean {

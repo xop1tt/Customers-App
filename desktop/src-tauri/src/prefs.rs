@@ -16,7 +16,7 @@ pub const DEFAULT_CHECK_HOURS: u32 = 24;
 pub const DEFAULT_LIGHT_THRESHOLD: u32 = 20;
 
 /// Группы боковой панели, которые можно свернуть.
-pub const SIDEBAR_GROUPS: [&str; 5] = ["collections", "sources", "scores", "work", "team"];
+pub const SIDEBAR_GROUPS: [&str; 6] = ["crm", "collections", "sources", "scores", "work", "team"];
 
 /// Цвет вида #RRGGBB (в верхнем регистре) или None.
 pub fn normalize_color(raw: &str) -> Option<String> {
@@ -473,6 +473,14 @@ mod tests {
         assert_eq!(again.value, p.value, "сохранено на диск");
         assert!(!path.with_extension("json.tmp").exists());
         assert_eq!(p.to_json()["navWidth"], 420.0);
+    }
+
+    #[test]
+    fn sidebar_collapsed_knows_crm_group() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut p = PrefsFile::<DevicePrefs>::load(&dir.path().join("device.json"));
+        assert!(p.patch(&json!({"sidebarCollapsed": ["crm"]})));
+        assert_eq!(p.value.sidebar_collapsed, vec!["crm".to_string()]);
     }
 
     #[test]

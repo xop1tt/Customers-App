@@ -27,6 +27,8 @@ import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
 import { useViewportWidth } from "../state/hooks";
 import { CollectionPage } from "./crm/CollectionPage";
+import { DealBoard } from "./crm/DealBoard";
+import { TodayPage } from "./crm/TodayPage";
 import { CrmCard } from "./crm/CrmCard";
 import { CollectionDialog } from "./crm/Collections";
 import { WorkspaceDialog } from "./crm/WorkspaceDialog";
@@ -233,7 +235,7 @@ function Shell() {
   useChatPolling();
   useMarketInstalled();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
-  const crm = section === "collection";
+  const crm = section === "collection" || section === "today" || section === "deals";
   const showInsp = (lead && device.inspectorShown && (!floatInsp || selected === 1)) || (crm && !!crmRecord);
   const InspectorBody = crm ? CrmCard : Inspector;
   const inspLabel = crm ? "Карточка записи" : "Сведения о лиде";
@@ -260,7 +262,9 @@ function Shell() {
           {lead && <LeadsPage />}
           {section === "sources" && <SourcesPage />}
           {section === "runs" && <RunsPage />}
-          {crm && <CollectionPage />}
+          {section === "collection" && <CollectionPage />}
+          {section === "today" && <TodayPage />}
+          {section === "deals" && <DealBoard />}
           {section === "profile" && <ProfilePage />}
           {section === "people" && <PeoplePage />}
           {section === "chat" && <ChatPage />}

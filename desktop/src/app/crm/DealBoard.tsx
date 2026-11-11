@@ -1,0 +1,98 @@
+// Канбан сделок (пакет B2): колонки этапов воронки, суммы, перенос сделки перетаскиванием или из меню.
+
+import { useState } from "react";
+import { api } from "../../api";
+import type { CrmRecord } from "../../api/types";
+import { boardColumns, canMove } from "../../lib/board";
+import { can, memberName } from "../../lib/crm";
+import { integer, money, plural } from "../../lib/format";
+import { Button, EmptyState, IconButton, Select, Spinner } from "../../ui/kit";
+import { showMenu } from "../../ui/overlay";
+import { attempt, openRecord, useStore } from "../../state/store";
+import { useLookup, useWsQuery } from "./useCrm";
+
+export function DealBoard() {
+  const ws = useStore((s) => s.ws);
+  const record = useStore((s) => s.record);
+  const lk = useLookup();
+  const [pipelineId, setPipelineId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<{ deal: CrmRecord; over: string | null } | null>(null);
+  const [tick, setTick] = useState(0);
+  const { data: deals, error } = useWsQuery(() => api.wsList("deals", { limit: 5000 }).then((r) => r.items), [tick]);
+
+  const pipes = [...lk.pipelines.values()].filter((p) => !p.deleted_at);
+  const pipe = pipes.find((p) => p.id === pipelineId) ?? pipes.find((p) => p.is_default) ?? pipes[0];
+  if (error) return <div className="page"><EmptyState icon="alert" title="Сделки не загрузились">{error}</EmptyState></div>;
+  if (!deals || !lk.stages.size) return <div className="page"><div className="boot"><Spinner size={18} /></div></div>;
+  if (!pipe) return <div className="page"><EmptyState icon="list" title="Нет воронки">Создайте воронку в настройках Workspace.</EmptyState></div>;
+
+  const perms = ws?.permissions ?? [];
+  const me = ws?.me;
+  const cols = boardColumns([...lk.stages.values()], deals, pipe.id);
+  const open = cols.flatMap((c) => (c.stage.kind === "open" ? c.deals : []));
+  const openSum = open.reduce((n, d) => n + (typeof d.amount === "number" && (!d.currency || d.currency === "RUB") ? d.amount : 0), 0);
+
+  const moveTo = async (deal: CrmRecord, stage: CrmRecord) => {
+    if (!canMove(deal, stage)) return;
+    if (await attempt(() => api.wsSave("deals", deal.id, { stage_id: stage.id }))) setTick((t) => t + 1);
+  };
+  const stageMenu = (deal: CrmRecord, anchor: DOMRect) =>
+    showMenu(cols.map((c) => ({ label: String(c.stage.name), icon: c.stage.id === deal.stage_id ? "check" : undefined, disabled: !canMove(deal, c.stage), onSelect: () => void moveTo(deal, c.stage) })), anchor);
+
+  return (
+    <div className="page crm-page">
+      <div className="crm-bar">
+        {pipes.length > 1 && <Select small value={pipe.id} options={pipes.map((p) => ({ value: p.id, label: String(p.name) }))} onChange={setPipelineId} label="Воронка" />}
+        <span className="muted">{integer(open.length)} {plural(open.length, "открытая сделка", "открытые сделки", "открытых сделок")}{openSum ? ` · ${money(openSum)}` : ""}</span>
+        <span className="grow" />
+        {can(perms, "create") && <Button icon="plus" small onClick={() => openRecord("deals", "new")}>Сделка</Button>}
+      </div>
+      <div className="board" role="list" aria-label={`Воронка ${String(pipe.name)}`}>
+        {cols.map((c) => (
+          <section
+            key={c.stage.id}
+            role="listitem"
+            aria-label={String(c.stage.name)}
+            className={`board-col ${String(c.stage.kind ?? "open")}${drag?.over === c.stage.id ? " drop" : ""}`}
+            onDragOver={(e) => { if (drag && canMove(drag.deal, c.stage)) { e.preventDefault(); if (drag.over !== c.stage.id) setDrag({ ...drag, over: c.stage.id }); } }}
+            onDragLeave={() => { if (drag?.over === c.stage.id) setDrag({ ...drag, over: null }); }}
+            onDrop={(e) => { e.preventDefault(); if (drag) void moveTo(drag.deal, c.stage); setDrag(null); }}
+          >
+            <header className="board-head">
+              <span className="ellipsis grow">{String(c.stage.name)}</span>
+              <span className="faint num">{integer(c.deals.length)}</span>
+            </header>
+            {c.totals.length > 0 && <div className="board-sum num">{c.totals.map(([cur, n]) => money(n, cur)).join(" · ")}</div>}
+            <div className="board-cards">
+              {c.deals.map((d) => {
+                const editable = can(perms, "edit", d, me);
+                const company = d.company_id ? lk.companies.get(String(d.company_id)) : undefined;
+                return (
+                  <article
+                    key={d.id}
+                    className={`board-card${record?.id === d.id ? " sel" : ""}${drag?.deal.id === d.id ? " dragging" : ""}`}
+                    draggable={editable}
+                    onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", d.id); setDrag({ deal: d, over: null }); }}
+                    onDragEnd={() => setDrag(null)}
+                  >
+                    <button type="button" className="board-open" onClick={() => openRecord("deals", d.id)}>
+                      <span className="board-title">{String(d.title || "Без названия")}</span>
+                      {company && <span className="faint ellipsis">{String(company.name)}</span>}
+                      <span className="row board-meta">
+                        {typeof d.amount === "number" && <span className="num">{money(d.amount, String(d.currency || "RUB"))}</span>}
+                        <span className="grow" />
+                        {d.owner_id ? <span className="faint ellipsis">{memberName(lk.members, d.owner_id)}</span> : null}
+                      </span>
+                    </button>
+                    {editable && <IconButton icon="chevronDown" size={14} tip="Перенести в этап" className="board-move" onClick={(e) => stageMenu(d, e.currentTarget.getBoundingClientRect())} />}
+                  </article>
+                );
+              })}
+              {!c.deals.length && <p className="faint board-empty">Нет сделок</p>}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
