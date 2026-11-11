@@ -17,6 +17,9 @@ async function nav() {
   const n = await screen.findByLabelText("Навигация");
   // Бейдж непрочитанного появляется после первого опроса.
   await waitFor(() => expect(getState().chat?.available).toBe(true));
+  // Группа «Команда» — в модуле «Команда» рейки (C2).
+  fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Команда/ }));
+  await within(n).findByRole("button", { name: /Сотрудники/ });
   return n;
 }
 

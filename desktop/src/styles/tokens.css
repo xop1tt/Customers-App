@@ -4,6 +4,7 @@
 
   --bg: #1b1c20;
   --bg-side: #15161a;
+  --bg-rail: #111215;
   --bg-raised: #212227;
   --bg-input: #17181c;
   --bg-hover: #25262c;
@@ -92,6 +93,7 @@
 
   --bg: #f5f6f8;
   --bg-side: #ebedf1;
+  --bg-rail: #e4e5e9;
   --bg-raised: #ffffff;
   --bg-input: #ffffff;
   --bg-hover: #e4e6ec;

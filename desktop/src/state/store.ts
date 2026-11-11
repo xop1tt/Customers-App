@@ -1,6 +1,7 @@
 // Единое хранилище приложения. Данные берутся у Rust-ядра, события обновляют их без ручной перезагрузки.
 
 import { useSyncExternalStore } from "react";
+import { MODULES, moduleOf, RESTORABLE, type ModuleId } from "../lib/modules";
 import { api } from "../api";
 import { on } from "../api/backend";
 import type {
@@ -149,7 +150,7 @@ async function loadSession(boot: BootInfo) {
     api.snapshot(), api.accountPrefs(), api.searchOverview(), api.searchStatus(), api.syncStatus(), api.updateInfo(),
   ]);
   const last = boot.device.lastSection as SectionId;
-  const section: SectionId = (["home", "all", "new", "favorites", "archive", "excluded", "sources", "runs"] as string[]).includes(last) ? last : "home";
+  const section: SectionId = RESTORABLE.includes(last) ? last : "home";
   setState({
     session: boot.session, snap, account, overview, search, sync, update, section, selection: [], anchor: null, filter: emptyFilter(),
     phase: account.welcomeDone ? "ready" : "welcome",
@@ -264,6 +265,20 @@ function wireEvents() {
 }
 
 // ---------------------------------------------------------------- действия интерфейса
+
+/** Последний открытый раздел каждого модуля: рейка возвращает в него. Только в памяти. */
+const lastIn = new Map<ModuleId, { section: SectionId; collectionId: string | null }>();
+
+/** Открыть модуль рейки: последний раздел в нём или его главный раздел. */
+export function openModule(id: ModuleId) {
+  const cur = state.section;
+  lastIn.set(moduleOf(cur), { section: cur, collectionId: state.collectionId });
+  if (moduleOf(cur) === id) return;
+  const last = lastIn.get(id);
+  if (last?.section === "collection" && last.collectionId && state.collections.some((c) => c.id === last.collectionId)) return openCollection(last.collectionId);
+  const home = MODULES.find((m) => m.id === id)!.home;
+  setSection(last && last.section !== "collection" && last.section !== "profile" ? last.section : home);
+}
 
 export function setSection(section: SectionId) {
   setState({ section, selection: [], anchor: null, navPeek: false, collectionId: null, record: null });

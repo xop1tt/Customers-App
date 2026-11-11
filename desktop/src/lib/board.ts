@@ -45,10 +45,13 @@ export interface TodayGroups {
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const open = (t: CrmRecord) => live(t) && t.status !== "done" && t.status !== "cancelled";
 
-/** Группы экрана «Сегодня» по местному времени. `mine` — только задачи, назначенные этому участнику (или без исполнителя). */
+/** Группы экрана «Сегодня» по местному времени. Просрочено — срок уже прошёл (как фильтр ядра `overdue`),
+ *  на сегодня — срок ещё впереди, но до конца дня. `mine` — только задачи этого участника (или без исполнителя). */
 export function todayGroups(tasks: CrmRecord[], deals: CrmRecord[], now: Date, mine?: string): TodayGroups {
-  const from = startOfDay(now).getTime();
-  const to = from + 86_400_000;
+  const from = now.getTime();
+  const end = startOfDay(now);
+  end.setDate(end.getDate() + 1);
+  const to = end.getTime();
   const due = (t: CrmRecord) => (t.due_at ? Date.parse(String(t.due_at)) : NaN);
   const forMe = (t: CrmRecord) => !mine || !t.assignee_id || t.assignee_id === mine;
   const active = tasks.filter((t) => open(t) && forMe(t) && !Number.isNaN(due(t))).sort((a, b) => due(a) - due(b));

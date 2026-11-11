@@ -32,7 +32,7 @@ describe("канбан сделок", () => {
 describe("экран «Сегодня»", () => {
   const now = new Date(2026, 10, 11, 12, 0);
   const at = (d: number, h: number) => new Date(2026, 10, d, h, 0).toISOString();
-  it("делит открытые задачи на просроченные и сегодняшние по местному времени", () => {
+  it("делит открытые задачи на просроченные (срок прошёл) и оставшиеся на сегодня по местному времени", () => {
     const tasks = [
       rec({ title: "вчера", due_at: at(10, 18), status: "todo" }),
       rec({ title: "утром", due_at: at(11, 9), status: "in_progress" }),
@@ -43,9 +43,10 @@ describe("экран «Сегодня»", () => {
       rec({ title: "чужая", due_at: at(11, 10), status: "todo", assignee_id: "other" }),
     ];
     const g = todayGroups(tasks, [], now, "me");
-    expect(g.overdue.map((t) => t.title)).toEqual(["вчера"]);
-    expect(g.today.map((t) => t.title)).toEqual(["утром", "вечером"]);
-    expect(todayGroups(tasks, [], now).today).toHaveLength(3);
+    expect(g.overdue.map((t) => t.title)).toEqual(["вчера", "утром"]);
+    expect(g.today.map((t) => t.title)).toEqual(["вечером"]);
+    expect(todayGroups(tasks, [], now).today.map((t) => t.title)).toEqual(["вечером"]);
+    expect(todayGroups(tasks, [], now).overdue.map((t) => t.title)).toEqual(["вчера", "утром", "чужая"]);
   });
   it("находит открытые сделки без движения 7 дней и дольше", () => {
     const deals = [
