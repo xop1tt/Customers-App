@@ -141,7 +141,7 @@ function ComposeDialog({ e, record, lk, emails, people, onClose }: { e: EntityMe
         <Field label="Тема"><TextInput value={subject} aria-label="Тема" onChange={(v) => { setSubject(v); setTouched(true); }} /></Field>
         <Field label="Текст"><TextArea value={body} aria-label="Текст" onChange={(v) => { setBody(v); setTouched(true); }} rows={10} /></Field>
         <p className="faint" style={{ fontSize: "var(--fs-sm)" }}>
-          Подпись берётся из настроек рассылки. <a onClick={() => { onClose(); openSettings("outreach"); }}>Изменить</a>
+          Подпись берётся из настроек рассылки. <button type="button" className="link" onClick={() => { onClose(); openSettings("outreach"); }}>Изменить</button>
         </p>
       </div>
     </Dialog>

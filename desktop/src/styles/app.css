@@ -387,7 +387,7 @@ button.kpi:not(:disabled):hover { background: var(--bg-hover); }
 .crm-link .done { text-decoration: line-through; color: var(--text-3); }
 .crm-link .bad, .bad { color: var(--orange); }
 .insp-sec h4.row { display: flex; align-items: center; }
-.insp-sec h4 a { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.insp-sec h4 a, .insp-sec h4 button.link { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .tl-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--bg-raised); color: var(--text-2); }
 .crm-body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .crm-convert { gap: 12px; flex-wrap: wrap; }

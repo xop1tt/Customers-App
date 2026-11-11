@@ -8,6 +8,7 @@ import { can } from "../../lib/crm";
 import { bytes } from "../../lib/format";
 import { pickSavePath } from "../../lib/platform";
 import { Button, IconButton } from "../../ui/kit";
+import { confirmDialog } from "../../ui/overlay";
 import { attempt, toast, useStore, NONE } from "../../state/store";
 
 export const MAX_ATTACHMENT = 5 * 1024 * 1024;
@@ -40,6 +41,10 @@ export function AttachmentsSection({ e, data }: { e: EntityMeta; data: WsCard })
       await attempt(() => api.wsAttachAdd(e.type, data.record.id, file.name, file.type, body));
     } finally { setBusy(false); }
   };
+  const removeFile = async (id: string, name: string) => {
+    if (!(await confirmDialog({ title: `Удалить файл «${name}»?`, message: "Файл исчезнет из карточки.", confirm: "Удалить", danger: true }))) return;
+    await attempt(() => api.wsDelete("attachments", id));
+  };
   const save = async (id: string, name: string) => {
     const path = await pickSavePath("Сохранить файл", name, name.includes(".") ? name.split(".").pop()! : "*");
     if (path && (await attempt(() => api.wsAttachSave(id, path)))) toast("Файл сохранён", "success");
@@ -59,7 +64,7 @@ export function AttachmentsSection({ e, data }: { e: EntityMeta; data: WsCard })
                 <span className="ellipsis grow">{String(a.name)}</span>
                 <span className="faint">{typeof a.size === "number" ? bytes(a.size) : ""}</span>
               </button>
-              <IconButton icon="trash" tip="Удалить" onClick={() => void attempt(() => api.wsDelete("attachments", a.id))} />
+              <IconButton icon="trash" tip="Удалить" onClick={() => void removeFile(a.id, String(a.name))} />
             </li>
           ))}
         </ul>

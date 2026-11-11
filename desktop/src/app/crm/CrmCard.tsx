@@ -133,7 +133,7 @@ function NewRecord({ e, preset }: { e: EntityMeta; preset?: Record<string, unkno
           {similar.length > 0 && (
             <Notice tone="warn">
               Похоже на: {similar.slice(0, 3).map((s, i) => (
-                <span key={s.id}>{i > 0 ? ", " : ""}<a onClick={() => openRecord(e.table, s.id)}>{e.title(s)}</a></span>
+                <span key={s.id}>{i > 0 ? ", " : ""}<button type="button" className="link" onClick={() => openRecord(e.table, s.id)}>{e.title(s)}</button></span>
               ))}
             </Notice>
           )}
@@ -261,13 +261,13 @@ function Overview({ e, data, lk, editable, save }: { e: EntityMeta; data: WsCard
       <AttachmentsSection e={e} data={data} />
       {data.contacts && (
         <section className="insp-sec">
-          <h4 className="row"><span className="grow">Контакты</span>{creatable && <a onClick={() => void quick("contacts", { company_id: r.id, first_name: "Новый контакт" })}>Добавить</a>}</h4>
+          <h4 className="row"><span className="grow">Контакты</span>{creatable && <button type="button" className="link" onClick={() => openRecord("contacts", "new", { company_id: r.id })}>Добавить</button>}</h4>
           <Related rows={data.contacts} e={ENTITIES.contact} lk={lk} />
         </section>
       )}
       {data.deals && (
         <section className="insp-sec">
-          <h4 className="row"><span className="grow">Сделки</span>{creatable && <a onClick={() => { const d = defaultStage(lk); if (d) void quick("deals", { ...d, company_id: r.id, title: `Сделка: ${e.title(r)}`, currency: "RUB" }); }}>Добавить</a>}</h4>
+          <h4 className="row"><span className="grow">Сделки</span>{creatable && <button type="button" className="link" onClick={() => openRecord("deals", "new", { company_id: r.id, title: `Сделка: ${e.title(r)}` })}>Добавить</button>}</h4>
           <Related rows={data.deals} e={ENTITIES.deal} lk={lk} />
         </section>
       )}
@@ -290,11 +290,6 @@ function Overview({ e, data, lk, editable, save }: { e: EntityMeta; data: WsCard
       </section>
     </>
   );
-}
-
-async function quick(table: string, fields: Record<string, unknown>) {
-  const saved = await attempt(() => api.wsSave(table, null, fields));
-  if (saved) openRecord(table, saved.id);
 }
 
 function Related({ rows, e, lk }: { rows: CrmRecord[]; e: EntityMeta; lk: Lookup }) {

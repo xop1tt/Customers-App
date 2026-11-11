@@ -5,7 +5,7 @@ import { api } from "../../api";
 import type { CrmRecord, WsCard } from "../../api/types";
 import type { EntityMeta } from "../../lib/crm";
 import { Button, Checkbox, IconButton, NumberInput, Select, SettingRow, TextInput } from "../../ui/kit";
-import { Dialog } from "../../ui/overlay";
+import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, refreshWorkspace, useStore } from "../../state/store";
 import { useWsQuery } from "./useCrm";
 
@@ -79,6 +79,10 @@ export function CustomFieldsEditor({ onClose }: { onClose: () => void }) {
   const { data: defs } = useDefinitions(type);
   const list = (defs ?? []).filter((d) => !d.deleted_at);
   const run = async (p: Promise<unknown>) => { await attempt(() => p); await refreshWorkspace(); };
+  const removeField = async (id: string, label: string) => {
+    if (!(await confirmDialog({ title: `Удалить поле «${label}»?`, message: "Поле и его значения пропадут из карточек.", confirm: "Удалить", danger: true }))) return;
+    await run(api.wsDelete("custom_fields", id));
+  };
   const move = async (i: number, d: -1 | 1) => {
     const a = list[i], b = list[i + d];
     if (a && b) await run(Promise.all([api.wsSave("custom_fields", a.id, { position: num(b.position) }), api.wsSave("custom_fields", b.id, { position: num(a.position) })]));
@@ -96,7 +100,7 @@ export function CustomFieldsEditor({ onClose }: { onClose: () => void }) {
               <IconButton icon="arrowDown" tip="Ниже" disabled={!can || i === list.length - 1} onClick={() => void move(i, 1)} />
             </span>
             <FieldRow def={f} disabled={!can} onSave={(patch) => void run(api.wsSave("custom_fields", f.id, patch))} />
-            {can && <IconButton icon="trash" tip="Удалить поле" onClick={() => void run(api.wsDelete("custom_fields", f.id))} />}
+            {can && <IconButton icon="trash" tip="Удалить поле" onClick={() => void removeField(f.id, String(f.label ?? ""))} />}
           </li>
         ))}
         {!list.length && <li className="faint">Полей пока нет.</li>}

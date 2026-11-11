@@ -239,7 +239,7 @@ function Compose({ lead }: { lead: Lead }) {
         <span className="grow" />
         <Button variant="ghost" onClick={() => { setSubject(initial.subject); setBody(initial.body); }}>Сбросить текст</Button>
       </div>
-      <p className="faint" style={{ fontSize: "var(--fs-sm)" }}>Подпись берётся из настроек рассылки. <a onClick={() => openSettings("outreach")}>Изменить</a></p>
+      <p className="faint" style={{ fontSize: "var(--fs-sm)" }}>Подпись берётся из настроек рассылки. <button type="button" className="link" onClick={() => openSettings("outreach")}>Изменить</button></p>
     </div>
   );
 }

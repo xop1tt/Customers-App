@@ -11,6 +11,7 @@ import { Popover } from "../ui/overlay";
 import { useViewportWidth } from "../state/hooks";
 import { modKey } from "../lib/platform";
 import { toggleQuick } from "./QuickSearch";
+import { moduleOf } from "../lib/modules";
 
 export function TopBar({ narrow }: { narrow: boolean }) {
   const navPeek = useStore((s) => s.navPeek);
@@ -70,7 +71,7 @@ export function TopBar({ narrow }: { narrow: boolean }) {
           <span className="ellipsis search-progress">{search.progress ?? "Идёт поиск…"}</span>
         </Button>
       ) : (
-        <Button variant="primary" icon="search" onClick={() => void startSearch()} className="search-btn">Найти лиды</Button>
+        <Button variant={moduleOf(section) === "search" ? "primary" : undefined} icon="search" onClick={() => void startSearch()} className="search-btn">Найти лиды</Button>
       )}
       {search.running && <Spinner size={14} />}
       {lead && <IconButton icon="panelRight" tip={device.inspectorShown ? "Скрыть панель сведений" : "Показать панель сведений"} active={device.inspectorShown} onClick={() => void patchDevice({ inspectorShown: !device.inspectorShown })} />}

@@ -118,7 +118,7 @@ function OAuthKeyDialog({ provider, redirect, onClose }: { provider: ProviderInf
     <Dialog title="Ключ приложения для входа" onClose={onClose} width={500}
       footer={<><Button onClick={onClose}>Отмена</Button><Button variant="primary" busy={busy} disabled={!id.trim() || (provider.needsSecret && !secret.trim())} onClick={() => void save()}>Сохранить</Button></>}>
       <div className="col" style={{ gap: 12 }}>
-        <p className="muted">Для входа через {provider.provider === "google" ? "Google" : "Dropbox"} нужен собственный ключ приложения. Создайте его в консоли и вставьте сюда. <a onClick={() => void openLink(provider.consolePage)}>Открыть консоль</a></p>
+        <p className="muted">Для входа через {provider.provider === "google" ? "Google" : "Dropbox"} нужен собственный ключ приложения. Создайте его в консоли и вставьте сюда. <button type="button" className="link" onClick={() => void openLink(provider.consolePage)}>Открыть консоль</button></p>
         <Field label="Адрес перенаправления" hint="Укажите его в настройках приложения в консоли."><div className="row"><TextInput value={redirect} onChange={() => {}} readOnly wrapClass="grow" /><Button onClick={() => void copyToClipboard(redirect, "Адрес скопирован")}>Копировать</Button></div></Field>
         <Field label={provider.clientIdLabel}><TextInput value={id} onChange={setId} data-autofocus /></Field>
         {provider.needsSecret && <Field label="Client secret"><PasswordInput value={secret} onChange={setSecret} /></Field>}
