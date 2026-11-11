@@ -18,7 +18,7 @@
 [![Tests](https://github.com/xop1tt/CLIENTS/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/xop1tt/CLIENTS/actions/workflows/tests.yml)
 [![Desktop](https://github.com/xop1tt/CLIENTS/actions/workflows/desktop.yml/badge.svg?branch=main)](https://github.com/xop1tt/CLIENTS/actions/workflows/desktop.yml)
 [![Cloud](https://github.com/xop1tt/CLIENTS/actions/workflows/cloud.yml/badge.svg?branch=main)](https://github.com/xop1tt/CLIENTS/actions/workflows/cloud.yml)
-[![Лицензия: PIBUL 1.0](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-PIBUL%201.0-blue)](LICENSE)
+[![Лицензия: FSL-1.1-ALv2](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-FSL--1.1--ALv2-blue)](LICENSE)
 
 [**⬇️ Скачать (macOS и Windows)**](https://github.com/xop1tt/CLIENTS/releases/latest) ·
 [**📖 Документация (Wiki)**](https://github.com/xop1tt/CLIENTS/wiki) ·
@@ -130,10 +130,12 @@ wiki/         исходники Wiki: публикуются в Wiki workflow �
 
 ## 📄 Лицензия
 
-Customers распространяется по лицензии **Personal & Internal Business Use License (PIBUL) 1.0**: его можно
-бесплатно использовать для себя и внутри своей организации. Продажа, коммерческое распространение и публикация копий
-без письменного разрешения автора запрещены. Полный текст: [LICENSE](LICENSE).
+Customers распространяется по лицензии **Functional Source License 1.1 с переходом в Apache 2.0** (FSL-1.1-ALv2).
+Исходный код открыт для изучения. Приложение можно бесплатно использовать, изменять и распространять для любых
+целей, кроме конкурирующего коммерческого продукта или сервиса. Через два года после выхода каждая версия становится
+доступна по лицензии Apache 2.0. Это лицензия с доступным исходным кодом, а не open source в смысле OSI.
+Версии до перехода на FSL распространялись по PIBUL 1.0. Полный текст: [LICENSE](LICENSE).
 
 <div align="center">
-<sub>© 2026 xop1tt · <a href="LICENSE">PIBUL 1.0</a></sub>
+<sub>© 2026 xop1tt · <a href="LICENSE">FSL-1.1-ALv2</a></sub>
 </div>
