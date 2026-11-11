@@ -540,6 +540,9 @@ export interface WsOp {
 
 export interface WsStageChange { from_stage_id: string | null; to_stage_id: string; changed_by: string | null; changed_at: string }
 
+/** Строка истории этапов для отчётов (ws_stage_history). */
+export interface StageChange { deal_id: string; from_stage_id: string | null; to_stage_id: string; changed_at: string }
+
 export interface WsCard {
   record: CrmRecord;
   tasks?: CrmRecord[];

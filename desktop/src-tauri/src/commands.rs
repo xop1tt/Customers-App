@@ -440,6 +440,7 @@ sync_cmds! {
     ws_import_preview(name: String, data: String, options: ImportOptions) -> Value = |c: &Arc<Core>, n: String, d: String, o: ImportOptions| c.ws_import_preview(&n, &d, o);
     ws_import_run(name: String, data: String, options: ImportOptions) -> Value = |c: &Arc<Core>, n: String, d: String, o: ImportOptions| c.ws_import_run(&n, &d, o);
     ws_import_history() -> Value = |c: &Arc<Core>| c.ws_import_history();
+    ws_stage_history() -> Value = |c: &Arc<Core>| c.ws_stage_history();
     ws_import_undo(batch: String) -> Value = |c: &Arc<Core>, b: String| c.ws_import_undo(&b);
     ws_collections() -> Value = |c: &Arc<Core>| c.ws_collections();
     ws_collection_items(id: String, query: Option<Query>) -> Value = |c: &Arc<Core>, id: String, q: Option<Query>| c.ws_collection_items(&id, q.unwrap_or_default());

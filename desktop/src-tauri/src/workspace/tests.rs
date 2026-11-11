@@ -127,10 +127,16 @@ fn deals_follow_stage_kind_and_keep_history() {
     assert_eq!(d["status"], "won");
     assert!(d["lost_reason"].is_null());
     assert_eq!(s.stage_history(&id(&d)).unwrap().len(), 3);
+    // Отчёты читают историю всех сделок; удалённая сделка из неё пропадает.
+    let all = s.stage_history_all().unwrap();
+    assert_eq!(all.iter().filter(|h| h["deal_id"] == d["id"]).count(), 3);
+    assert_eq!(all.last().unwrap()["to_stage_id"], won["id"]);
     assert!(s.save("deals", Some(&id(&d)), &m(json!({"amount": -1}))).is_err());
     // Этап другой воронки не подходит.
     let other = s.save("pipelines", None, &m(json!({"name": "Вторая"}))).unwrap();
     assert!(s.save("deals", None, &m(json!({"title": "x", "pipeline_id": id(&other), "stage_id": first}))).is_err());
+    s.delete("deals", &id(&d)).unwrap();
+    assert!(s.stage_history_all().unwrap().iter().all(|h| h["deal_id"] != d["id"]));
 }
 
 #[test]
