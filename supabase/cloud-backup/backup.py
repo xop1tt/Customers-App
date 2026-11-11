@@ -27,7 +27,7 @@ PREPARE = Path(__file__).with_name("prepare-target.sql")
 def tables(conn) -> list[str]:
     rows = conn.execute(
         """
-        select format('%I.%I', n.nspname, c.relname)
+        select format('%%I.%%I', n.nspname, c.relname)
         from pg_class c join pg_namespace n on n.oid = c.relnamespace
         where c.relkind in ('r', 'p') and n.nspname = any(%s)
           and not c.relispartition
