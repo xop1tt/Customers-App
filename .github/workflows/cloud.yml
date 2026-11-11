@@ -83,8 +83,8 @@ jobs:
       - name: Functions (unit tests, type check)
         working-directory: supabase/functions
         run: |
-          "$DENO" test --allow-env _shared/shared_test.ts
-          "$DENO" check send-email/index.ts email-gate/index.ts delete-account/index.ts maintenance/index.ts
+          "$DENO" test --allow-env _shared/shared_test.ts market-relay/relay_test.ts
+          "$DENO" check send-email/index.ts email-gate/index.ts delete-account/index.ts maintenance/index.ts market-relay/index.ts
 
       - name: Start local stack
         run: supabase/tests/stack/up.sh

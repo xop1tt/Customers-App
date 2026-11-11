@@ -7,22 +7,22 @@
 **Бесплатное приложение для macOS и Windows для поиска лидов по открытым источникам**<br>
 биржи и RSS · Telegram · VK · OpenStreetMap · свои ключевые слова и исключения · CRM
 
-[![Последний релиз](https://img.shields.io/github/v/release/xop1tt/CLIENTS?label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&color=2ea44f)](https://github.com/xop1tt/CLIENTS/releases/latest)
-[![Загрузки](https://img.shields.io/github/downloads/xop1tt/CLIENTS/total?label=%D0%B7%D0%B0%D0%B3%D1%80%D1%83%D0%B7%D0%BA%D0%B8)](https://github.com/xop1tt/CLIENTS/releases)
-[![macOS 12+](https://img.shields.io/badge/macOS-12%2B-000000?logo=apple&logoColor=white)](https://github.com/xop1tt/CLIENTS/wiki/Установка)
-[![Windows 10+](https://img.shields.io/badge/Windows-10%2B-0078D4?logo=windows&logoColor=white)](https://github.com/xop1tt/CLIENTS/wiki/Установка)
+[![Последний релиз](https://img.shields.io/github/v/release/xop1tt/Customers-App?label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&color=2ea44f)](https://github.com/xop1tt/Customers-App/releases/latest)
+[![Загрузки](https://img.shields.io/github/downloads/xop1tt/Customers-App/total?label=%D0%B7%D0%B0%D0%B3%D1%80%D1%83%D0%B7%D0%BA%D0%B8)](https://github.com/xop1tt/Customers-App/releases)
+[![macOS 12+](https://img.shields.io/badge/macOS-12%2B-000000?logo=apple&logoColor=white)](https://github.com/xop1tt/Customers-App/wiki/Установка)
+[![Windows 10+](https://img.shields.io/badge/Windows-10%2B-0078D4?logo=windows&logoColor=white)](https://github.com/xop1tt/Customers-App/wiki/Установка)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](desktop)
 [![React](https://img.shields.io/badge/React-TypeScript-61DAFB?logo=react&logoColor=white)](desktop/src)
 [![Rust](https://img.shields.io/badge/Rust-ядро-DEA584?logo=rust&logoColor=white)](desktop/src-tauri)
 <br>
-[![Tests](https://github.com/xop1tt/CLIENTS/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/xop1tt/CLIENTS/actions/workflows/tests.yml)
-[![Desktop](https://github.com/xop1tt/CLIENTS/actions/workflows/desktop.yml/badge.svg?branch=main)](https://github.com/xop1tt/CLIENTS/actions/workflows/desktop.yml)
-[![Cloud](https://github.com/xop1tt/CLIENTS/actions/workflows/cloud.yml/badge.svg?branch=main)](https://github.com/xop1tt/CLIENTS/actions/workflows/cloud.yml)
+[![Tests](https://github.com/xop1tt/Customers-App/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/xop1tt/Customers-App/actions/workflows/tests.yml)
+[![Desktop](https://github.com/xop1tt/Customers-App/actions/workflows/desktop.yml/badge.svg?branch=main)](https://github.com/xop1tt/Customers-App/actions/workflows/desktop.yml)
+[![Cloud](https://github.com/xop1tt/Customers-App/actions/workflows/cloud.yml/badge.svg?branch=main)](https://github.com/xop1tt/Customers-App/actions/workflows/cloud.yml)
 [![Лицензия: FSL-1.1-ALv2](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-FSL--1.1--ALv2-blue)](LICENSE)
 
-[**⬇️ Скачать (macOS и Windows)**](https://github.com/xop1tt/CLIENTS/releases/latest) ·
-[**📖 Документация (Wiki)**](https://github.com/xop1tt/CLIENTS/wiki) ·
-[**🐞 Сообщить о проблеме**](https://github.com/xop1tt/CLIENTS/issues/new)
+[**⬇️ Скачать (macOS и Windows)**](https://github.com/xop1tt/Customers-App/releases/latest) ·
+[**📖 Документация (Wiki)**](https://github.com/xop1tt/Customers-App/wiki) ·
+[**🐞 Сообщить о проблеме**](https://github.com/xop1tt/Customers-App/issues/new)
 
 </div>
 
@@ -52,7 +52,7 @@ Customers ищет потенциальных клиентов в открыты
 
 ## 🚀 Быстрый старт
 
-Готовые файлы лежат на странице [последнего релиза](https://github.com/xop1tt/CLIENTS/releases/latest): один релиз содержит установщики для обеих систем и файлы `.sha256` для проверки.
+Готовые файлы лежат на странице [последнего релиза](https://github.com/xop1tt/Customers-App/releases/latest): один релиз содержит установщики для обеих систем и файлы `.sha256` для проверки.
 
 ### 🍎 macOS (12 Monterey и новее)
 
@@ -73,25 +73,25 @@ Customers ищет потенциальных клиентов в открыты
 3. Создайте учётную запись, добавьте источники и нажмите **«Найти лиды»**.
 
 Данные лежат в `%LOCALAPPDATA%\Customers` и при обновлении и удалении по умолчанию сохраняются. Приложение само предлагает новую версию.
-Подробнее: [Wiki → Установка](https://github.com/xop1tt/CLIENTS/wiki/Установка), [desktop/README.md](desktop/README.md), сборка из исходников: [Wiki → Разработка и сборка](https://github.com/xop1tt/CLIENTS/wiki/Разработка-и-сборка).
+Подробнее: [Wiki → Установка](https://github.com/xop1tt/Customers-App/wiki/Установка), [desktop/README.md](desktop/README.md), сборка из исходников: [Wiki → Разработка и сборка](https://github.com/xop1tt/Customers-App/wiki/Разработка-и-сборка).
 
 Обе версии работают с одним облачным аккаунтом и одним форматом экспорта, поэтому можно пользоваться и Mac, и Windows.
 
 ## 📖 Документация
 
-Подробная документация переехала в **[Wiki](https://github.com/xop1tt/CLIENTS/wiki)**:
+Подробная документация переехала в **[Wiki](https://github.com/xop1tt/Customers-App/wiki)**:
 
 | Пользователям | Продвинутым |
 |---|---|
-| [Установка](https://github.com/xop1tt/CLIENTS/wiki/Установка) | [Поиск в GitHub Actions](https://github.com/xop1tt/CLIENTS/wiki/Поиск-в-GitHub-Actions) (Python, Notion, Telegram) |
-| [Работа с приложением](https://github.com/xop1tt/CLIENTS/wiki/Работа-с-приложением) | [Внешние интеграции и бесплатные лимиты](https://github.com/xop1tt/CLIENTS/wiki/Внешние-интеграции) |
-| [Источники](https://github.com/xop1tt/CLIENTS/wiki/Источники) | [Разработка и сборка](https://github.com/xop1tt/CLIENTS/wiki/Разработка-и-сборка) |
-| [Оценка и фильтры](https://github.com/xop1tt/CLIENTS/wiki/Оценка-и-фильтры) | [Безопасность и конфиденциальность](https://github.com/xop1tt/CLIENTS/wiki/Безопасность-и-конфиденциальность) |
-| [Учётные записи и облако](https://github.com/xop1tt/CLIENTS/wiki/Учётные-записи-и-облако) | [Ограничения и планы](https://github.com/xop1tt/CLIENTS/wiki/Ограничения-и-планы) |
-| [Резервные копии и экспорт](https://github.com/xop1tt/CLIENTS/wiki/Резервные-копии-и-экспорт) · [Экспорт в CRM](https://github.com/xop1tt/CLIENTS/wiki/Экспорт-в-CRM) | [Настройка облака Supabase](docs/cloud-setup.md) · [устройство облака](docs/cloud.md) |
-| [Интеграции: диски, почта, звонки](https://github.com/xop1tt/CLIENTS/wiki/Интеграции-приложения) | [Тестирование](https://github.com/xop1tt/CLIENTS/wiki/Тестирование) · [Аудит источников](docs/research.md) |
-| [Обновления и отчёты о сбоях](https://github.com/xop1tt/CLIENTS/wiki/Обновления-и-отчёты-о-сбоях) | [Приложение: исходники](desktop/README.md) |
-| [Частые проблемы](https://github.com/xop1tt/CLIENTS/wiki/Частые-проблемы) | |
+| [Установка](https://github.com/xop1tt/Customers-App/wiki/Установка) | [Поиск в GitHub Actions](https://github.com/xop1tt/Customers-App/wiki/Поиск-в-GitHub-Actions) (Python, Notion, Telegram) |
+| [Работа с приложением](https://github.com/xop1tt/Customers-App/wiki/Работа-с-приложением) | [Внешние интеграции и бесплатные лимиты](https://github.com/xop1tt/Customers-App/wiki/Внешние-интеграции) |
+| [Источники](https://github.com/xop1tt/Customers-App/wiki/Источники) | [Разработка и сборка](https://github.com/xop1tt/Customers-App/wiki/Разработка-и-сборка) |
+| [Оценка и фильтры](https://github.com/xop1tt/Customers-App/wiki/Оценка-и-фильтры) | [Безопасность и конфиденциальность](https://github.com/xop1tt/Customers-App/wiki/Безопасность-и-конфиденциальность) |
+| [Учётные записи и облако](https://github.com/xop1tt/Customers-App/wiki/Учётные-записи-и-облако) | [Ограничения и планы](https://github.com/xop1tt/Customers-App/wiki/Ограничения-и-планы) |
+| [Резервные копии и экспорт](https://github.com/xop1tt/Customers-App/wiki/Резервные-копии-и-экспорт) · [Экспорт в CRM](https://github.com/xop1tt/Customers-App/wiki/Экспорт-в-CRM) | [Настройка облака Supabase](docs/cloud-setup.md) · [устройство облака](docs/cloud.md) |
+| [Интеграции: диски, почта, звонки](https://github.com/xop1tt/Customers-App/wiki/Интеграции-приложения) | [Тестирование](https://github.com/xop1tt/Customers-App/wiki/Тестирование) · [Аудит источников](docs/research.md) |
+| [Обновления и отчёты о сбоях](https://github.com/xop1tt/Customers-App/wiki/Обновления-и-отчёты-о-сбоях) | [Приложение: исходники](desktop/README.md) |
+| [Частые проблемы](https://github.com/xop1tt/Customers-App/wiki/Частые-проблемы) | |
 
 ## 📡 Откуда берутся лиды
 
@@ -103,7 +103,7 @@ Customers ищет потенциальных клиентов в открыты
 | OpenStreetMap + проверка сайтов | бесплатно | организации без сайта или с устаревшим сайтом |
 
 Kwork, Habr Freelance, Яндекс Карты, 2ГИС и поисковые системы не подключены: бесплатно и в рамках правил их
-использовать нельзя. Причины: [Wiki → Источники](https://github.com/xop1tt/CLIENTS/wiki/Источники#что-не-подключено-и-почему).
+использовать нельзя. Причины: [Wiki → Источники](https://github.com/xop1tt/Customers-App/wiki/Источники#что-не-подключено-и-почему).
 
 ## 🧱 Из чего состоит
 

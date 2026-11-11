@@ -87,6 +87,12 @@ workflow ничего не делает. Запустить вручную: **Ac
 **Ежедневная очистка.** Workflow `.github/workflows/maintenance.yml` раз в сутки удаляет из базы устаревшие служебные
 записи (docs/MAINTENANCE.md). Ему нужны те же `CRON_SECRET` и `SUPABASE_URL`, что и проверке неактивных аккаунтов.
 
+**Webhooks маркетплейса (ADR-046).** События интеграциям отправляет функция `market-relay`. Секрет для неё база
+создаёт сама; после загрузки функции (шаг 5) выполните в SQL Editor `select secret from private.market_relay;`,
+добавьте значение в **Edge Functions → Secrets** под именем `MARKET_RELAY_SECRET` и запишите адрес функции:
+`update private.market_relay set url = 'https://REF.supabase.co/functions/v1/market-relay' where id = 1;`.
+Пока адрес не записан, события интеграциям не отправляются.
+
 `SEND_EMAIL_HOOK_SECRET` добавите на шаге 6. `SUPABASE_URL` и `SUPABASE_SERVICE_ROLE_KEY` Supabase
 передаёт функциям сам — их добавлять не нужно.
 
@@ -106,6 +112,7 @@ npx supabase functions deploy delete-account --project-ref REF --no-verify-jwt
 npx supabase functions deploy inactive-accounts --project-ref REF --no-verify-jwt
 npx supabase functions deploy keep-account --project-ref REF --no-verify-jwt
 npx supabase functions deploy maintenance --project-ref REF --no-verify-jwt
+npx supabase functions deploy market-relay --project-ref REF --no-verify-jwt
 ```
 
 `login` откроет браузер — подтвердите вход. После каждой команды должно быть `Deployed Functions … send-email`

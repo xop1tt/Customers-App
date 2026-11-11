@@ -90,7 +90,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
   const helpItems = (): MenuItem[] => [
     { label: "Что нового", icon: "sparkles", onSelect: () => setState({ whatsNewOpen: true }) },
-    { label: "Страница релизов", icon: "external", onSelect: () => void openLink(update?.releasesPage ?? "https://github.com/xop1tt/CLIENTS/releases") },
+    { label: "Страница релизов", icon: "external", onSelect: () => void openLink(update?.releasesPage ?? "https://github.com/xop1tt/Customers-App/releases") },
     { label: "Сообщить о проблеме", icon: "report", onSelect: () => setState({ reportOpen: true }) },
   ];
 

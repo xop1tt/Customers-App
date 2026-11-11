@@ -13,7 +13,7 @@
 # Без gh скрипт сохранит файлы и подскажет, что вставить в Settings → Secrets → Actions.
 set -euo pipefail
 
-REPO="${REPO:-xop1tt/CLIENTS}"
+REPO="${REPO:-xop1tt/Customers-App}"
 NAME="Lead Generator Self-Signed"
 DIR="$(mktemp -d)"
 trap 'rm -rf "$DIR"' EXIT

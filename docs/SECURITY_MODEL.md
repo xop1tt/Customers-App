@@ -56,6 +56,21 @@ Storage: бакет `attachments` приватный; политика `storage.
   именами, явной проверкой `auth.uid() is not null` и прав, `revoke execute … from public, anon`.
 * Каждая definer-функция пишет `audit_log` для действий с участниками, ролями, владением, экспортом, удалением.
 * Ни одна функция не принимает `user_id`/`created_by` от клиента для записи — только `auth.uid()`.
+* Автопроверка (ADR-046): `test_security_definer_functions_open_to_users_check_the_caller` в
+  `supabase/tests/test_migrations.py` требует, чтобы каждая `public` definer-функция, которую могут вызвать `anon` или
+  `authenticated`, проверяла вызывающего (`require_perm`, `is_member`, `has_perm`, `uid()`, `require_moderator`).
+  Служебные функции (только `service_role`: почта, неактивные аккаунты, очистка) пользователям недоступны.
+
+## 4a. Webhooks маркетплейса (S2, ADR-046)
+
+* База не отправляет запросы на адрес интеграции. `private.market_deliver` подписывает тело (HMAC-SHA256) и передаёт
+  его Edge Function `market-relay` с секретом `x-relay-secret` (хранится в `private.market_relay`, недоступна
+  пользователям). Функция принимает только `https`, отклоняет IP-литералы, `localhost`, `*.local`, `*.internal`,
+  резолвит имя (A и AAAA) и отправляет, только если все адреса публичные; перенаправления не выполняются.
+* Остаточный риск: между проверкой DNS и запросом имя может смениться (DNS rebinding). Запрос идёт из сети Edge
+  Functions, а не из сети базы, ответ интеграции атакующему не возвращается, интеграции проходят модерацию.
+* Пока адрес `market-relay` не записан в `private.market_relay.url`, события не отправляются.
+* Защита от утёкших паролей Supabase (S5) доступна только на Pro; на бесплатном плане (ADR-035) не включается.
 
 ## 5. Угрозы и проверки (security-тесты этапа 3, `supabase/tests/test_workspace_security.py`)
 
@@ -76,6 +91,9 @@ Storage: бакет `attachments` приватный; политика `storage.
 | `crm_push` с операцией на чужой Workspace или без прав | `rejected` по каждой операции, ничего не применено |
 | Ссылка задачи/заметки на запись чужого Workspace | исключение триггера |
 | Подписанная ссылка на вложение чужого Workspace | отказ Storage |
+| Webhook интеграции на имя, указывающее на 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, fc00::/7 | `market-relay` отклоняет (`relay_test.ts`) |
+| Прямой запрос базы на адрес интеграции | не происходит: только `market-relay` (`test_marketplace.py`) |
+| Workspace без участников после удаления аккаунтов | удаляется через 30 дней (`test_maintenance.py`) |
 | `service_role` / секретный ключ в приложении | сборка отклоняет ключ (`is_public_key`), `release-check` ищет его в коде |
 
 Тесты идут на одноразовом стенде (`supabase/tests/stack`, CI `cloud.yml`) с настоящими PostgREST/GoTrue и

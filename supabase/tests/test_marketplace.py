@@ -195,14 +195,35 @@ def http_stub():
                 returns bigint language sql as
                 $f$ insert into net.test_requests (url, body, headers) values (url, body, headers) returning id $f$;
         """)
+        c.execute("update private.market_relay set url = %s where id = 1", (RELAY,))
     yield
     with db() as c:
+        c.execute("update private.market_relay set url = null where id = 1")
         c.execute("drop schema net cascade; drop extension if exists pgcrypto; drop schema if exists extensions")
 
 
-def requests() -> list[tuple[str, dict, dict]]:
+RELAY = "https://relay.test/functions/v1/market-relay"
+
+
+def relayed() -> list[tuple[str, dict, dict]]:
+    """Запросы базы к market-relay (ADR-046): адрес, конверт, заголовки."""
     with db() as c:
         return c.execute("select url, body, headers from net.test_requests order by id").fetchall()
+
+
+def requests() -> list[tuple[str, dict, dict]]:
+    """То, что market-relay отправит интеграции: её адрес, подписанное тело и заголовки подписи."""
+    out = []
+    for url, env, headers in relayed():
+        assert url == RELAY and headers["x-relay-secret"] == relay_secret()
+        out.append((env["url"], json.loads(env["payload"]),
+                    {"X-Customers-Event": env["event"], "X-Customers-Signature": env["signature"], "_text": env["payload"]}))
+    return out
+
+
+def relay_secret() -> str:
+    with db() as c:
+        return c.execute("select secret from private.market_relay where id = 1").fetchone()[0]
 
 
 def company(uid: str, ws: str, name: str) -> str:
@@ -232,8 +253,7 @@ def test_events_are_signed_and_respect_scopes(http_stub):
     by_url = {u: (b, h) for u, b, h in sent}
     body, headers = by_url["https://hooks.example.com/customers"]
     assert body["event"] == "record.created" and body["entity_id"] == rid and body["record"]["name"] == "ООО Зерно"
-    with db() as c:
-        as_text = c.execute("select body::text from net.test_requests where url = 'https://hooks.example.com/customers' order by id desc limit 1").fetchone()[0]
+    as_text = headers["_text"]  # тело ровно в том виде, в каком market-relay его отправит
     assert headers["X-Customers-Signature"] == "sha256=" + hmac.new(secret.encode(), as_text.encode(), hashlib.sha256).hexdigest()
     ids_body, _ = by_url["https://ids.example.com/h"]
     assert "record" not in ids_body and ids_body["entity_id"] == rid, "без crm.read — только идентификаторы"
@@ -243,3 +263,27 @@ def test_events_are_signed_and_respect_scopes(http_stub):
     before = len(requests())
     company(owner, ws, "ООО Мука")
     assert [u for u, _, _ in requests()[before:]] == ["https://ids.example.com/h"]
+
+
+def test_database_never_calls_the_integration_url_directly(http_stub):
+    """S2 (ADR-046): все запросы базы идут только в market-relay; без его адреса события не отправляются."""
+    owner, dev, mod = users(2) + [moderator()]
+    ws = workspace_with(owner, {})
+    app = listed(dev, mod)
+    rpc(owner, "market_install", p_workspace=ws, p_app=app["id"])
+    company(owner, ws, "ООО Ячмень")
+    assert relayed() and all(u == RELAY for u, _, _ in relayed())
+
+    with db() as c:
+        c.execute("update private.market_relay set url = null where id = 1")
+    before = len(relayed())
+    company(owner, ws, "ООО Овёс")
+    assert len(relayed()) == before, "без market-relay база не отправляет ничего"
+
+
+def test_relay_config_is_hidden_from_users():
+    owner = users(1)[0]
+    denied("42501", one, owner, "select secret from private.market_relay")
+    with db() as c:
+        secret = c.execute("select secret from private.market_relay where id = 1").fetchone()[0]
+    assert len(secret) == 64
