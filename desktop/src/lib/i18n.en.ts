@@ -1007,6 +1007,21 @@ export const EN: Record<string, string> = {
   "Настройка панели": "Customize sidebar",
   "${v}, новых: ${v}": "$1, new: $2",
   "CRM": "CRM",
+  "Лента": "Feed",
+  "Всё": "All",
+  "Заметки": "Notes",
+  "Задачи": "Tasks",
+  "Этапы": "Stages",
+  "Запись создана": "Record created",
+  "Создана запись": "Record created",
+  "Поставлена задача": "Task created",
+  "Задача выполнена": "Task completed",
+  "Этап сделки": "Deal stage",
+  "Этап удалён": "Stage deleted",
+  "Здесь пока ничего нет.": "Nothing here yet.",
+  "Лента пуста: здесь будут заметки, звонки, задачи и смены этапов.": "The feed is empty: notes, calls, tasks and stage changes will appear here.",
+  "Сделка: ${v}": "Deal: $1",
+  "Контакт: ${v}": "Contact: $1",
 };
 
 /** Дополнительные шаблоны на регулярных выражениях (числа, склонения). */
