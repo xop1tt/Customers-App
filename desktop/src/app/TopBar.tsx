@@ -3,7 +3,7 @@ import { integer, shortRelative } from "../lib/format";
 import { Avatar, Button, IconButton, Spinner, TextInput } from "../ui/kit";
 import { Icon } from "../ui/icons";
 import { sourceTitle } from "../lib/sources";
-import { patchDevice, setFilter, setState, useStore } from "../state/store";
+import { openRecord, patchDevice, setFilter, setState, useStore } from "../state/store";
 import { startSearch, stopSearch } from "../state/actions";
 import { visibleLeads } from "../lib/leads";
 import { useMemo, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import { useViewportWidth } from "../state/hooks";
 import { modKey } from "../lib/platform";
 import { toggleQuick } from "./QuickSearch";
 import { moduleOf } from "../lib/modules";
+import { collectionGlyph } from "../lib/crm";
 
 export function TopBar({ narrow }: { narrow: boolean }) {
   const navPeek = useStore((s) => s.navPeek);
@@ -27,6 +28,9 @@ export function TopBar({ narrow }: { narrow: boolean }) {
   const lead = isLeadList(section);
   const shown = useMemo(() => (lead ? visibleLeads(leads, section, filter).length : 0), [leads, section, filter, lead]);
 
+  const cg = collection ? collectionGlyph(collection) : null;
+  const topGlyph = cg && "emoji" in cg ? cg.emoji : <Icon name={cg && "icon" in cg ? cg.icon : SECTIONS[section].icon} size={22} />;
+
   const syncText = sync?.enabled
     ? sync.kind === "syncing" ? "Синхронизация…" : sync.kind === "offline" ? "Нет сети" : sync.kind === "failed" ? "Ошибка синхронизации" : sync.lastSync ? `Синхронизировано ${shortRelative(sync.lastSync)}` : "Синхронизация включена"
     : null;
@@ -41,7 +45,7 @@ export function TopBar({ narrow }: { narrow: boolean }) {
         onClick={() => (narrow ? setState({ navPeek: !navPeek }) : void patchDevice({ navOpen: !device.navOpen }))}
       />
       <div className="topbar-title">
-        <span className="topbar-emoji" aria-hidden="true">{collection?.emoji || SECTIONS[section].emoji}</span>
+        <span className="topbar-emoji" aria-hidden="true">{topGlyph}</span>
         <h2 className="ellipsis">{collection ? collection.name : SECTIONS[section].title}{sourceTitleKey && section === "all" ? <span className="muted"> · {sourceTitle(sourceTitleKey)}</span> : null}</h2>
         {lead && <span className="topbar-count num faint">{integer(shown)}</span>}
         {collection && <span className="topbar-count num faint">{integer(collection.count)}</span>}
@@ -73,6 +77,7 @@ export function TopBar({ narrow }: { narrow: boolean }) {
       ) : (
         <Button variant={moduleOf(section) === "search" ? "primary" : undefined} icon="search" onClick={() => void startSearch()} className="search-btn">Найти лиды</Button>
       )}
+      {!search.running && ws?.active && section === "today" && <Button variant="primary" icon="plus" onClick={() => openRecord("deals", "new")}>Новая сделка</Button>}
       {search.running && <Spinner size={14} />}
       {lead && <IconButton icon="panelRight" tip={device.inspectorShown ? "Скрыть панель сведений" : "Показать панель сведений"} active={device.inspectorShown} onClick={() => void patchDevice({ inspectorShown: !device.inspectorShown })} />}
     </header>

@@ -125,7 +125,7 @@ function NewRecord({ e, preset }: { e: EntityMeta; preset?: Record<string, unkno
   return (
     <div className="inspector-body">
       <div className="insp-head">
-        <div className="row insp-tags"><Tag>{e.emoji} {e.one}</Tag></div>
+        <div className="row insp-tags"><Tag><Icon name={e.icon} size={12} /> {e.one}</Tag></div>
         <h3 className="insp-title">Новая запись</h3>
       </div>
       <div className="insp-scroll">
@@ -178,7 +178,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
     <div className="inspector-body">
       <div className="insp-head">
         <div className="row insp-tags">
-          <Tag>{e.emoji} {e.one}</Tag>
+          <Tag><Icon name={e.icon} size={12} /> {e.one}</Tag>
           {status && <Tag tone={STATUS_TONE[String(r.status)] ?? "gray"}>{status}</Tag>}
           {e.type === "deal" && typeof r.amount === "number" && <Tag tone="blue">{money(r.amount, String(r.currency ?? "RUB"))}</Tag>}
           {r.archived_at && <Tag icon="archive">В архиве</Tag>}
@@ -203,7 +203,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
           {deletable && (r.deleted_at
             ? <Button small icon="refresh" onClick={() => void attempt(() => api.wsRestore(e.table, id))}>Восстановить</Button>
             : <IconButton icon="trash" tip="Удалить" onClick={() => void remove()} />)}
-          <IconButton icon="x" tip="Закрыть" onClick={() => openRecord(e.table, null)} />
+          <IconButton icon="x" tip="Закрыть (Esc)" aria-label="Закрыть" onClick={() => openRecord(e.table, null)} />
         </div>
       </div>
       {merging && <MergeDialog e={e} record={r} lk={lk} onClose={() => setMerging(false)} />}

@@ -15,6 +15,8 @@ export interface EntityMeta {
   /** Подпись кнопки создания: «Новая сделка». */
   create: string;
   many: string;
+  /** Линейная иконка из набора интерфейса (вместо цветного эмодзи). */
+  icon: string;
   emoji: string;
   title: (r: CrmRecord) => string;
   /** Столбцы таблицы коллекции по умолчанию. */
@@ -39,7 +41,7 @@ const text = (r: CrmRecord, f: string) => (typeof r[f] === "string" ? (r[f] as s
 
 export const ENTITIES: Record<EntityType, EntityMeta> = {
   company: {
-    type: "company", table: "companies", one: "Компания", create: "Новая компания", many: "Компании", emoji: "🏢",
+    type: "company", table: "companies", one: "Компания", create: "Новая компания", many: "Компании", icon: "building", emoji: "🏢",
     title: (r) => text(r, "name") || "Без названия",
     columns: ["name", "phones", "emails", "industry", "owner_id", "updated_at"],
     fields: [
@@ -57,7 +59,7 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
     ],
   },
   contact: {
-    type: "contact", table: "contacts", one: "Контакт", create: "Новый контакт", many: "Контакты", emoji: "👤",
+    type: "contact", table: "contacts", one: "Контакт", create: "Новый контакт", many: "Контакты", icon: "user", emoji: "👤",
     title: (r) => text(r, "full_name") || "Без имени",
     columns: ["full_name", "position", "phones", "emails", "owner_id", "updated_at"],
     fields: [
@@ -71,7 +73,7 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
     ],
   },
   crm_lead: {
-    type: "crm_lead", table: "crm_leads", one: "Заявка", create: "Новая заявка", many: "Заявки", emoji: "🌱",
+    type: "crm_lead", table: "crm_leads", one: "Заявка", create: "Новая заявка", many: "Заявки", icon: "filter", emoji: "🌱",
     title: (r) => text(r, "title") || "Без названия",
     columns: ["title", "company_name", "status", "source", "owner_id", "created_at"],
     fields: [
@@ -86,7 +88,7 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
     ],
   },
   deal: {
-    type: "deal", table: "deals", one: "Сделка", create: "Новая сделка", many: "Сделки", emoji: "💼",
+    type: "deal", table: "deals", one: "Сделка", create: "Новая сделка", many: "Сделки", icon: "briefcase", emoji: "💼",
     title: (r) => text(r, "title") || "Без названия",
     columns: ["title", "stage_id", "amount", "expected_close_date", "owner_id", "updated_at"],
     fields: [
@@ -102,7 +104,7 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
     ],
   },
   task: {
-    type: "task", table: "tasks", one: "Задача", create: "Новая задача", many: "Задачи", emoji: "📋",
+    type: "task", table: "tasks", one: "Задача", create: "Новая задача", many: "Задачи", icon: "clipboard", emoji: "📋",
     title: (r) => text(r, "title") || "Без названия",
     columns: ["title", "status", "priority", "due_at", "assignee_id", "updated_at"],
     fields: [
@@ -209,3 +211,20 @@ export const STATUS_TONE: Record<string, "gray" | "green" | "red" | "blue" | "or
   open: "blue", won: "green", lost: "red", todo: "gray", in_progress: "blue", done: "green", cancelled: "gray",
   new: "purple", qualified: "green", disqualified: "red", converted: "green", urgent: "red", high: "orange", normal: "gray", low: "gray",
 };
+
+/** Иконки встроенных коллекций: ключ встроенной коллекции или пара «название + стартовый эмодзи». Выбранные пользователем эмодзи не подменяются. */
+const BUILTIN_ICONS: Record<string, string> = {
+  all_clients: "users", my_clients: "star", new_leads: "filter", deals_this_week: "calendar", overdue_tasks: "clock", won_deals: "trophy", lost_deals: "xCircle",
+};
+const SEEDED: Record<string, string> = {
+  "Все клиенты|🤝": "all_clients", "Мои клиенты|⭐": "my_clients", "Новые лиды|🌱": "new_leads", "Сделки на этой неделе|📅": "deals_this_week",
+  "Просроченные задачи|⏰": "overdue_tasks", "Успешные сделки|🏆": "won_deals", "Потерянные сделки|🥀": "lost_deals",
+};
+
+/** Что рисовать у коллекции: иконку (встроенные и без выбора) или эмодзи, выбранный человеком. */
+export function collectionGlyph(c: { builtin?: string | null; name: string; emoji: string | null; entity_type: string }): { icon: string } | { emoji: string } {
+  const key = c.builtin && BUILTIN_ICONS[c.builtin] ? c.builtin : SEEDED[`${c.name}|${c.emoji ?? ""}`];
+  if (key && BUILTIN_ICONS[key]) return { icon: BUILTIN_ICONS[key] as string };
+  if (c.emoji) return { emoji: c.emoji };
+  return { icon: ENTITIES[c.entity_type as EntityType]?.icon ?? "list" };
+}

@@ -40,7 +40,7 @@ describe("окно Ctrl/Cmd+K", () => {
     await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(2));
     expect(screen.getByText("Компании")).toBeTruthy();
     expect(screen.getByText("Контакты")).toBeTruthy();
-    expect(options()).toContain(`💼${deal.title}`);
+    expect(options()).toContain(deal.title);
     const first = options()[0];
     expect(first).toContain("ООО «Северный ветер»");
     fireEvent.keyDown(input(), { key: "Enter" });

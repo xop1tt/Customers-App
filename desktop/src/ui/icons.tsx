@@ -76,6 +76,12 @@ const P: Record<string, string> = {
   bellOff: "M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l2 2H8M10 21h4M3 3l18 18",
   paperclip: "M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 17.9a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8",
   store: "M4 9l1.5-5h13L20 9M4 9h16M4 9a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0M5 11v9h14v-9M10 20v-5h4v5",
+  building: "M5 21V4l7-2 7 2v17M3 21h18M9 8h2M13 8h2M9 12h2M13 12h2M10 21v-4h4v4",
+  briefcase: "M3 8h18v12H3zM9 8V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3M3 13h18",
+  clipboard: "M6 5h12v16H6zM9 3h6v4H9zM9 14l2 2 4-4",
+  trophy: "M7 4h10v5a5 5 0 0 1-10 0V4ZM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8M10 18h4",
+  clock: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2",
+  xCircle: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM9 9l6 6M15 9l-6 6",
   tree: "M12 3v5M12 8H6v5M12 8h6v5M4 13h4v4H4zM16 13h4v4h-4zM10 3h4v5h-4z",
 };
 

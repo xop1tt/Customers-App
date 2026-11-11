@@ -122,11 +122,28 @@ describe("интерфейс CRM", () => {
     expect(within(nav).queryByText("По источнику")).toBeNull();
     fireEvent.click(await within(nav).findByText("Все клиенты"));
     const header = document.querySelector(".topbar-title") as HTMLElement;
-    await waitFor(() => expect(header).toHaveTextContent("🤝Все клиенты"));
+    await waitFor(() => expect(header).toHaveTextContent("Все клиенты"));
     fireEvent.click(await screen.findByText("ООО «Северный ветер»"));
     const card = await screen.findByLabelText("Карточка записи");
     expect(await within(card).findByDisplayValue("ООО «Северный ветер»")).toBeInTheDocument();
     expect(within(card).getByText("Ольга Смирнова")).toBeInTheDocument();
+  });
+
+  it("панель карточки закрывается кнопкой и клавишей Esc; в шапке панели CRM виден переключатель рабочего пространства", async () => {
+    render(<App />);
+    const nav = await screen.findByLabelText("Навигация");
+    await openCrm();
+    const wsBtn = await within(nav).findByRole("button", { name: /^Рабочее пространство:/ });
+    expect(wsBtn).toBeInTheDocument();
+    fireEvent.click(await within(nav).findByText("Все клиенты"));
+    fireEvent.click(await screen.findByText("ООО «Северный ветер»"));
+    const card = await screen.findByLabelText("Карточка записи");
+    fireEvent.click(within(card).getByRole("button", { name: "Закрыть" }));
+    await waitFor(() => expect(screen.queryByLabelText("Карточка записи")).toBeNull());
+    fireEvent.click(await screen.findByText("ООО «Северный ветер»"));
+    await screen.findByLabelText("Карточка записи");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByLabelText("Карточка записи")).toBeNull());
   });
 
   it("аватары участников видны только в облачном рабочем пространстве из нескольких человек", async () => {

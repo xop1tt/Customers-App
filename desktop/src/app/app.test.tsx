@@ -43,7 +43,7 @@ describe("приложение с демо-бэкендом", () => {
     fireEvent.click(screen.getByLabelText("Учётная запись"));
     fireEvent.click(await screen.findByText("Настройки", { selector: ".menu-item" }));
     const dialog = await screen.findByRole("dialog", { name: "Настройки" });
-    for (const title of ["Основные", "Приложение", "Поиск клиентов", "Поддержка"]) expect(within(dialog).getByText(title)).toBeInTheDocument();
+    for (const title of ["Личное", "Приложение", "Поиск клиентов", "Данные", "Поддержка"]) expect(within(dialog).getByText(title)).toBeInTheDocument();
     for (const name of ["Почта и звонки", "Уведомления", "Система"]) expect(within(dialog).getByText(name)).toBeInTheDocument();
     expect(within(dialog).queryByText("Рассылка")).toBeNull();
     fireEvent.click(within(dialog).getByText("Почта и звонки"));

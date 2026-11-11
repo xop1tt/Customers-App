@@ -72,6 +72,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const teamShut = useCollapsed("team");
   const chat = useStore((s) => s.chat);
   const hasWs = useStore((s) => !!s.ws?.active);
+  const wsName = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.name ?? null);
   // Панель разделов показывает группы открытого модуля рейки; в режиме настройки — все настраиваемые группы.
   const mod = moduleOf(section);
   // «Настроить панель» у каждой вкладки своя: настраивается только то, что показано в открытой вкладке.
@@ -149,6 +150,19 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
       <div className="side-head">
         <span className="side-brand side-module grow">{customize ? `Настройка: ${MODULES.find((m) => m.id === mod)!.title}` : MODULES.find((m) => m.id === mod)!.title}</span>
       </div>
+
+      {mod === "crm" && !customize && wsName && (
+        <div className="side-ws">
+          <button type="button" className="ws-switch grow" onClick={() => setState({ workspaceOpen: true })} aria-haspopup="dialog" aria-label={`Рабочее пространство: ${wsName}`} data-tip="Участники, воронки, поля">
+            <Avatar name={wsName} size={26} />
+            <span className="col grow" style={{ gap: 0, minWidth: 0, textAlign: "left" }}>
+              <span className="ellipsis ws-switch-name">{wsName}</span>
+              <span className="ellipsis faint ws-switch-sub">Рабочее пространство</span>
+            </span>
+            <Icon name="chevronDown" size={14} className="faint" />
+          </button>
+        </div>
+      )}
 
       <nav className="side-scroll">
         {showSearch && <div className="nav-group">{groupFor(main, MAIN_GROUP)}</div>}

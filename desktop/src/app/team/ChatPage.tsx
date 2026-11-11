@@ -376,7 +376,7 @@ function CardChip({ card, onRemove }: { card: ChatAttachment; onRemove?: () => v
   const meta = ENTITIES[card.type];
   const body = (
     <>
-      <span className="chat-card-emoji" aria-hidden>{meta.emoji}</span>
+      <span className="chat-card-emoji" aria-hidden><Icon name={meta.icon} size={16} /></span>
       <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
         <span className="ellipsis chat-card-title">{card.available ? card.title || "Без названия" : "Нет доступа к карточке"}</span>
         <span className="ellipsis faint chat-card-sub">{[meta.one, card.available ? card.subtitle : ""].filter(Boolean).join(" · ")}</span>
@@ -432,7 +432,7 @@ function AttachCardDialog({ taken, onClose, onPick }: { taken: ChatAttachment[];
               return (
                 <li key={r.id}>
                   <button type="button" className="pick-row" disabled={used} onClick={() => onPick({ type, id: r.id, title: meta.title(r), subtitle: sub, available: true })}>
-                    <span aria-hidden>{meta.emoji}</span>
+                    <span aria-hidden><Icon name={meta.icon} size={16} /></span>
                     <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
                       <span className="ellipsis">{meta.title(r)}</span>
                       {sub && <span className="ellipsis faint" style={{ fontSize: "var(--fs-sm)" }}>{sub}</span>}

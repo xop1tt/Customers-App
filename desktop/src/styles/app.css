@@ -667,3 +667,10 @@ button.pick-row:hover { background: var(--bg-hover); }
 .board-next.bad { color: var(--red); }
 .backup-reminder { padding: 16px 16px 0; }
 .recovery-key { font-family: var(--mono); font-size: var(--fs-lg, 16px); letter-spacing: 0.06em; padding: 12px 14px; background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md, 6px); text-align: center; word-break: break-all; }
+
+/* Переключатель рабочего пространства в шапке панели CRM (макет 1 из аудита). */
+.ws-switch { display: flex; align-items: center; gap: 8px; min-width: 0; height: 44px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-md, 8px); background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.ws-switch:hover { background: var(--bg-hover); }
+.ws-switch-name { font-weight: 650; }
+.ws-switch-sub { font-size: var(--fs-sm); }
+.side-ws { display: flex; padding: 0 10px 8px; flex: none; }

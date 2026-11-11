@@ -253,7 +253,7 @@ function ManifestFacts({ m }: { m: MarketManifest }) {
       </section>
       <section className="market-fact">
         <h4>Кнопки в карточках</h4>
-        {actions.length ? actions.map((a) => <div key={a.id}>{ENTITIES[a.entity].emoji} {a.label} <span className="faint">· {ENTITIES[a.entity].one.toLowerCase()}</span></div>) : <div className="faint">Нет</div>}
+        {actions.length ? actions.map((a) => <div key={a.id}><Icon name={ENTITIES[a.entity].icon} size={13} /> {a.label} <span className="faint">· {ENTITIES[a.entity].one.toLowerCase()}</span></div>) : <div className="faint">Нет</div>}
       </section>
       <section className="market-fact">
         <h4>События</h4>
