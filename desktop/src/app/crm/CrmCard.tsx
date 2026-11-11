@@ -1,5 +1,5 @@
-// Карточка CRM-записи в панели сведений: поля, связанные записи, лента (заметки, события, комментарии),
-// задачи, история этапов сделки и конфликты синхронизации. Новая запись создаётся здесь же.
+// Карточка CRM-записи в панели сведений: поля, связанные записи, лента клиента (заметки, события, комментарии,
+// задачи, смены этапов; у компании — и по её сделкам и контактам), задачи и конфликты синхронизации. Новая запись создаётся здесь же.
 
 import { CustomFieldsSection } from "./CustomFields";
 import { WatchingNow } from "./Presence";
@@ -9,7 +9,8 @@ import { api } from "../../api";
 import type { CrmRecord, WsCard, WsConflict } from "../../api/types";
 import { byTable, can, cellText, CURRENCIES, ENUMS, ENTITIES, type EntityMeta, type FieldMeta, fromInput, type Lookup, memberName, STATUS_TONE, toInput } from "../../lib/crm";
 import { fullRu, money, shortRelative } from "../../lib/format";
-import { Button, EmptyState, Field, IconButton, Notice, Select, Spinner, Tabs, Tag, TextArea, TextInput } from "../../ui/kit";
+import { buildTimeline, filterTimeline, relatedForTimeline, type TimelineFilter, type TimelineSource } from "../../lib/timeline";
+import { Button, EmptyState, Field, IconButton, Notice, Segmented, Select, Spinner, Tabs, Tag, TextArea, TextInput } from "../../ui/kit";
 import { Icon } from "../../ui/icons";
 import { confirmDialog } from "../../ui/overlay";
 import { attempt, openRecord, toast, useStore } from "../../state/store";
@@ -17,7 +18,7 @@ import { actionsFor, actionUrl } from "../../state/market";
 import { openLink } from "../../state/actions";
 import { defaultStage, stagesOf, useLookup, useWsQuery } from "./useCrm";
 
-type Tab = "overview" | "feed" | "tasks" | "history";
+type Tab = "overview" | "feed" | "tasks";
 
 export function CrmCard() {
   const record = useStore((s) => s.record);
@@ -169,7 +170,6 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
 
   const tabs: { id: Tab; label: string }[] = [{ id: "overview", label: "Обзор" }];
   if (e.type !== "task") tabs.push({ id: "feed", label: "Лента" }, { id: "tasks", label: `Задачи${data.tasks?.length ? ` · ${data.tasks.length}` : ""}` });
-  if (e.type === "deal") tabs.push({ id: "history", label: "Этапы" });
 
   return (
     <div className="inspector-body">
@@ -208,7 +208,6 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
           {tab === "overview" && <Overview e={e} data={data} lk={lk} editable={editable} save={save} />}
           {tab === "feed" && <Feed e={e} data={data} lk={lk} />}
           {tab === "tasks" && <Tasks e={e} id={id} tasks={data.tasks ?? []} lk={lk} />}
-          {tab === "history" && <StageHistory data={data} lk={lk} />}
         </div>
       </div>
     </div>
@@ -315,16 +314,26 @@ function Feed({ e, data, lk }: { e: EntityMeta; data: WsCard; lk: Lookup }) {
   const [kind, setKind] = useState<"note" | "comment" | (typeof ACTIVITY_TYPES)[number]>("note");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<TimelineFilter>("all");
   const creatable = can(ws?.permissions ?? [], "create");
   const link = { entity_type: e.type, entity_id: data.record.id };
+  // Лента компании включает её сделки и контакты: их карточки читаются отдельно.
+  const related = useMemo(() => (e.type === "company" ? relatedForTimeline(data) : []), [e.type, data]);
+  const { data: extra } = useWsQuery(
+    () => Promise.all(related.map(({ table, rec }) => api.wsCard(table, rec.id).then((card) => ({ card, table, rec })).catch(() => null))),
+    [related.map((x) => x.rec.id).join(",")],
+  );
   const items = useMemo(() => {
-    const all = [
-      ...(data.notes ?? []).map((r) => ({ r, k: "note" as const, at: r.created_at })),
-      ...(data.comments ?? []).map((r) => ({ r, k: "comment" as const, at: r.created_at })),
-      ...(data.activities ?? []).map((r) => ({ r, k: "activity" as const, at: String(r.occurred_at ?? r.created_at) })),
-    ];
-    return all.sort((a, b) => (a.at < b.at ? 1 : -1));
-  }, [data]);
+    const stage = (id: string | null) => (id ? String(lk.stages.get(id)?.name ?? "Этап удалён") : "—");
+    const sources: TimelineSource[] = [{ card: data, source: null, table: e.table }];
+    for (const x of extra ?? []) {
+      if (!x) continue;
+      const meta = byTable(x.table);
+      if (meta) sources.push({ card: x.card, source: `${meta.one}: ${meta.title(x.rec)}`, table: x.table });
+    }
+    return buildTimeline(sources, stage);
+  }, [data, extra, lk, e.table]);
+  const shown = filterTimeline(items, filter);
 
   const add = async () => {
     if (!text.trim()) return;
@@ -350,16 +359,25 @@ function Feed({ e, data, lk }: { e: EntityMeta; data: WsCard; lk: Lookup }) {
           <div className="row"><span className="grow" /><Button small variant="primary" busy={busy} disabled={!text.trim()} onClick={() => void add()}>Добавить</Button></div>
         </section>
       )}
-      {items.length === 0 ? <p className="faint">Лента пуста: здесь будут заметки, звонки, письма и комментарии.</p> : (
-        <ul className="timeline">
-          {items.map(({ r, k, at }) => (
-            <li key={r.id}>
-              <span className="tl-icon"><Icon name={k === "note" ? "note" : k === "comment" ? "users" : r.type === "call" ? "phone" : r.type === "email" ? "mail" : r.type === "system" ? "info" : "dot"} size={13} /></span>
+      <div className="tl-filter">
+        <Segmented small value={filter} onChange={setFilter} options={[
+          { value: "all", label: "Всё" }, { value: "notes", label: "Заметки" }, { value: "events", label: "События" },
+          { value: "tasks", label: "Задачи" }, { value: "stages", label: "Этапы" },
+        ]} />
+      </div>
+      {shown.length === 0 ? <p className="faint">{filter === "all" ? "Лента пуста: здесь будут заметки, звонки, задачи и смены этапов." : "Здесь пока ничего нет."}</p> : (
+        <ul className="timeline" aria-label="Лента">
+          {shown.map((it) => (
+            <li key={it.key} className={`tl-${it.kind}`}>
+              <span className="tl-icon"><Icon name={it.icon} size={13} /></span>
               <div className="col grow" style={{ gap: 2, minWidth: 0 }}>
                 <span className="faint" style={{ fontSize: "var(--fs-sm)" }}>
-                  {k === "note" ? "Заметка" : k === "comment" ? "Комментарий" : ENUMS["activities.type"]![String(r.type)] ?? String(r.type)} · {shortRelative(at)}{r.created_by ? ` · ${memberName(lk.members, r.created_by)}` : ""}
+                  {it.label} · {shortRelative(it.at)}{it.who ? ` · ${memberName(lk.members, it.who)}` : ""}
                 </span>
-                <span className="selectable crm-body">{String(r.body ?? r.summary ?? "")}</span>
+                {it.text && (it.open
+                  ? <button type="button" className="crm-link tl-text" onClick={() => openRecord(it.open!.table, it.open!.id)}>{it.text}</button>
+                  : <span className="selectable crm-body">{it.text}</span>)}
+                {it.source && <span className="faint tl-source ellipsis">{it.source}</span>}
               </div>
             </li>
           ))}
@@ -413,24 +431,5 @@ function Tasks({ e, id, tasks, lk }: { e: EntityMeta; id: string; tasks: CrmReco
         </ul>
       )}
     </>
-  );
-}
-
-function StageHistory({ data, lk }: { data: WsCard; lk: Lookup }) {
-  const h = data.history ?? [];
-  if (!h.length) return <p className="faint">Сделка ещё не меняла этап.</p>;
-  const name = (id: string | null) => (id ? String(lk.stages.get(id)?.name ?? "Этап удалён") : "—");
-  return (
-    <ul className="timeline">
-      {[...h].reverse().map((x, i) => (
-        <li key={`${x.changed_at}-${i}`}>
-          <span className="tl-icon"><Icon name="chevronRight" size={13} /></span>
-          <div className="col grow" style={{ gap: 2 }}>
-            <span>{name(x.from_stage_id)} → <b>{name(x.to_stage_id)}</b></span>
-            <span className="faint" style={{ fontSize: "var(--fs-sm)" }}>{fullRu(x.changed_at)}{x.changed_by ? ` · ${memberName(lk.members, x.changed_by)}` : ""}</span>
-          </div>
-        </li>
-      ))}
-    </ul>
   );
 }
