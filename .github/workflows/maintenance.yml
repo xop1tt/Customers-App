@@ -1,0 +1,35 @@
+name: Maintenance
+
+# Раз в сутки: очистка облачной базы (журналы синхронизации и доставок, надгробия CRM, старые уведомления,
+# служебные журналы почты). Сроки хранения — в миграции 20261111120000_maintenance.sql, логика — в Edge Function
+# maintenance. Нужны переменная SUPABASE_URL и секрет CRON_SECRET (те же, что у Inactive accounts).
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Call maintenance
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [[ -z "$SUPABASE_URL" || -z "$CRON_SECRET" ]]; then
+            echo "SUPABASE_URL (variable) or CRON_SECRET (secret) is not set; skipping."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --max-time 240 -X POST \
+            -H "x-cron-secret: $CRON_SECRET" \
+            "${SUPABASE_URL%/}/functions/v1/maintenance"
+          echo
