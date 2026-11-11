@@ -24,15 +24,6 @@ def test_minimal_permissions_everywhere():
         assert yaml.safe_load(f.read_text(encoding="utf-8"))["permissions"] == {"contents": "read"}, f.name
 
 
-def test_search_is_manual_only_with_concurrency():
-    wf = load("search.yml")
-    on = wf[True]  # YAML 1.1: ключ "on" парсится как True
-    # Расписание выключено: поиск идёт в приложении для macOS, Actions — только ручной запуск.
-    assert "workflow_dispatch" in on and "schedule" not in on
-    assert wf["concurrency"] == {"group": "lead-search", "cancel-in-progress": False}
-    assert wf["jobs"]["search"]["timeout-minutes"] <= 30
-
-
 def test_tests_workflow_has_no_secrets_and_no_pull_request_target():
     text = (WF / "tests.yml").read_text(encoding="utf-8")
     assert "secrets." not in text and "pull_request_target" not in text

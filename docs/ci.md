@@ -8,19 +8,19 @@
 | --- | --- | --- |
 | `desktop.yml` | PR в любую ветку, push в `main` по путям `desktop/**` | Интерфейс (типы, тесты, release-check, сборка); Rust на Ubuntu, macOS и Windows (`cargo test --locked`, на Ubuntu ещё `cargo fmt --check`, `cargo clippy -D warnings` и проверка актуальности `Cargo.lock`); сборка macOS (universal .app) и Windows (exe). Итог: проверка **Desktop gate**. |
 | `cloud.yml` | то же для `supabase/**` и облачного модуля | Миграции, функции и клиент на одноразовом стенде. Итог: **Cloud gate**. |
-| `tests.yml` | каждый PR и push в `main` | Python-тесты с порогом покрытия 90 %. Проверка называется `test`. |
+| `tests.yml` | каждый PR и push в `main` | Проверки репозитория на Python (workflow, release-check, иконки, миграции, гигиена). Проверка называется `test`. |
 | `codeql.yml` | каждый PR, push в `main`, раз в неделю | Статический анализ: actions, python, javascript-typescript, rust. |
 | `dependency-review.yml` | каждый PR | Блокирует PR с новой зависимостью с известной уязвимостью (high и выше). Проверка называется `review`. |
 | `dependabot-automerge.yml` | PR от Dependabot | Включает автослияние по политике ниже. Сам ничего не сливает. |
 | `release.yml` | вручную или по тегу `v*` (кроме `v*-*`) | Единственный workflow, который публикует Stable-релиз; задача `publish` ждёт подтверждения в окружении `production`. PR и Dependabot его не запускают. |
-| `search.yml`, `diagnose.yml`, `wiki.yml` | вручную / push в `main` | Прежние процессы, не менялись. |
+| `wiki.yml` | push в `main` по путям `wiki/**` | Публикация wiki. |
 | `maintenance.yml` | каждый день 03:41 UTC, вручную | Очистка облачной базы через Edge Function `maintenance` (docs/MAINTENANCE.md). Нужны переменная `SUPABASE_URL` и секрет `CRON_SECRET`; без них пропускается. |
 | `cloud-backup.yml` | каждый день 02:23 UTC, вручную | Снимок облачной базы (`supabase/cloud-backup/backup.py`), проверка восстановления на чистом PostgreSQL 17 со сверкой строк, шифрование gpg, артефакт на 90 дней. Нужны секреты `SUPABASE_DB_URL`, `BACKUP_PASSPHRASE` (docs/BACKUP.md). Только читает базу. |
 | `migrate.yml` | только вручную из `main` | `status` / `push` / `register` миграций рабочего проекта: стенд и `test_migrations.py`, затем подтверждение в окружении `database` и Supabase CLI (`supabase/scripts/migrate.sh`). docs/MIGRATIONS.md. |
 
 **Почему «gate».** У `desktop.yml` и `cloud.yml` нет фильтра путей на уровне workflow: его заменяет задача `changes`. Если PR не трогает `desktop/` (например, обновление pip), тяжёлые задачи пропускаются, а `Desktop gate` всё равно сообщает «успех». Иначе обязательная проверка висела бы в ожидании и PR нельзя было бы слить. Пропущенные матричные задачи отображаются с неразвёрнутым именем, поэтому обязательными делают именно gate, а не отдельные задачи матрицы.
 
-Все workflow используют `permissions: contents: read`; повышенные права только в задачах `release.yml/publish`, `wiki.yml/publish`, `codeql.yml/analyze` и `dependabot-automerge.yml/automerge`. Секреты нужны только `release.yml`, `search.yml` и `diagnose.yml`; PR из форков их не получают. `pull_request_target` используется один раз (автослияние), код PR там не скачивается и не запускается. Действия закреплены полными SHA, это проверяет `tests/test_workflows.py`. Устаревшие запуски PR отменяются (`concurrency`).
+Все workflow используют `permissions: contents: read`; повышенные права только в задачах `release.yml/publish`, `wiki.yml/publish`, `codeql.yml/analyze` и `dependabot-automerge.yml/automerge`. Секреты нужны `release.yml` и облачным `maintenance.yml`, `cloud-backup.yml`, `migrate.yml`; PR из форков их не получают. `pull_request_target` используется один раз (автослияние), код PR там не скачивается и не запускается. Действия закреплены полными SHA, это проверяет `tests/test_workflows.py`. Устаревшие запуски PR отменяются (`concurrency`).
 
 ## Dependabot
 

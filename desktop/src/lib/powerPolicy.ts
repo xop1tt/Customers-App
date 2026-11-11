@@ -2,7 +2,6 @@
 
 import type { PowerState } from "../api/types";
 
-export const DEFAULT_THRESHOLD = 20;
 export const THRESHOLD_RANGE = [5, 50] as const;
 
 export type LightModeReason = { kind: "systemSaver" } | { kind: "lowBattery"; percent: number; threshold: number };

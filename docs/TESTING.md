@@ -75,6 +75,7 @@
 | 2026-11-09 | контейнер | `cargo test --locked` и `cargo test --locked --features beta` после этапа 1 | 255 passed / 255 passed; `stack.rs` — 2 без стенда (SKIPPED) |
 | 2026-11-09 | контейнер | `npm run typecheck`, `npm test`, `npm run build`, `npm run release:check` | типы без ошибок; 44 passed; сборка есть; 22 пункта пройдены |
 | 2026-11-09 | контейнер | `python -m pytest` (как в CI, покрытие ≥ 90 %) | 166 passed, покрытие 90.57 % |
+| 2026-11-11 | контейнер | D2: Python-генератор удалён, `python -m pytest` проверяет только репозиторий; каталог OSM — `cargo test osm_catalog` | все прошли |
 | 2026-11-09 | контейнер | `npm run debug:build` + запуск под Xvfb | создаются только `~/.local/share/customers-beta` и `local.customers.beta`; при чужой метке — окно с отказом, ничего не записано |
 | 2026-11-09 | CI (PR #90) | Cloud: тест стенда нашёл имя серверной роли в `release-check.cjs` | исправлен `release-check.cjs`, тест не менялся |
 | 2026-11-09 | контейнер | этап 2: `cargo fmt --check`, `cargo clippy --lib --bins -D warnings` (Stable и Beta) | без замечаний |
