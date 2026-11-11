@@ -9,10 +9,14 @@ src/                 интерфейс
   api/               типы, вызовы команд Rust, демо-бэкенд (mock.ts) для запуска в обычном браузере
   state/             хранилище, действия, события ядра
   ui/                собственные компоненты: кнопки, поля, переключатели, всплывающие окна, меню, подсказки, диалоги
-  app/               оболочка, боковая панель, верхняя панель, инспектор, страницы, настройки
+  app/               оболочка, рейка модулей, панель разделов, инспектор, страницы, настройки
+  app/crm/           CRM: «Сегодня», доска сделок, карточка и лента, коллекции, импорт, отчёты
+  app/team/          команда: сообщения, сотрудники, уведомления, профиль
+  lib/               чистая логика интерфейса (доска, лента, отчёты, навигация, переводы)
   styles/            токены (цвета, радиусы, движение), базовые стили, стили компонентов и приложения
 src-tauri/           ядро (Rust)
-  src/search/        источники (RSS, Telegram, VK, OpenStreetMap), оценка, дедупликация
+  src/workspace/     CRM: схема сущностей, база Workspace, запросы, импорт CSV/Excel, дедупликация, синхронизация
+  src/search/        поиск клиентов: источники (RSS, Telegram, VK, OpenStreetMap), оценка, дедупликация
   src/store.rs db.rs база лидов (SQLCipher), миграции, резервные копии
   src/cloud/         вход (Supabase Auth) и синхронизация
   src/drives.rs mail.rs crm.rs   облачные диски, почта, экспорт в CRM
@@ -29,7 +33,7 @@ scripts/             set-version.cjs (версия из тега), make-dmg.sh, 
 ```bash
 cd desktop
 npm ci
-npm run dev            # интерфейс в браузере с демо-данными (?auth, ?welcome, ?cloud, ?local, ?update, ?whatsnew, ?platform=windows)
+npm run dev            # интерфейс в браузере с демо-данными (?team, ?auth, ?welcome, ?cloud, ?local, ?update, ?whatsnew, ?reports, ?platform=windows)
 npx tauri dev          # настоящее приложение
 npm run typecheck && npm test
 cargo test --manifest-path src-tauri/Cargo.toml

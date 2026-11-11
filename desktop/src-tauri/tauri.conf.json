@@ -42,7 +42,7 @@
       "app"
     ],
     "category": "Business",
-    "shortDescription": "Поиск потенциальных клиентов",
+    "shortDescription": "CRM со встроенным поиском клиентов",
     "macOS": {
       "minimumSystemVersion": "12.0"
     }

@@ -87,11 +87,6 @@ export function plural(n: number, one: string, few: string, many: string): strin
   return many;
 }
 
-export function duration(seconds: number): string {
-  const s = Math.max(0, Math.round(seconds));
-  return s >= 60 ? `${Math.floor(s / 60)} мин ${s % 60} с` : `${s} с`;
-}
-
 /** Домашняя папка в путях сокращается до «~» только для показа. */
 export function shortenHome(path: string): string {
   return path.replace(/^\/Users\/[^/]+/, "~").replace(/^[A-Za-z]:\\Users\\[^\\]+/, "~");
