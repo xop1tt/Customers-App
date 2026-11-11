@@ -8,6 +8,7 @@ import { confirmDialog } from "../../ui/overlay";
 import { Icon } from "../../ui/icons";
 import { attempt, boot, patchAccount, refreshSnapshot, toast, useStore } from "../../state/store";
 import { DrivesPanel } from "../panels/DrivesPanel";
+import { PortableCopyRows } from "./PortableCopy";
 
 export function DataSection() {
   const session = useStore((s) => s.session);
@@ -79,6 +80,10 @@ export function DataSection() {
             ))}
           </ul>
         )}
+      </Group>
+
+      <Group title="Перенос на другой компьютер" sub="portable" note="Обычные копии зашифрованы ключом этого устройства и открываются только здесь. Переносимая копия зашифрована ключом восстановления: её можно открыть на другом компьютере с Customers.">
+        <SettingRow title="Переносимая копия" hint="Лиды, локальные базы CRM и настройки рабочих пространств в одном файле .customers."><PortableCopyRows /></SettingRow>
       </Group>
 
       <Group title="Облачные диски" sub="drives" note="Копии базы можно загружать в папку приложения на вашем диске. Приложение не видит другие ваши файлы.">

@@ -158,6 +158,29 @@ pub fn row_counts(conn: &Connection) -> AppResult<BTreeMap<String, i64>> {
     Ok(out)
 }
 
+/// Копия базы `src` (ключ `src_key`) в новый файл `dst`, зашифрованный ключом `dst_key` (переносимая копия,
+/// пакет G8). Переносится `user_version`; копия проверяется целостностью и числом строк, иначе удаляется.
+pub fn export_rekeyed(src: &Path, src_key: &DbKey, dst: &Path, dst_key: &DbKey) -> AppResult<()> {
+    remove_database_files(dst);
+    let result = (|| -> AppResult<()> {
+        let conn = open_connection(src, false, Some(src_key))?;
+        let counts = row_counts(&conn)?;
+        let user_version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        conn.execute("ATTACH DATABASE ?1 AS rekeyed KEY ?2", rusqlite::params![dst.to_string_lossy(), dst_key.attach_value()])?;
+        conn.query_row("SELECT sqlcipher_export('rekeyed')", [], |_| Ok(()))?;
+        conn.execute_batch(&format!("PRAGMA rekeyed.user_version = {user_version}; DETACH DATABASE rekeyed;"))?;
+        drop(conn);
+        if file_state(dst) != FileState::Encrypted {
+            return Err(AppError::msg("копия получилась незашифрованной"));
+        }
+        verify(dst, dst_key, &counts)
+    })();
+    if result.is_err() {
+        remove_database_files(dst);
+    }
+    result
+}
+
 fn verify(path: &Path, key: &DbKey, expected: &BTreeMap<String, i64>) -> AppResult<()> {
     let conn = open_connection(path, true, Some(key))?;
     let check: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0))?;

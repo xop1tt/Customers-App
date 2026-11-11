@@ -101,6 +101,19 @@ pub struct WorkspaceStore {
     pub user_id: String,
 }
 
+/// Встроенная `lower()` SQLite приводит к нижнему регистру только латиницу, поэтому поиск «ромашка» не находил
+/// «Ромашка». Подменяем её на версию с Юникодом: поиск, фильтр «содержит» и сопоставление этапов при импорте
+/// перестают зависеть от регистра и для русских букв.
+fn unicode_lower(conn: &Connection) -> AppResult<()> {
+    use rusqlite::functions::FunctionFlags;
+    use rusqlite::types::{Value as SqlValue, ValueRef};
+    conn.create_scalar_function("lower", 1, FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC, |ctx| match ctx.get_raw(0) {
+        ValueRef::Text(t) => Ok(SqlValue::Text(String::from_utf8_lossy(t).to_lowercase())),
+        _ => ctx.get::<SqlValue>(0),
+    })?;
+    Ok(())
+}
+
 impl WorkspaceStore {
     pub fn open(path: &Path, key: Option<&DbKey>, workspace_id: &str, user_id: &str) -> AppResult<Self> {
         if let Some(dir) = path.parent() {
@@ -108,6 +121,7 @@ impl WorkspaceStore {
         }
         let conn = db::open_connection(path, false, key)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
+        unicode_lower(&conn)?;
         let store = Self { conn, path: path.to_path_buf(), workspace_id: workspace_id.to_string(), user_id: user_id.to_string() };
         store.create_schema()?;
         match store.meta("workspace_id") {
@@ -382,7 +396,7 @@ impl WorkspaceStore {
         self.check_rights(e, current.as_ref(), &clean)?;
         let merged = merged_row(current.as_ref(), &clean);
         self.check_required(e, current.is_none(), &merged)?;
-        self.check_references(e, &clean)?;
+        self.check_references(e, &clean, &merged)?;
         derive_fields(e, &merged, &mut clean, self)?;
         if let (Some(row), true) = (&current, clean.is_empty()) {
             return Ok(row.clone());
@@ -497,7 +511,9 @@ impl WorkspaceStore {
         Ok(())
     }
 
-    fn check_references(&self, e: &Entity, fields: &Map<String, Value>) -> AppResult<()> {
+    /// `row` — запись после изменения: перенос на другую карточку (`entity_id`) проверяется по её типу, даже если
+    /// сам тип не менялся (объединение дубликатов, пакет G4).
+    fn check_references(&self, e: &Entity, fields: &Map<String, Value>, row: &Map<String, Value>) -> AppResult<()> {
         for (col, target) in REFERENCES {
             if let Some(id) = fields.get(col).and_then(Value::as_str) {
                 if e.has(col) && !self.exists(target, id) {
@@ -506,7 +522,8 @@ impl WorkspaceStore {
             }
         }
         if let Some(id) = fields.get("entity_id").and_then(Value::as_str) {
-            let t = fields.get("entity_type").and_then(Value::as_str).ok_or_else(|| err("Не указан тип связанной карточки."))?;
+            let t =
+                fields.get("entity_type").or_else(|| row.get("entity_type")).and_then(Value::as_str).ok_or_else(|| err("Не указан тип связанной карточки."))?;
             let target = schema::by_type(t).filter(|x| x.table != "tasks").ok_or_else(|| err("Неизвестный тип карточки."))?;
             if !self.exists(target.table, id) {
                 return Err(err("Связанная карточка не найдена в этом Workspace."));

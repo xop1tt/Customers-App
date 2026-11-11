@@ -23,6 +23,7 @@ pub mod tray_text;
 pub mod updates;
 pub mod util;
 pub mod whatsnew;
+pub mod xmltext;
 // Customers 2.0: базы Workspace и данные CRM (этапы 3–7).
 pub mod workspace;
 
@@ -35,6 +36,9 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::ws_card,
         commands::ws_save,
         commands::ws_delete,
+        commands::ws_merge,
+        commands::ws_merge_last,
+        commands::ws_merge_undo,
         commands::ws_restore,
         commands::ws_duplicates,
         commands::ws_convert_lead,
@@ -59,6 +63,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::ws_delete_role,
         commands::ws_delete_stage,
         commands::ws_collection_items,
+        commands::ws_export_fields,
+        commands::ws_export,
         commands::ws_reorder_collections,
         commands::ws_hide_collection,
         commands::ws_conflicts,
@@ -73,6 +79,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::ws_remove_member,
         commands::ws_leave,
         commands::ws_rename_workspace,
+        commands::ws_set_local_details,
         commands::backup_now,
         commands::boot_info,
         commands::call_phone,
@@ -154,6 +161,10 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::resend_cloud_email_change,
         commands::reset_source_memory,
         commands::restore_backup,
+        commands::portable_state,
+        commands::create_portable_key,
+        commands::export_portable,
+        commands::import_portable,
         commands::reveal_path,
         commands::run_search,
         commands::save_oauth_key,
@@ -174,6 +185,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::update_info,
         commands::update_intervals,
         commands::upload_backup_to_drive,
+        commands::upload_portable_to_drive,
         commands::whats_new,
     ]
 }

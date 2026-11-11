@@ -153,9 +153,18 @@ fn u32le(b: &[u8], at: usize) -> Option<usize> {
     b.get(at..at + 4).map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]) as usize)
 }
 
-/// Файлы архива: имя → содержимое (только stored и deflate, с ограничением распакованного размера).
-fn unzip(data: &[u8]) -> AppResult<HashMap<String, Vec<u8>>> {
-    let bad = || err("Файл Excel повреждён или это не .xlsx.");
+/// Почему архив не прочитан ([`unzip_entries`]).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ZipProblem {
+    Corrupt,
+    TooBig,
+    Method,
+}
+
+/// Файлы архива, которые выбрал `wanted`: имя → содержимое (только stored и deflate, распакованных байт не
+/// больше `max_total`). Общий для книг XLSX и переносимой копии (пакет G8).
+pub(crate) fn unzip_entries(data: &[u8], wanted: &dyn Fn(&str) -> bool, max_total: u64) -> Result<HashMap<String, Vec<u8>>, ZipProblem> {
+    let bad = || ZipProblem::Corrupt;
     let eocd = (0..data.len().saturating_sub(21)).rev().take(70_000).find(|&i| data[i..].starts_with(b"PK\x05\x06")).ok_or_else(bad)?;
     let count = u16le(data, eocd + 10).ok_or_else(bad)?;
     let mut at = u32le(data, eocd + 16).ok_or_else(bad)?;
@@ -172,8 +181,7 @@ fn unzip(data: &[u8]) -> AppResult<HashMap<String, Vec<u8>>> {
         let local = u32le(data, at + 42).ok_or_else(bad)?;
         let name = String::from_utf8_lossy(data.get(at + 46..at + 46 + nlen).ok_or_else(bad)?).into_owned();
         at += 46 + nlen + xlen + clen;
-        let wanted = name == "xl/workbook.xml" || name == "xl/_rels/workbook.xml.rels" || name == "xl/sharedStrings.xml" || name.starts_with("xl/worksheets/");
-        if !wanted {
+        if !wanted(&name) {
             continue;
         }
         if !data.get(local..).is_some_and(|s| s.starts_with(b"PK\x03\x04")) {
@@ -182,21 +190,32 @@ fn unzip(data: &[u8]) -> AppResult<HashMap<String, Vec<u8>>> {
         let start = local + 30 + u16le(data, local + 26).ok_or_else(bad)? + u16le(data, local + 28).ok_or_else(bad)?;
         let raw = data.get(start..start + csize).ok_or_else(bad)?;
         total += usize_ as u64;
-        if total > MAX_UNZIPPED {
-            return Err(err("Файл Excel слишком большой после распаковки."));
+        if total > max_total {
+            return Err(ZipProblem::TooBig);
         }
         let bytes = match method {
             0 => raw.to_vec(),
             8 => {
                 let mut v = Vec::with_capacity(usize_.min(16 << 20));
-                flate2::read::DeflateDecoder::new(raw).take(MAX_UNZIPPED).read_to_end(&mut v).map_err(|_| bad())?;
+                flate2::read::DeflateDecoder::new(raw).take(max_total).read_to_end(&mut v).map_err(|_| bad())?;
                 v
             }
-            _ => return Err(err("Файл Excel сжат неподдерживаемым способом. Сохраните его как .csv.")),
+            _ => return Err(ZipProblem::Method),
         };
         out.insert(name, bytes);
     }
     Ok(out)
+}
+
+/// Нужные файлы книги Excel.
+fn unzip(data: &[u8]) -> AppResult<HashMap<String, Vec<u8>>> {
+    let wanted =
+        |name: &str| name == "xl/workbook.xml" || name == "xl/_rels/workbook.xml.rels" || name == "xl/sharedStrings.xml" || name.starts_with("xl/worksheets/");
+    unzip_entries(data, &wanted, MAX_UNZIPPED).map_err(|p| match p {
+        ZipProblem::Corrupt => err("Файл Excel повреждён или это не .xlsx."),
+        ZipProblem::TooBig => err("Файл Excel слишком большой после распаковки."),
+        ZipProblem::Method => err("Файл Excel сжат неподдерживаемым способом. Сохраните его как .csv."),
+    })
 }
 
 fn xml_text(bytes: &[u8]) -> String {
@@ -204,11 +223,7 @@ fn xml_text(bytes: &[u8]) -> String {
 }
 
 fn attr(e: &quick_xml::events::BytesStart, name: &[u8]) -> Option<String> {
-    e.attributes()
-        .flatten()
-        .find(|a| a.key.as_ref() == name || a.key.local_name().as_ref() == name)
-        .and_then(|a| a.unescape_value().ok())
-        .map(|v| v.into_owned())
+    e.attributes().flatten().find(|a| a.key.as_ref() == name || a.key.local_name().as_ref() == name).and_then(|a| crate::xmltext::attr_value(&a))
 }
 
 /// Путь к первому листу книги: workbook.xml → r:id → workbook.xml.rels.
@@ -262,7 +277,8 @@ fn shared_strings(files: &HashMap<String, Vec<u8>>) -> Vec<String> {
                 _ => {}
             },
             Ok(Event::Empty(e)) if e.local_name().as_ref() == b"si" => out.push(String::new()),
-            Ok(Event::Text(t)) if in_si && in_t && !in_rph => cur.push_str(&t.unescape().map(|c| c.into_owned()).unwrap_or_default()),
+            Ok(Event::Text(t)) if in_si && in_t && !in_rph => cur.push_str(&crate::xmltext::text(&t)),
+            Ok(Event::GeneralRef(r)) if in_si && in_t && !in_rph => cur.push_str(&crate::xmltext::entity(&r)),
             Ok(Event::End(e)) => match e.local_name().as_ref() {
                 b"si" => {
                     in_si = false;
@@ -320,7 +336,8 @@ pub fn parse_xlsx(data: &[u8]) -> AppResult<Vec<Vec<String>>> {
                 b"t" => in_is_t = true,
                 _ => {}
             },
-            Ok(Event::Text(t)) if in_v || in_is_t => val.push_str(&t.unescape().map(|c| c.into_owned()).unwrap_or_default()),
+            Ok(Event::Text(t)) if in_v || in_is_t => val.push_str(&crate::xmltext::text(&t)),
+            Ok(Event::GeneralRef(r)) if in_v || in_is_t => val.push_str(&crate::xmltext::entity(&r)),
             Ok(Event::End(e)) => match e.local_name().as_ref() {
                 b"v" => in_v = false,
                 b"t" => in_is_t = false,

@@ -492,6 +492,24 @@ impl Core {
     }
 
     /// «Похоже на: …» до сохранения.
+    /// Объединить две компании или два контакта (пакет G4).
+    pub fn ws_merge(self: &Arc<Self>, request: crate::workspace::merge::MergeRequest) -> CmdResult<Value> {
+        let out = self.with_crm(|st| crate::workspace::merge::merge(st, &request))?;
+        self.ws_changed();
+        Ok(json!(out))
+    }
+
+    /// Последнее объединение, которое ещё можно отменить, или null.
+    pub fn ws_merge_last(&self) -> CmdResult<Value> {
+        self.with_crm(|st| Ok(json!(crate::workspace::merge::last(st)?)))
+    }
+
+    pub fn ws_merge_undo(self: &Arc<Self>) -> CmdResult<Value> {
+        let out = self.with_crm(crate::workspace::merge::undo)?;
+        self.ws_changed();
+        Ok(json!(out))
+    }
+
     pub fn ws_duplicates(&self, entity: &str, fields: Map<String, Value>, except: Option<&str>) -> CmdResult<Value> {
         let keys = dedupe::keys(entity, &fields);
         self.with_crm(|st| Ok(json!(st.duplicates(entity, &keys, except)?)))
@@ -537,23 +555,51 @@ impl Core {
         })
     }
 
+    /// Коллекция, её таблица и запрос: фильтры коллекции вместе с тем, что добавил пользователь (поиск, сортировка).
+    fn collection_query(st: &WorkspaceStore, id: &str, extra: Query) -> crate::error::AppResult<(Value, &'static str, Query)> {
+        let c = st.get("collections", id)?.ok_or_else(|| crate::error::AppError::msg("Коллекция не найдена."))?;
+        let table =
+            c["entity_type"].as_str().and_then(schema::by_type).map(|e| e.table).ok_or_else(|| crate::error::AppError::msg("Неизвестный тип коллекции."))?;
+        let mut q = Query::from_config(&c["config"]);
+        q.filters.extend(extra.filters);
+        if !extra.sort.is_empty() {
+            q.sort = extra.sort;
+        }
+        q.search = extra.search;
+        q.limit = extra.limit;
+        Ok((c, table, q))
+    }
+
     pub fn ws_collection_items(&self, id: &str, extra: Query) -> CmdResult<Value> {
         self.with_crm(|st| {
-            let c = st.get("collections", id)?.ok_or_else(|| crate::error::AppError::msg("Коллекция не найдена."))?;
-            let table = c["entity_type"]
-                .as_str()
-                .and_then(schema::by_type)
-                .map(|e| e.table)
-                .ok_or_else(|| crate::error::AppError::msg("Неизвестный тип коллекции."))?;
-            let mut q = Query::from_config(&c["config"]);
-            q.filters.extend(extra.filters);
-            if !extra.sort.is_empty() {
-                q.sort = extra.sort;
-            }
-            q.search = extra.search;
-            q.limit = extra.limit;
+            let (c, table, q) = Self::collection_query(st, id, extra)?;
             Ok(json!({"collection": c, "entity": table, "items": st.list(table, &q)?, "total": st.count(table, &Query { limit: None, ..q.clone() })?}))
         })
+    }
+
+    // ------------------------------------------------------------ экспорт CSV/Excel (G1, docs/EXPORT.md)
+
+    /// Колонки, которые можно выгрузить для записей таблицы: поля и свои поля Workspace.
+    pub fn ws_export_fields(&self, entity: &str, lang: &str) -> CmdResult<Value> {
+        self.with_crm(|st| Ok(json!(crate::workspace::export::fields(st, entity, crate::tray_text::Lang::parse(lang))?)))
+    }
+
+    /// Сохраняет записи в файл CSV или XLSX. С `collection` выгружается то, что показывает коллекция
+    /// (её фильтры и `query` пользователя), без неё — записи таблицы `entity` по `query`.
+    pub fn ws_export(&self, request: crate::workspace::export::Request, path: &Path) -> CmdResult<Value> {
+        let lang = crate::tray_text::Lang::parse(&request.lang);
+        let (bytes, count) = self.with_crm(|st| {
+            let (table, q) = match request.collection.as_deref() {
+                Some(id) => {
+                    let (_, table, q) = Self::collection_query(st, id, request.query)?;
+                    (table.to_string(), q)
+                }
+                None => (request.entity, request.query),
+            };
+            crate::workspace::export::file(st, &table, &q, &request.fields, &request.format, lang)
+        })?;
+        std::fs::write(path, bytes).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
+        Ok(json!({"count": count}))
     }
 
     /// Порядок коллекций в левой панели — свой у каждого пользователя.
@@ -680,6 +726,31 @@ impl Core {
             }
             self.set_catalog(&s, c)?;
         }
+        self.ws_state()
+    }
+
+    /// Название и валюта сделок активного Workspace на этом устройстве (мастер первого запуска, пакет G7).
+    /// Только локальный Workspace: список хранится на устройстве, сервер не меняется. У облачного Workspace
+    /// название меняет `ws_rename_workspace`, валюта задаётся на сервере.
+    pub fn ws_set_local_details(self: &Arc<Self>, name: &str, currency: &str) -> CmdResult<Value> {
+        let s = self.require()?;
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 120 {
+            return Err(CmdError::msg("Название — от 1 до 120 символов."));
+        }
+        let currency = currency.trim().to_uppercase();
+        if currency.len() != 3 || !currency.bytes().all(|b| b.is_ascii_uppercase()) {
+            return Err(CmdError::msg("Валюта — трёхбуквенный код, например RUB."));
+        }
+        let mut c = self.ws_catalog(&s)?;
+        let active = c.active.clone();
+        let w = c.workspaces.iter_mut().find(|w| Some(&w.id) == active.as_ref()).ok_or_else(|| CmdError::msg("Нет активного Workspace."))?;
+        if w.remote {
+            return Err(CmdError::msg("Облачный Workspace настраивается в его настройках."));
+        }
+        w.name = name.into();
+        w.default_currency = currency;
+        self.set_catalog(&s, c)?;
         self.ws_state()
     }
 
@@ -1407,6 +1478,22 @@ mod team_tests {
         let core = Core::new(f.env.clone());
         core.register("anna", &password(), &password(), false).unwrap();
         (f, core)
+    }
+
+    #[tokio::test]
+    async fn first_run_sets_name_and_currency_of_local_workspace() {
+        let (_f, core) = local();
+        let state = core.ws_set_local_details("  Студия «Пиксель» ", "usd").unwrap();
+        let active = state["active"].as_str().unwrap().to_string();
+        let w = state["workspaces"].as_array().unwrap().iter().find(|w| w["id"] == json!(active)).unwrap().clone();
+        assert_eq!(w["name"], "Студия «Пиксель»");
+        assert_eq!(w["defaultCurrency"], "USD");
+        assert!(core.ws_set_local_details("", "RUB").unwrap_err().message.contains("от 1 до 120"));
+        assert!(core.ws_set_local_details("X", "рубль").unwrap_err().message.contains("трёхбуквенный"));
+        assert!(core.ws_set_local_details("X", "RU").is_err());
+        // После перезапуска список Workspace читается с диска с теми же значениями.
+        let again = core.ws_state().unwrap();
+        assert!(again["workspaces"].as_array().unwrap().iter().any(|w| w["name"] == "Студия «Пиксель»" && w["defaultCurrency"] == "USD"));
     }
 
     #[tokio::test]

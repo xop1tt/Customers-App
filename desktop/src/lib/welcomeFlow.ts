@@ -1,11 +1,12 @@
-// Мастер первого запуска: шаги, пропуск, завершение (порт WelcomeFlow) и подсказка региона (порт RegionSuggestion).
+// Мастер первого запуска (пакет G7, ADR-063): шаги, пропуск, завершение и подсказка региона (порт RegionSuggestion).
+// Шаги идут от CRM: компания, воронка, клиенты, связь; поиск клиентов — одна из возможностей, а не первый шаг.
 
 export const WELCOME_STEPS = [
   { id: "intro", title: "Добро пожаловать", optional: false },
-  { id: "sources", title: "Источники лидов", optional: true },
-  { id: "integrations", title: "Интеграции", optional: true },
-  { id: "drives", title: "Облачные диски", optional: true },
-  { id: "appearance", title: "Оформление", optional: true },
+  { id: "company", title: "Ваша компания", optional: true },
+  { id: "pipeline", title: "Как вы продаёте", optional: true },
+  { id: "clients", title: "Добавьте клиентов", optional: true },
+  { id: "comms", title: "Звонки и письма", optional: true },
 ] as const;
 
 export type WelcomeStepId = (typeof WELCOME_STEPS)[number]["id"];

@@ -2,11 +2,12 @@
 
 import { call } from "./backend";
 import type {
+  PortableState,
   AccountPrefs, AuthCallback, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
   CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll,
-  ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange,
+  ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -56,6 +57,10 @@ export const api = {
   listBackups: () => call<BackupFile[]>("list_backups"),
   backupNow: () => call<string>("backup_now"),
   restoreBackup: (path: string) => call<string>("restore_backup", { path }),
+  portableState: () => call<PortableState>("portable_state"),
+  createPortableKey: (replace: boolean) => call<string>("create_portable_key", { replace }),
+  exportPortable: (path: string) => call<string>("export_portable", { path }),
+  importPortable: (path: string, key: string) => call<string>("import_portable", { path, key }),
   moveDatabase: (dir: string) => call<string>("move_database", { dir }),
   accountPrefs: () => call<AccountPrefs>("account_prefs"),
   patchAccountPrefs: (changes: Partial<AccountPrefs>) => call<AccountPrefs>("patch_account_prefs", { changes }),
@@ -87,6 +92,7 @@ export const api = {
   connectOauth: (service: string) => call<string>("connect_oauth", { service }),
   connectWebdav: (service: string, url: string, login: string, password: string) => call<string>("connect_webdav", { service, url, login, password }),
   uploadBackupToDrive: (service: string) => call<string>("upload_backup_to_drive", { service }),
+  uploadPortableToDrive: (service: string) => call<string>("upload_portable_to_drive", { service }),
   mailProviders: () => call<MailProviderInfo[]>("mail_providers"),
   mailPreset: (email: string, name: string) => call<MailAccount>("mail_preset", { email, name }),
   mailState: () => call<MailState>("mail_state"),
@@ -115,6 +121,7 @@ export const api = {
   wsSyncNow: () => call<WsState>("ws_sync_now"),
   wsCreateWorkspace: (name: string) => call<WsState>("ws_create_workspace", { name }),
   wsRenameWorkspace: (name: string) => call<WsState>("ws_rename_workspace", { name }),
+  wsSetLocalDetails: (name: string, currency: string) => call<WsState>("ws_set_local_details", { name, currency }),
   wsList: (entity: string, query?: WsQuery) => call<{ items: CrmRecord[]; total: number }>("ws_list", { entity, query: query ?? null }),
   wsCard: (entity: string, id: string) => call<WsCard>("ws_card", { entity, id }),
   wsSave: (entity: string, id: string | null, fields: Record<string, unknown>) => call<CrmRecord>("ws_save", { entity, id, fields }),
@@ -130,6 +137,11 @@ export const api = {
   wsStageHistory: () => call<StageChange[]>("ws_stage_history"),
   wsImportUndo: (batch: string) => call<{ removed: number; failed?: number; alreadyUndone?: boolean }>("ws_import_undo", { batch }),
   wsCollectionItems: (id: string, query?: WsQuery) => call<{ collection: WsCollection; entity: string; items: CrmRecord[]; total: number }>("ws_collection_items", { id, query: query ?? null }),
+  wsExportFields: (entity: string, lang: string) => call<CrmExportField[]>("ws_export_fields", { entity, lang }),
+  wsExport: (request: CrmExportRequest, path: string) => call<{ count: number }>("ws_export", { request, path }),
+  wsMerge: (request: CrmMergeRequest) => call<{ kept: CrmRecord; moved: number }>("ws_merge", { request }),
+  wsMergeLast: () => call<CrmMergeInfo | null>("ws_merge_last", {}),
+  wsMergeUndo: () => call<CrmMergeInfo>("ws_merge_undo", {}),
   wsReorderCollections: (list: string[]) => call("ws_reorder_collections", ids(list)),
   wsHideCollection: (id: string, hidden: boolean) => call("ws_hide_collection", { id, hidden }),
   wsConflicts: () => call<{ conflicts: WsConflict[]; rejected: WsOp[] }>("ws_conflicts"),

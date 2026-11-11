@@ -4,6 +4,8 @@
 import { CustomFieldsSection } from "./CustomFields";
 import { WatchingNow } from "./Presence";
 import { AttachmentsSection } from "./Attachments";
+import { canMerge, MergeDialog, MergeUndo } from "./MergeDialog";
+import { CommsBar, NextStep } from "./Comms";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import type { CrmRecord, WsCard, WsConflict } from "../../api/types";
@@ -24,7 +26,7 @@ export function CrmCard() {
   const record = useStore((s) => s.record);
   const e = record ? byTable(record.table) : undefined;
   if (!record || !e) return <div className="inspector-body"><EmptyState icon="note" title="Выберите запись">Здесь появятся поля, связанные записи, задачи и лента.</EmptyState></div>;
-  if (record.id === "new") return <NewRecord key={`new-${e.table}`} e={e} />;
+  if (record.id === "new") return <NewRecord key={`new-${e.table}-${JSON.stringify(record.preset ?? null)}`} e={e} preset={record.preset} />;
   return <RecordCard key={record.id} e={e} id={record.id} />;
 }
 
@@ -87,7 +89,7 @@ function Fields({ e, rec, lk, editable, onChange }: { e: EntityMeta; rec: Record
 
 // ---------------------------------------------------------------- новая запись
 
-function NewRecord({ e }: { e: EntityMeta }) {
+function NewRecord({ e, preset }: { e: EntityMeta; preset?: Record<string, unknown> }) {
   const ws = useStore((s) => s.ws);
   const lk = useLookup();
   const [draft, setDraft] = useState<Record<string, unknown>>({});
@@ -98,8 +100,8 @@ function NewRecord({ e }: { e: EntityMeta }) {
     if (e.type === "deal") Object.assign(d, defaultStage(lk) ?? {}, { currency: ws?.workspaces.find((w) => w.id === ws.active)?.defaultCurrency ?? "RUB" });
     if (e.type === "task") Object.assign(d, { status: "todo", priority: "normal", assignee_id: ws?.me });
     if (e.type === "crm_lead") d.status = "new";
-    return d;
-  }, [e.type, lk, ws]);
+    return { ...d, ...(preset ?? {}) };
+  }, [e.type, lk, ws, preset]);
   const rec = { ...base, ...draft };
 
   // «Похоже на…» до сохранения (те же ключи, что у ядра: телефон, почта, домен, название).
@@ -153,6 +155,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
   const lk = useLookup();
   const { data, error } = useWsQuery(() => api.wsCard(e.table, id), [e.table, id]);
   const [tab, setTab] = useState<Tab>("overview");
+  const [merging, setMerging] = useState(false);
   const market = useStore((st) => st.marketInstalled);
   if (error) return <div className="inspector-body"><EmptyState icon="alert" title="Запись не открылась">{error}</EmptyState></div>;
   if (!data) return <div className="inspector-body"><div className="boot"><Spinner size={18} /></div></div>;
@@ -183,6 +186,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
         </div>
         <h3 className="insp-title selectable">{e.title(r)}</h3>
         <WatchingNow type={e.type} id={r.id} />
+        <CommsBar e={e} data={data} lk={lk} />
         <div className="row insp-actions">
           {e.type === "task" && editable && (
             <IconButton icon="check" tip={r.status === "done" ? "Вернуть в работу" : "Выполнено"} active={r.status === "done"} onClick={() => save({ status: r.status === "done" ? "todo" : "done" })} />
@@ -195,15 +199,18 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
             }}><span aria-hidden>{app.icon}</span> {action.label}</Button>
           ))}
           <span className="grow" />
+          {(e.type === "company" || e.type === "contact") && !r.deleted_at && canMerge(perms) && <IconButton icon="merge" tip="Объединить с дубликатом" onClick={() => setMerging(true)} />}
           {deletable && (r.deleted_at
             ? <Button small icon="refresh" onClick={() => void attempt(() => api.wsRestore(e.table, id))}>Восстановить</Button>
             : <IconButton icon="trash" tip="Удалить" onClick={() => void remove()} />)}
           <IconButton icon="x" tip="Закрыть" onClick={() => openRecord(e.table, null)} />
         </div>
       </div>
+      {merging && <MergeDialog e={e} record={r} lk={lk} onClose={() => setMerging(false)} />}
       {tabs.length > 1 && <Tabs value={tab} onChange={setTab} tabs={tabs} />}
       <div className="insp-scroll">
         <div className="insp-sections">
+          {(e.type === "company" || e.type === "contact") && <MergeUndo table={e.table} id={id} />}
           {data.conflicts.map((c) => <ConflictNotice key={c.id} c={c} e={e} lk={lk} />)}
           {tab === "overview" && <Overview e={e} data={data} lk={lk} editable={editable} save={save} />}
           {tab === "feed" && <Feed e={e} data={data} lk={lk} />}
@@ -248,6 +255,7 @@ function Overview({ e, data, lk, editable, save }: { e: EntityMeta; data: WsCard
           ))}
         </div>
       )}
+      <NextStep e={e} data={data} lk={lk} />
       <Fields e={e} rec={r} lk={lk} editable={editable} onChange={(f, v) => save({ [f]: v })} />
       <CustomFieldsSection e={e} data={data} editable={editable} />
       <AttachmentsSection e={e} data={data} />

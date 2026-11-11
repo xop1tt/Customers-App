@@ -128,6 +128,10 @@ sync_cmds! {
     list_backups() -> Vec<Value> = |c: &Arc<Core>| c.list_backups();
     backup_now() -> String = |c: &Arc<Core>| c.backup_now_command();
     restore_backup(path: String) -> String = |c: &Arc<Core>, p: String| c.restore(&PathBuf::from(p));
+    portable_state() -> Value = |c: &Arc<Core>| c.portable_state();
+    create_portable_key(replace: bool) -> String = |c: &Arc<Core>, r: bool| c.create_portable_key(r);
+    export_portable(path: String) -> String = |c: &Arc<Core>, p: String| c.export_portable(&PathBuf::from(p));
+    import_portable(path: String, key: String) -> String = |c: &Arc<Core>, p: String, k: String| c.import_portable(&PathBuf::from(p), &k);
     move_database(dir: String) -> String = |c: &Arc<Core>, d: String| c.move_database(&PathBuf::from(d));
     account_prefs() -> Value = |c: &Arc<Core>| c.account_prefs();
     patch_account_prefs(changes: Value) -> Value = |c: &Arc<Core>, ch: Value| c.patch_account_prefs(&ch);
@@ -206,6 +210,14 @@ pub async fn upload_backup_to_drive(core: C<'_>, service: String) -> CmdResult<S
     let s = c.require()?;
     let file = c.backup_now(&s)?;
     c.upload_to_drive(&service, &file).await
+}
+/// Выгружает на диск переносимую копию под ключом восстановления: лиды и CRM одним файлом (пакет G8).
+#[tauri::command]
+pub async fn upload_portable_to_drive(core: C<'_>, service: String) -> CmdResult<String> {
+    let c = core.inner().clone();
+    let (data, _) = c.portable_bytes()?;
+    let name = format!("customers-{}.customers", chrono::Local::now().format("%Y-%m-%d_%H-%M"));
+    c.upload_data_to_drive(&service, &name, &data).await
 }
 
 #[tauri::command]
@@ -435,6 +447,9 @@ sync_cmds! {
     ws_attach_add(entity_type: String, entity_id: String, name: String, mime: String, data: String) -> Value = |c: &Arc<Core>, t: String, i: String, n: String, m: String, d: String| c.ws_attach_add(&t, &i, &n, &m, &d);
     ws_restore(entity: String, id: String) -> Value = |c: &Arc<Core>, e: String, id: String| c.ws_restore(&e, &id);
     ws_duplicates(entity: String, fields: serde_json::Map<String, Value>, except: Option<String>) -> Value = |c: &Arc<Core>, e: String, f, x: Option<String>| c.ws_duplicates(&e, f, x.as_deref());
+    ws_merge(request: crate::workspace::merge::MergeRequest) -> Value = |c: &Arc<Core>, r| c.ws_merge(r);
+    ws_merge_last() -> Value = |c: &Arc<Core>| c.ws_merge_last();
+    ws_merge_undo() -> Value = |c: &Arc<Core>| c.ws_merge_undo();
     ws_convert_lead(lead_id: String, options: Option<ConvertOptions>) -> Value = |c: &Arc<Core>, id: String, o: Option<ConvertOptions>| c.ws_convert_lead(&id, o.unwrap_or_default());
     ws_import_read(name: String, data: String) -> Value = |c: &Arc<Core>, n: String, d: String| c.ws_import_read(&n, &d);
     ws_import_preview(name: String, data: String, options: ImportOptions) -> Value = |c: &Arc<Core>, n: String, d: String, o: ImportOptions| c.ws_import_preview(&n, &d, o);
@@ -444,6 +459,8 @@ sync_cmds! {
     ws_import_undo(batch: String) -> Value = |c: &Arc<Core>, b: String| c.ws_import_undo(&b);
     ws_collections() -> Value = |c: &Arc<Core>| c.ws_collections();
     ws_collection_items(id: String, query: Option<Query>) -> Value = |c: &Arc<Core>, id: String, q: Option<Query>| c.ws_collection_items(&id, q.unwrap_or_default());
+    ws_export_fields(entity: String, lang: String) -> Value = |c: &Arc<Core>, e: String, l: String| c.ws_export_fields(&e, &l);
+    ws_export(request: crate::workspace::export::Request, path: String) -> Value = |c: &Arc<Core>, r, p: String| c.ws_export(r, &PathBuf::from(p));
     ws_reorder_collections(ids: Vec<String>) -> () = |c: &Arc<Core>, ids: Vec<String>| c.ws_reorder_collections(ids);
     ws_hide_collection(id: String, hidden: bool) -> () = |c: &Arc<Core>, id: String, h: bool| c.ws_hide_collection(&id, h);
     ws_conflicts() -> Value = |c: &Arc<Core>| c.ws_conflicts();
@@ -510,6 +527,10 @@ pub async fn ws_remove_member(core: C<'_>, user: String) -> CmdResult<Value> {
 #[tauri::command]
 pub async fn ws_leave(core: C<'_>) -> CmdResult<Value> {
     core.inner().ws_leave().await
+}
+#[tauri::command]
+pub fn ws_set_local_details(core: C<'_>, name: String, currency: String) -> CmdResult<Value> {
+    core.inner().ws_set_local_details(&name, &currency)
 }
 #[tauri::command]
 pub async fn ws_rename_workspace(core: C<'_>, name: String) -> CmdResult<Value> {

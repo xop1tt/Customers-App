@@ -3,6 +3,7 @@
 
 pub mod data;
 pub mod integrations;
+pub mod portable;
 pub mod prefs_sync;
 pub mod search;
 pub mod session;

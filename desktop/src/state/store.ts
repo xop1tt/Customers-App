@@ -39,6 +39,8 @@ export interface AppState {
   /** Открытый подраздел настроек; null — первый. */
   settingsSub: string | null;
   exportOpen: boolean;
+  /** Окно быстрого поиска (Ctrl/Cmd+K, пакет G5). */
+  quickOpen: boolean;
   whatsNewOpen: boolean;
   reportOpen: boolean;
   customizeNav: boolean;
@@ -48,7 +50,8 @@ export interface AppState {
   ws: WsState | null;
   collections: WsCollection[];
   collectionId: string | null;
-  record: { table: string; id: string } | null;
+  /** Открытая карточка CRM; `preset` — значения полей новой записи (например, срок задачи из календаря). */
+  record: { table: string; id: string; preset?: Record<string, unknown> } | null;
   workspaceOpen: boolean;
   /** Открытое окно маркетплейса (раздел) или null. */
   market: "catalog" | "installed" | "developer" | "moderation" | null;
@@ -81,7 +84,7 @@ const EMPTY_SNAP: Snapshot = { leads: [], sources: [], pipelineErrors: [], exclu
 const initial: AppState = {
   phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
-  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru",
+  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, quickOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru",
   ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0, profileId: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [],
 };
 
@@ -223,7 +226,7 @@ export function openCollection(id: string) {
 export function openProfile(id: string | null = null) {
   setState({ section: "profile", profileId: id, collectionId: null, record: null, selection: [], anchor: null, navPeek: false });
 }
-export const openRecord = (table: string, id: string | null) => setState({ record: id ? { table, id } : null });
+export const openRecord = (table: string, id: string | null, preset?: Record<string, unknown>) => setState({ record: id ? { table, id, ...(preset ? { preset } : {}) } : null });
 
 export async function checkPower() {
   try {
@@ -278,6 +281,12 @@ export function openModule(id: ModuleId) {
   if (last?.section === "collection" && last.collectionId && state.collections.some((c) => c.id === last.collectionId)) return openCollection(last.collectionId);
   const home = MODULES.find((m) => m.id === id)!.home;
   setSection(last && last.section !== "collection" && last.section !== "profile" ? last.section : home);
+}
+
+/** Открыть запись CRM из любого места: если открыт не модуль CRM, сначала переход в подходящий раздел. */
+export function goToRecord(table: string, id: string, preset?: Record<string, unknown>) {
+  if (moduleOf(state.section) !== "crm") setSection(table === "deals" ? "deals" : table === "tasks" ? "calendar" : "today");
+  openRecord(table, id, preset);
 }
 
 export function setSection(section: SectionId) {

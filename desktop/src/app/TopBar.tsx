@@ -9,6 +9,8 @@ import { visibleLeads } from "../lib/leads";
 import { useMemo, useRef, useState } from "react";
 import { Popover } from "../ui/overlay";
 import { useViewportWidth } from "../state/hooks";
+import { modKey } from "../lib/platform";
+import { toggleQuick } from "./QuickSearch";
 
 export function TopBar({ narrow }: { narrow: boolean }) {
   const navPeek = useStore((s) => s.navPeek);
@@ -18,6 +20,7 @@ export function TopBar({ narrow }: { narrow: boolean }) {
   const device = useStore((s) => s.device);
   const search = useStore((s) => s.search);
   const sync = useStore((s) => s.sync);
+  const ws = useStore((s) => s.ws);
   const sourceTitleKey = filter.source;
   const collection = useStore((s) => (s.section === "collection" ? s.collections.find((c) => c.id === s.collectionId) : undefined));
   const lead = isLeadList(section);
@@ -54,6 +57,7 @@ export function TopBar({ narrow }: { narrow: boolean }) {
           <span className="ellipsis">{syncText}</span>
         </span>
       )}
+      {ws && <IconButton icon="search" tip={`Быстрый поиск (${modKey()}+K)`} aria-label="Быстрый поиск" onClick={toggleQuick} />}
       <WorkspaceAvatars />
       {search.running ? (
         <Button onClick={() => void stopSearch()} icon="stop" className="search-btn">

@@ -450,6 +450,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn crm_export_saves_what_the_collection_shows() {
+        use crate::workspace::export::Request;
+        let (f, core, _) = seeded();
+        company(&core, "Ромашка");
+        company(&core, "Лютик");
+        let fields = core.ws_export_fields("companies", "ru").unwrap();
+        assert_eq!(fields[0], json!({"key": "name", "title": "Компания", "default": true, "custom": false}));
+        let collections = core.ws_collections().unwrap();
+        let all = collections.as_array().unwrap().iter().find(|c| c["name"] == "Все клиенты").unwrap()["id"].as_str().unwrap().to_string();
+        let request = |format: &str, search: Option<&str>| Request {
+            collection: Some(all.clone()),
+            query: crate::workspace::query::Query { search: search.map(String::from), ..Default::default() },
+            format: format.into(),
+            fields: vec!["name".into()],
+            lang: "ru".into(),
+            ..Default::default()
+        };
+        let csv = f.dir.path().join("crm.csv");
+        assert_eq!(core.ws_export(request("csv", None), &csv).unwrap()["count"], 2);
+        let text = String::from_utf8(std::fs::read(&csv).unwrap()).unwrap();
+        assert!(text.contains("Компания\r\n") && text.contains("Ромашка") && text.contains("Лютик"));
+        let xlsx = f.dir.path().join("crm.xlsx");
+        assert_eq!(core.ws_export(request("xlsx", Some("лют")), &xlsx).unwrap()["count"], 1, "поиск пользователя сужает выгрузку");
+        let table = crate::workspace::import::parse("crm.xlsx", &std::fs::read(&xlsx).unwrap()).unwrap();
+        assert_eq!((table.headers, table.rows), (vec!["Компания".to_string()], vec![vec!["Лютик".to_string()]]));
+        // Без коллекции выгружается таблица целиком; неизвестная коллекция и папка, которой нет, — ошибки.
+        let plain = Request { entity: "companies".into(), format: "csv".into(), fields: vec!["name".into()], ..Default::default() };
+        assert_eq!(core.ws_export(plain.clone(), &csv).unwrap()["count"], 2);
+        assert!(core.ws_export(Request { collection: Some("нет".into()), ..plain.clone() }, &csv).is_err());
+        assert!(core.ws_export(plain, &f.dir.path().join("нет").join("crm.csv")).is_err());
+    }
+
+    #[tokio::test]
     async fn backup_includes_crm_databases_and_restores_them() {
         let (f, core, _) = seeded();
         let s = core.session().unwrap();

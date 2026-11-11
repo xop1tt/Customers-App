@@ -310,6 +310,13 @@ export interface SearchOverview {
   autoSearchMinutes: number;
 }
 
+/** Переносимая копия (G8, ADR-062): создан ли ключ восстановления. */
+export interface PortableState {
+  hasKey: boolean;
+  extension: string;
+  keyLength: number;
+}
+
 export interface BackupFile {
   name: string;
   path: string;
@@ -397,6 +404,23 @@ export interface ExportFieldInfo {
   key: string;
   title: string;
   default: boolean;
+}
+
+/** Колонка экспорта CRM: поле записи или своё поле Workspace (`custom`). */
+export interface CrmExportField extends ExportFieldInfo { custom: boolean }
+/** Объединение дубликатов (пакет G4): `values` — выбранные значения полей оставшейся записи. */
+export interface CrmMergeRequest { entity: "companies" | "contacts"; keep: string; remove: string; values: Record<string, unknown> }
+export interface CrmMergeInfo { entity: string; keep: string; remove: string; removedTitle: string; at: string }
+
+export type CrmExportFormat = "xlsx" | "csv";
+/** Что выгрузить: записи таблицы `entity` или то, что показывает коллекция; `query` — поиск и фильтры пользователя. */
+export interface CrmExportRequest {
+  entity: string;
+  collection?: string | null;
+  query?: WsQuery;
+  format: CrmExportFormat;
+  fields: string[];
+  lang: string;
 }
 
 export interface CrmReport {
