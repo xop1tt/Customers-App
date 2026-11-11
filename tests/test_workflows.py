@@ -283,3 +283,23 @@ def test_inactive_accounts_job_is_weekly_and_uses_only_the_cron_secret():
     text = (WF / "inactive-accounts.yml").read_text(encoding="utf-8")
     assert "uses:" not in text and "${{ secrets.CRON_SECRET }}" in text
     assert "${{ " not in text.split("run: |")[1]  # в шелл ничего не подставляется напрямую
+
+
+def test_cloud_backup_is_daily_read_only_and_encrypts_before_storing():
+    wf = load("cloud-backup.yml")
+    on = wf[True]
+    assert "schedule" in on and "workflow_dispatch" in on and "pull_request" not in on
+    assert wf["concurrency"]["cancel-in-progress"] is False
+    steps = wf["jobs"]["backup"]["steps"]
+    names = [s.get("name", "") for s in steps]
+    assert names.index("Dump") < names.index("Restore check") < names.index("Encrypt") < names.index("Store")
+    store = steps[names.index("Store")]
+    assert store["with"]["path"].endswith(".tar.gpg") and store["with"]["retention-days"] == 90
+    encrypt = steps[names.index("Encrypt")]["run"]
+    assert "--symmetric --cipher-algo AES256" in encrypt and "--passphrase-fd 3" in encrypt
+    text = (WF / "cloud-backup.yml").read_text(encoding="utf-8")
+    secrets = set(re.findall(r"secrets\.(\w+)", text))
+    assert secrets == {"SUPABASE_DB_URL", "BACKUP_PASSPHRASE"}, secrets
+    # Пароль шифрования не попадает в командную строку gpg.
+    assert "--passphrase \"" not in text and "--passphrase $" not in text
+

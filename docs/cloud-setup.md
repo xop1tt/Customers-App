@@ -193,10 +193,10 @@ update private.email_limits set signup_resend_cooldown = interval '15 minutes', 
 Собственные ограничения Supabase Auth (письма в час, попытки ввода кода) настраиваются в панели **Authentication → Rate Limits**
 и этой миграцией не затрагиваются.
 
-## Шаг 11. Резервная копия облака (раз в месяц)
+## Шаг 11. Резервная копия облака
 
-На бесплатном тарифе автоматических копий нет, но у каждого пользователя полная копия на его Mac
-(и резервные копии в «Документы → Lead Generator Backups»). Дополнительно:
+На бесплатном тарифе автоматических копий нет. Ежедневный зашифрованный снимок с проверкой восстановления
+делает workflow **Cloud backup** — настройка и восстановление в [BACKUP.md](BACKUP.md). Вручную дополнительно:
 
 - **просто:** **Table Editor** → таблица `leads` (затем `exclusions`, `user_settings`) → **Export → CSV**;
 - **полностью:** нужен бесплатный Docker Desktop. **Project Settings → Database → Connection string**
