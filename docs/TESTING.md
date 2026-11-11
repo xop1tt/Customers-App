@@ -46,6 +46,13 @@
 | `supabase/tests/test_backup.py` (3) | на стенде: снимок содержит `auth.users` и таблицы CRM, счёт строк из того же снимка; восстановление в пустую базу проходит; недостающие строки проваливают проверку |
 | `tests/test_workflows.py::test_cloud_backup_is_daily_read_only_and_encrypts_before_storing` | расписание, права только на чтение, проверка восстановления до шифрования, в артефакт идёт только `.gpg` |
 
+## 2b. Учёт миграций (пакет A2)
+
+| Тест | Проверяет |
+|---|---|
+| `tests/test_migration_files.py` (3) | имена файлов — версии CLI, уникальны и по порядку; `register` записывает только миграции, применённые вручную до A2; `push` без истории и повторный `register` отклоняются, `--dry-run` перед применением |
+| `tests/test_workflows.py::test_migrations_are_applied_only_manually_after_the_stand_and_approval` | только ручной запуск из `main`, стенд без секретов с `test_migrations.py`, применение после стенда в окружении `database` |
+
 ## 3a. Тесты этапов 3–7 (Workspace и CRM)
 
 | Тест | Проверяет |

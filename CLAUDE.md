@@ -65,7 +65,8 @@ Maksim (не программист); код пишет Claude Code. Отвеч�
 * Каждая таблица `public` — `enable` + `force row level security`; security definer функции — `set search_path = ''`
   и проверка прав (`private.require_perm` / `private.is_member`); у `anon` нет прав на таблицы.
 * Новая CRM-таблица подключается через `private.crm_attach(...)` (ADR-027).
-* Порядок: стенд и CI зелёные → PR → Maksim применяет миграцию в рабочем проекте → проверка read-only запросом.
+* Порядок: стенд и CI зелёные → PR слит → Maksim запускает **Actions → Migrate → push** и подтверждает окружение
+  `database` → проверка read-only запросом (docs/MIGRATIONS.md).
 * Откат приложения не откатывает базу: схема должна работать с предыдущей версией клиента (expand/contract).
 
 ## 7. Кроссплатформенность и интерфейс
