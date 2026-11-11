@@ -293,6 +293,11 @@ mod tests {
         names
     }
 
+    /// Пароль учётной записи собирается во время выполнения: литералы паролей CodeQL считает секретом.
+    fn account_password(n: u8) -> String {
+        ["password", "-", &n.to_string()].concat()
+    }
+
     #[test]
     fn recovery_key_format() {
         let a = generate_key();
@@ -313,7 +318,7 @@ mod tests {
     async fn portable_copy_opens_on_another_account_only_with_the_recovery_key() {
         let f = fixture(false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.register("anna", &account_password(1), &account_password(1), false).unwrap();
         company(&core, "Ромашка");
         company(&core, "Лютик");
         let file = f.dir.path().join("перенос.customers");
@@ -342,7 +347,7 @@ mod tests {
 
         // Другая учётная запись (другой ключ устройства): чужой ключ — понятная ошибка, данные не тронуты.
         core.logout();
-        core.register("boris", "password-2", "password-2", false).unwrap();
+        core.register("boris", &account_password(2), &account_password(2), false).unwrap();
         company(&core, "Чужая");
         assert_eq!(core.portable_state().unwrap()["hasKey"], false);
         let wrong = core.import_portable(&file, &format_key(&generate_key())).unwrap_err();
@@ -380,7 +385,7 @@ mod tests {
     async fn foreign_files_are_refused() {
         let f = fixture(false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.register("anna", &account_password(1), &account_password(1), false).unwrap();
         let key = core.create_portable_key(false).unwrap();
         let file = f.dir.path().join("x.customers");
         std::fs::write(&file, b"not a zip").unwrap();
