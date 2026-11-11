@@ -10,6 +10,7 @@ import { handler as emailGate } from "../../functions/email-gate/handler.ts";
 import { handler as deleteAccount } from "../../functions/delete-account/handler.ts";
 import { handler as inactiveAccounts } from "../../functions/inactive-accounts/handler.ts";
 import { handler as keepAccount } from "../../functions/keep-account/handler.ts";
+import { handler as maintenance } from "../../functions/maintenance/handler.ts";
 
 const AUTH = Deno.env.get("STACK_AUTH_URL") ?? "http://127.0.0.1:9999";
 const REST = Deno.env.get("STACK_REST_URL") ?? "http://127.0.0.1:54330";
@@ -22,6 +23,7 @@ const functions: Record<string, (r: Request) => Promise<Response>> = {
   "delete-account": deleteAccount,
   "inactive-accounts": inactiveAccounts,
   "keep-account": keepAccount,
+  maintenance,
 };
 
 async function proxy(req: Request, target: string, ip: string): Promise<Response> {

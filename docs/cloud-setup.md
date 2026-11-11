@@ -84,6 +84,9 @@ workflow ничего не делает. Запустить вручную: **Ac
 `update private.email_limits set inactive_after = interval '3 years', inactive_warn_before = interval '45 days';`
 (неактивность от 90 суток до 10 лет, предупреждение за 7–180 суток).
 
+**Ежедневная очистка.** Workflow `.github/workflows/maintenance.yml` раз в сутки удаляет из базы устаревшие служебные
+записи (docs/MAINTENANCE.md). Ему нужны те же `CRON_SECRET` и `SUPABASE_URL`, что и проверке неактивных аккаунтов.
+
 `SEND_EMAIL_HOOK_SECRET` добавите на шаге 6. `SUPABASE_URL` и `SUPABASE_SERVICE_ROLE_KEY` Supabase
 передаёт функциям сам — их добавлять не нужно.
 
@@ -102,6 +105,7 @@ npx supabase functions deploy email-gate --project-ref REF --no-verify-jwt
 npx supabase functions deploy delete-account --project-ref REF --no-verify-jwt
 npx supabase functions deploy inactive-accounts --project-ref REF --no-verify-jwt
 npx supabase functions deploy keep-account --project-ref REF --no-verify-jwt
+npx supabase functions deploy maintenance --project-ref REF --no-verify-jwt
 ```
 
 `login` откроет браузер — подтвердите вход. После каждой команды должно быть `Deployed Functions … send-email`

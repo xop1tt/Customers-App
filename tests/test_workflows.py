@@ -285,6 +285,17 @@ def test_inactive_accounts_job_is_weekly_and_uses_only_the_cron_secret():
     assert "${{ " not in text.split("run: |")[1]  # в шелл ничего не подставляется напрямую
 
 
+def test_maintenance_job_is_daily_and_uses_only_the_cron_secret():
+    wf = load("maintenance.yml")
+    on = wf[True]
+    assert "schedule" in on and "workflow_dispatch" in on and "pull_request" not in on
+    assert on["schedule"][0]["cron"].endswith("* * *")  # каждый день
+    assert wf["concurrency"]["cancel-in-progress"] is False
+    text = (WF / "maintenance.yml").read_text(encoding="utf-8")
+    assert "uses:" not in text and "${{ secrets.CRON_SECRET }}" in text and "/functions/v1/maintenance" in text
+    assert "${{ " not in text.split("run: |")[1]  # в шелл ничего не подставляется напрямую
+
+
 def test_cloud_backup_is_daily_read_only_and_encrypts_before_storing():
     wf = load("cloud-backup.yml")
     on = wf[True]

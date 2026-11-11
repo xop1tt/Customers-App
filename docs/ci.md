@@ -14,6 +14,7 @@
 | `dependabot-automerge.yml` | PR от Dependabot | Включает автослияние по политике ниже. Сам ничего не сливает. |
 | `release.yml` | вручную или по тегу `v*` (кроме `v*-*`) | Единственный workflow, который публикует Stable-релиз; задача `publish` ждёт подтверждения в окружении `production`. PR и Dependabot его не запускают. |
 | `search.yml`, `diagnose.yml`, `wiki.yml` | вручную / push в `main` | Прежние процессы, не менялись. |
+| `maintenance.yml` | каждый день 03:41 UTC, вручную | Очистка облачной базы через Edge Function `maintenance` (docs/MAINTENANCE.md). Нужны переменная `SUPABASE_URL` и секрет `CRON_SECRET`; без них пропускается. |
 | `cloud-backup.yml` | каждый день 02:23 UTC, вручную | Снимок облачной базы (`supabase/cloud-backup/backup.py`), проверка восстановления на чистом PostgreSQL 17 со сверкой строк, шифрование gpg, артефакт на 90 дней. Нужны секреты `SUPABASE_DB_URL`, `BACKUP_PASSPHRASE` (docs/BACKUP.md). Только читает базу. |
 | `migrate.yml` | только вручную из `main` | `status` / `push` / `register` миграций рабочего проекта: стенд и `test_migrations.py`, затем подтверждение в окружении `database` и Supabase CLI (`supabase/scripts/migrate.sh`). docs/MIGRATIONS.md. |
 
