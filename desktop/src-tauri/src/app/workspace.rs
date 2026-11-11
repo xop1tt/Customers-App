@@ -1083,12 +1083,10 @@ impl Core {
         let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
         match sync::rpc(&cloud, "team_directory", json!({"p_workspace": active.id})).await {
             Ok(list) => {
-                // Своё имя и фото у коллег устарели (например, сменили на другом устройстве) — обновляем.
+                // Своё имя и фото в облаке и здесь могут разойтись (сменили на другом устройстве): сверяем.
                 if let Some(mine) = list.as_array().and_then(|a| a.iter().find(|p| p["user_id"].as_str() == Some(me.as_str()))) {
-                    let name_changed = !name.is_empty() && mine["display_name"].as_str() != Some(name.as_str());
-                    let avatar_changed = mine["avatar"].as_str().unwrap_or("") != avatar.as_deref().unwrap_or("");
-                    if name_changed || avatar_changed {
-                        self.publish_profile(&s, name_changed.then_some(name.as_str()), avatar_changed.then(|| avatar.as_deref().unwrap_or("")));
+                    if self.reconcile_profile(&s, mine["display_name"].as_str(), mine["avatar"].as_str().or(Some(""))) {
+                        self.env.emit("session-changed", serde_json::to_value(self.info()).unwrap_or(Value::Null));
                     }
                 }
                 Ok(list)

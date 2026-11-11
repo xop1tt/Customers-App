@@ -379,22 +379,89 @@ impl Core {
 
     /// Имя и фото профиля видят и другие участники Workspace: они хранятся ещё и в `user_profiles`
     /// (остальное синхронизируется настройками). Фото — отдельным запросом: на сервере без миграции
-    /// 20261110170000 столбца `avatar_data` нет, и это не должно мешать имени.
+    /// 20261110170000 столбца `avatar_data` нет, и это не должно мешать имени. Успешно отправленное значение
+    /// запоминается (`profile.pub.*`): по нему видно, что у этого устройства есть неотправленная правка.
     pub(crate) fn publish_profile(&self, s: &Session, name: Option<&str>, avatar: Option<&str>) {
         let (Some(cloud), true) = (self.env.cloud.clone(), s.is_cloud) else { return };
         let Some(uid) = self.cloud_user.lock().unwrap().as_ref().map(|u| u.id.clone()) else { return };
         let mut bodies = vec![];
         if let Some(n) = name {
-            bodies.push(json!({"display_name": n.chars().take(120).collect::<String>()}));
+            let n: String = n.chars().take(120).collect();
+            bodies.push(("name", n.clone(), json!({"display_name": n})));
         }
         if let Some(a) = avatar {
-            bodies.push(json!({"avatar_data": if a.is_empty() { Value::Null } else { json!(a) }}));
+            bodies.push(("avatar", a.to_string(), json!({"avatar_data": if a.is_empty() { Value::Null } else { json!(a) }})));
         }
+        let store = s.store.clone();
         tokio::spawn(async move {
-            for body in bodies {
-                let _ = cloud.authorized("PATCH", &format!("/rest/v1/user_profiles?user_id=eq.{uid}"), Some(&body), &[("Prefer", "return=minimal")]).await;
+            for (kind, value, body) in bodies {
+                let sent = cloud.authorized("PATCH", &format!("/rest/v1/user_profiles?user_id=eq.{uid}"), Some(&body), &[("Prefer", "return=minimal")]).await;
+                if matches!(sent, Ok((code, _)) if (200..300).contains(&code)) {
+                    let _ = store.lock().unwrap().set_value(&format!("profile.pub.{kind}"), &serde_json::to_string(&value).unwrap_or_default());
+                }
             }
         });
+    }
+
+    /// Сверка имени и фото с копией в облаке (`user_profiles`): так профиль доходит и тогда, когда настройки
+    /// другого устройства не успели прийти. Правка, сделанная здесь и ещё не отправленная, уходит в облако;
+    /// иначе побеждает облако (его меняло другое устройство). Возвращает, изменилось ли что-то здесь.
+    pub(crate) fn reconcile_profile(&self, s: &Session, server_name: Option<&str>, server_avatar: Option<&str>) -> bool {
+        let mut changed = false;
+        let (mut send_name, mut send_avatar) = (None, None);
+        for (kind, server) in [("name", server_name), ("avatar", server_avatar)] {
+            let (key, marker_key) = (format!("profile.{kind}"), format!("profile.pub.{kind}"));
+            let Some(server) = server.map(str::trim) else { continue };
+            let local = stored_text(s, &key).unwrap_or_default();
+            let marker = s.with_store(|st| st.value(&marker_key)).and_then(|m| serde_json::from_str::<String>(&m).ok());
+            let json = |v: &str| serde_json::to_string(v).unwrap_or_default();
+            if server == local {
+                if marker.as_deref() != Some(local.as_str()) {
+                    let _ = s.with_store(|st| st.set_value(&marker_key, &json(&local)));
+                }
+                continue;
+            }
+            let unsent = s.with_store(|st| st.has_pending("setting", &key)) || marker.as_deref().is_some_and(|m| m != local);
+            let adopt = !server.is_empty() && !unsent;
+            if adopt {
+                let _ = s.with_store(|st| st.set_value(&key, &json(server)).and_then(|_| st.set_value(&marker_key, &json(server))));
+                changed = true;
+            } else if !local.is_empty() && (unsent || marker.as_deref() != Some(local.as_str())) {
+                if kind == "name" {
+                    send_name = Some(local);
+                } else {
+                    send_avatar = Some(local);
+                }
+            }
+        }
+        if send_name.is_some() || send_avatar.is_some() {
+            self.publish_profile(s, send_name.as_deref(), send_avatar.as_deref());
+        }
+        changed
+    }
+
+    /// Читает свою строку `user_profiles` и сверяет с ней имя и фото (после каждой удачной синхронизации).
+    pub(crate) async fn pull_own_profile(self: &Arc<Self>, s: &Arc<Session>) {
+        let (Some(cloud), true) = (self.env.cloud.clone(), s.is_cloud) else { return };
+        let Some(uid) = self.cloud_user.lock().unwrap().as_ref().map(|u| u.id.clone()) else { return };
+        // Столбца `avatar_data` на сервере может не быть: тогда читаем одно имя.
+        for select in ["display_name,avatar_data", "display_name"] {
+            let Ok((code, data)) = cloud.authorized("GET", &format!("/rest/v1/user_profiles?user_id=eq.{uid}&select={select}"), None, &[]).await else {
+                return;
+            };
+            if !(200..300).contains(&code) {
+                continue;
+            }
+            let rows: Value = serde_json::from_slice(&data).unwrap_or(Value::Null);
+            let Some(row) = rows.as_array().and_then(|a| a.first()) else { return };
+            let (name, avatar) = (row["display_name"].as_str(), row["avatar_data"].as_str());
+            // Столбец есть, но пуст (null) — это пустое фото; столбца нет — фото не сверяем.
+            let avatar = if select.contains("avatar_data") { Some(avatar.unwrap_or("")) } else { None };
+            if self.reconcile_profile(s, name, avatar) {
+                self.env.emit("session-changed", serde_json::to_value(self.info()).unwrap_or(Value::Null));
+            }
+            return;
+        }
     }
 
     // ------------------------------------------------------------------ локальные учётные записи
@@ -817,6 +884,57 @@ mod tests {
         assert!(core.set_profile(None, Some(&format!("data:image/png;base64,{}", "A".repeat(70_000)))).is_err());
         assert_eq!(core.set_profile(None, Some("")).unwrap().avatar, None, "пустое значение убирает аватар");
         assert_eq!(core.info().unwrap().display_name, "Анна К.");
+    }
+
+    #[tokio::test]
+    async fn cloud_profile_change_goes_to_the_sync_journal() {
+        let session = r#"{"access_token":"AT","refresh_token":"RT","expires_in":3600,"user":{"id":"U-3","email":"me@example.com","email_confirmed_at":"2026-11-05T00:00:00Z"}}"#;
+        let f = fixture(true, vec![Ok(HttpResponse::new(200, session))]);
+        let core = Core::new(f.env.clone());
+        core.cloud_sign_in("me@example.com", &typed_secret()).await.unwrap();
+        core.set_profile(Some("Макс"), Some("data:image/jpeg;base64,AAAA")).unwrap();
+        let dirty = core.session().unwrap().with_store(|st| st.pending_changes(100).unwrap());
+        let keys: Vec<_> = dirty.settings.iter().map(|c| c.key.as_str()).collect();
+        assert!(keys.contains(&"profile.name") && keys.contains(&"profile.avatar"), "{keys:?}");
+    }
+
+    const CLOUD_SESSION: &str = r#"{"access_token":"AT","refresh_token":"RT","expires_in":3600,"user":{"id":"U-4","email":"me@example.com","email_confirmed_at":"2026-11-05T00:00:00Z"}}"#;
+
+    #[tokio::test]
+    async fn profile_from_another_device_is_adopted_from_the_cloud_copy() {
+        let f = fixture(true, vec![Ok(HttpResponse::new(200, CLOUD_SESSION))]);
+        let core = Core::new(f.env.clone());
+        core.cloud_sign_in("me@example.com", &typed_secret()).await.unwrap();
+        let s = core.session().unwrap();
+        // Новое устройство: своего имени и фото нет, в облаке они есть.
+        assert!(core.reconcile_profile(&s, Some("Макс"), Some("data:image/jpeg;base64,AAAA")));
+        let info = core.info().unwrap();
+        assert_eq!((info.display_name.as_str(), info.avatar.as_deref()), ("Макс", Some("data:image/jpeg;base64,AAAA")));
+        // Принятое из облака в журнал не попадает: обратно оно не уходит.
+        let dirty = s.with_store(|st| st.pending_changes(100).unwrap());
+        assert!(!dirty.settings.iter().any(|c| c.key.starts_with("profile.")));
+        // Имя сменили на другом устройстве, здесь правок нет: побеждает облако.
+        assert!(core.reconcile_profile(&s, Some("Максим"), None));
+        assert_eq!(core.info().unwrap().display_name, "Максим");
+        assert!(!core.reconcile_profile(&s, Some("Максим"), None), "одинаковые значения ничего не меняют");
+    }
+
+    #[tokio::test]
+    async fn unsent_local_profile_edit_is_not_overwritten_by_the_old_cloud_copy() {
+        let f = fixture(true, vec![Ok(HttpResponse::new(200, CLOUD_SESSION))]);
+        let core = Core::new(f.env.clone());
+        core.cloud_sign_in("me@example.com", &typed_secret()).await.unwrap();
+        let s = core.session().unwrap();
+        core.reconcile_profile(&s, Some("Старое"), Some(""));
+        // Правка здесь, отправка в облако не удалась (в журнале она ещё лежит).
+        s.with_store(|st| st.set_synced_value("profile.name", "\"Новое\"")).unwrap();
+        assert!(!core.reconcile_profile(&s, Some("Старое"), Some("")));
+        assert_eq!(core.info().unwrap().display_name, "Новое");
+        // Правка ушла в настройки (журнал пуст), но в user_profiles не дошла: облачная копия всё равно не затирает её.
+        let pending = s.with_store(|st| st.pending_changes(100).unwrap());
+        s.with_store(|st| st.mark_pushed(&pending)).unwrap();
+        assert!(!core.reconcile_profile(&s, Some("Старое"), Some("")));
+        assert_eq!(core.info().unwrap().display_name, "Новое");
     }
 
     #[tokio::test]

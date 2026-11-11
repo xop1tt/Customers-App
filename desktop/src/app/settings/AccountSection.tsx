@@ -116,7 +116,7 @@ function CloudAccount() {
       </Group>
       <Group title="Синхронизация" sub="cloud">
         <SettingRow title={sync?.kind === "syncing" ? "Синхронизация…" : sync?.kind === "offline" ? "Нет связи с сервером" : sync?.kind === "failed" ? "Последняя синхронизация не удалась" : "Данные синхронизированы"}
-          hint={`${sync?.lastSync ? `Последний раз: ${fullRu(sync.lastSync)}. ` : ""}${sync?.message ?? ""}${sync?.pending ? ` Ждут отправки: ${sync.pending}.` : ""}`} />
+          hint={`${sync?.lastSync ? `Последний раз: ${fullRu(sync.lastSync)}. ` : ""}${sync?.message ?? ""}${sync?.pending ? ` Ждут отправки: ${sync.pending}.` : ""}${sync?.lastSync ? ` В последний раз отправлено: ${sync.lastPushed ?? 0}, получено: ${sync.lastPulled ?? 0}.` : ""}`} />
       </Group>
       <Group title="Пароль" sub="security"><div style={{ paddingTop: 14 }}><PasswordForm labels={["Текущий пароль", "Новый пароль", "Повторите новый пароль"]} onSubmit={(o, n, c) => api.changeCloudPassword(o, n, c)} /></div></Group>
       {dialog === "email" && <EmailDialog onClose={() => setDialog(null)} />}

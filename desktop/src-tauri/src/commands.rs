@@ -170,7 +170,11 @@ sync_cmds! {
     stop_search() -> () = |c: &Arc<Core>| c.stop_search();
     search_status() -> Value = |c: &Arc<Core>| to_value(c.search_status()?);
     sync_status() -> Value = |c: &Arc<Core>| to_value(c.sync_status()?);
-    sync_now() -> () = |c: &Arc<Core>| c.sync_now_command();
+}
+
+#[tauri::command]
+pub async fn sync_now(core: C<'_>) -> CmdResult<()> {
+    core.inner().sync_everything_command().await
 }
 
 // ---------------------------------------------------------------- интеграции
