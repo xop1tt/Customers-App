@@ -533,6 +533,14 @@ pub async fn ws_audit(core: C<'_>, actor: Option<String>, action: Option<String>
     core.inner().ws_audit(actor, action, entity_id, offset).await
 }
 #[tauri::command]
+pub async fn ws_transfer_ownership(core: C<'_>, user: String) -> CmdResult<Value> {
+    core.inner().ws_transfer_ownership(&user).await
+}
+#[tauri::command]
+pub async fn ws_delete_workspace(core: C<'_>, confirm_name: String) -> CmdResult<Value> {
+    core.inner().ws_delete_workspace(&confirm_name).await
+}
+#[tauri::command]
 pub async fn ws_accept_invitation(core: C<'_>, token: String) -> CmdResult<Value> {
     core.inner().ws_accept_invitation(&token).await
 }

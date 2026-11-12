@@ -806,6 +806,19 @@ impl Core {
         self.ws_state()
     }
 
+    /// Передать владение: цель становится владельцем, прежний владелец — администратором (одной транзакцией в базе).
+    pub async fn ws_transfer_ownership(self: &Arc<Self>, user: &str) -> CmdResult<Value> {
+        check_uuid(user)?;
+        self.ws_rpc("transfer_ownership", json!({"p_user": user}), true).await?;
+        self.ws_state()
+    }
+
+    /// Удалить Workspace: мягкое удаление, имя вводится повторно (проверяет база); локальные копии уходят при обновлении списка.
+    pub async fn ws_delete_workspace(self: &Arc<Self>, confirm_name: &str) -> CmdResult<Value> {
+        self.ws_rpc("delete_workspace", json!({"p_confirm_name": confirm_name}), true).await?;
+        self.ws_state()
+    }
+
     pub async fn ws_rename_workspace(self: &Arc<Self>, name: &str) -> CmdResult<Value> {
         let s = self.require()?;
         if s.is_cloud {
@@ -1586,6 +1599,8 @@ mod team_tests {
         assert_eq!(a, json!({"items": [], "more": false}));
         assert!(core.ws_audit(Some("x&y".into()), None, None, None).await.is_ok(), "локальное пространство: отбор не проверяется, облака нет");
         assert!(core.ws_revoke_invitation("не-идентификатор").await.is_err());
+        assert!(core.ws_transfer_ownership("не-идентификатор").await.is_err());
+        assert!(core.ws_delete_workspace("Моё").await.is_err(), "в локальной учётной записи облачных действий нет");
     }
 
     #[tokio::test]

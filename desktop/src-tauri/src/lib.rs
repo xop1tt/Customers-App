@@ -54,6 +54,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::ws_revoke_invitation,
         commands::ws_resend_invitation,
         commands::ws_audit,
+        commands::ws_transfer_ownership,
+        commands::ws_delete_workspace,
         commands::ws_attach_add,
         commands::ws_attach_save,
         commands::ws_presence,

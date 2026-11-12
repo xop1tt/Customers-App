@@ -12,6 +12,7 @@ import { useWsQuery } from "./useCrm";
 import { PipelineEditor, RolesEditor } from "./Editors";
 import { HandoverDialog, type HandoverTarget } from "./Handover";
 import { AuditDialog } from "./AuditLog";
+import { DangerZone } from "./Danger";
 import { usePresence } from "./Presence";
 import { CustomFieldsEditor } from "./CustomFields";
 
@@ -119,6 +120,7 @@ function WorkspaceDialogBody() {
       {audit && <AuditDialog onClose={() => setAudit(false)} />}
       <SyncQueue />
 
+      <DangerZone />
       {ws.isCloud && current && !current.personal && (
         <Group title="Выход">
           <SettingRow title="Покинуть рабочее пространство" hint="Локальная копия данных этого рабочего пространства будет удалена с устройства. Владелец не может выйти, пока не передаст владение.">

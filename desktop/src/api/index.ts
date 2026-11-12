@@ -152,6 +152,8 @@ export const api = {
   wsRevokeInvitation: (id: string) => call<boolean>("ws_revoke_invitation", { id }),
   wsResendInvitation: (id: string) => call<WsInvite>("ws_resend_invitation", { id }),
   wsAudit: (q: WsAuditQuery = {}) => call<{ items: WsAuditItem[]; more: boolean }>("ws_audit", { actor: q.actor ?? null, action: q.action ?? null, entityId: q.entityId ?? null, offset: q.offset ?? 0 }),
+  wsTransferOwnership: (user: string) => call<WsState>("ws_transfer_ownership", { user }),
+  wsDeleteWorkspace: (confirmName: string) => call<WsState>("ws_delete_workspace", { confirmName }),
   wsAcceptInvitation: (token: string) => call<WsState>("ws_accept_invitation", { token }),
   wsSetMemberRole: (user: string, role: string) => call<WsState>("ws_set_member_role", { user, role }),
   wsRemoveMember: (user: string) => call<WsState>("ws_remove_member", { user }),

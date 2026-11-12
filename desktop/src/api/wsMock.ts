@@ -607,6 +607,27 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       audit(ws.info.id, ME, "member_role", "member", m.userId, { role: s("role") });
       return state();
     }
+    case "ws_transfer_ownership": {
+      if (!demoParams.has("team")) return remoteOnly();
+      if (!has(ws, "ownership.transfer")) fail("Передать владение может только владелец.");
+      const target = ws.members.find((x) => x.userId === s("user") && x.userId !== ME) ?? fail("Владельцем можно сделать только другого участника.");
+      Object.assign(target, member(target.userId, target.displayName, "owner", ws.info.id));
+      const myself = ws.members.find((x) => x.userId === ME);
+      if (myself) Object.assign(myself, member(ME, myself.displayName, "admin", ws.info.id));
+      Object.assign(ws.info, { role: "admin", roleName: ROLE_NAME.admin, rank: RANK.admin, permissions: ROLE_PERMS.admin ?? [] });
+      audit(ws.info.id, ME, "member_role", "member", s("user"), { role: "owner" });
+      return state();
+    }
+    case "ws_delete_workspace": {
+      if (!demoParams.has("team")) return remoteOnly();
+      if (!has(ws, "workspace.delete")) fail("Удалить рабочее пространство может только владелец.");
+      if (ws.info.personal) fail("Личное рабочее пространство удалить нельзя.");
+      if (s("confirmName").trim() !== ws.info.name) fail("Название не совпадает.");
+      const i = workspaces.indexOf(ws);
+      workspaces.splice(i, 1);
+      active = workspaces.find((w) => w.info.personal)?.info.id ?? workspaces[0]?.info.id ?? null;
+      return state();
+    }
     case "ws_remove_member":
       if (!demoParams.has("team")) return remoteOnly();
       if (!has(ws, "members.manage")) fail("Нет прав на удаление участников.");
