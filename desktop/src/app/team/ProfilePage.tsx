@@ -1,6 +1,7 @@
 // Профиль сотрудника: свой (меню учётной записи) или коллеги (из «Сотрудников», чата, упоминаний).
 // Имя и фото меняются в настройках учётной записи; должность, отдел, руководителя и дату прихода — тот, у кого есть права.
 
+import { HandoverDialog } from "../crm/Handover";
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { TeamMember } from "../../api/types";
@@ -19,6 +20,7 @@ export function ProfilePage() {
   const team = useStore((s) => s.team);
   const id = useStore((s) => s.profileId);
   const [editing, setEditing] = useState(false);
+  const [handing, setHanding] = useState(false);
   useEffect(() => { void refreshTeam(); }, [id]);
   if (!session) return null;
   const me = ws?.me;
@@ -68,6 +70,7 @@ export function ProfilePage() {
               <Button icon="edit" onClick={() => openSettings("account", "profile")}>Изменить профиль</Button>
             ) : (
               <>
+                {cloud && (ws?.permissions ?? []).includes("records.edit") && <Button icon="users" onClick={() => setHanding(true)}>Передать записи</Button>}
                 {cloud && <Button variant="primary" icon="chat" onClick={() => void messageMember(m.user_id)}>Отправить сообщение</Button>}
                 {email && <Button icon="mail" onClick={() => void openLink(`mailto:${email}`)}>Написать на почту</Button>}
               </>
@@ -96,6 +99,7 @@ export function ProfilePage() {
           </section>
         )}
       </div>
+      {handing && <HandoverDialog from={{ userId: m.user_id, displayName: m.display_name }} onClose={() => setHanding(false)} />}
       {editing && <EditMemberDialog member={m} team={team} onClose={() => setEditing(false)} />}
     </div>
   );

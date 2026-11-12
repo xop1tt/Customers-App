@@ -10,6 +10,7 @@ import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, refreshWorkspace, setState, toast, useStore } from "../../state/store";
 import { useWsQuery } from "./useCrm";
 import { PipelineEditor, RolesEditor } from "./Editors";
+import { HandoverDialog, type HandoverTarget } from "./Handover";
 import { usePresence } from "./Presence";
 import { CustomFieldsEditor } from "./CustomFields";
 
@@ -129,6 +130,8 @@ function Members() {
   const manage = ws.permissions.includes("members.manage");
   const online = new Set(usePresence().map((p) => p.user_id));
   const myRank = ws.workspaces.find((w) => w.id === ws.active)?.rank ?? 0;
+  const canHand = ws.permissions.includes("records.edit");
+  const [hand, setHand] = useState<{ target: HandoverTarget; leaving: boolean } | null>(null);
   return (
     <Group title={`Участники · ${integer(ws.members.length)}`}>
       <ul className="ws-member-list">
@@ -145,18 +148,15 @@ function Members() {
                 <>
                   <Select small value={m.role} width={150} onChange={(role) => void attempt(() => api.wsSetMemberRole(m.userId, role)).then(() => refreshWorkspace())}
                     options={roleOptions.filter((r) => rankOf(r.value) < myRank)} />
-                  <IconButton icon="x" tip="Удалить из рабочего пространства" onClick={async () => {
-                    if (await confirmDialog({ title: `Удалить ${m.displayName}?`, message: "Участник потеряет доступ к данным рабочего пространства. Его записи останутся.", confirm: "Удалить", danger: true })) {
-                      await attempt(() => api.wsRemoveMember(m.userId));
-                      await refreshWorkspace();
-                    }
-                  }} />
+                  {canHand && <IconButton icon="users" tip="Передать записи коллеге" onClick={() => setHand({ target: { userId: m.userId, displayName: m.displayName }, leaving: false })} />}
+                  <IconButton icon="x" tip="Удалить из рабочего пространства" onClick={() => setHand({ target: { userId: m.userId, displayName: m.displayName }, leaving: true })} />
                 </>
               ) : <Tag>{m.roleName}</Tag>}
             </li>
           );
         })}
       </ul>
+      {hand && <HandoverDialog from={hand.target} leaving={hand.leaving} onClose={() => setHand(null)} onRemove={async () => { await api.wsRemoveMember(hand.target.userId); }} />}
     </Group>
   );
 }
