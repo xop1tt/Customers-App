@@ -50,7 +50,6 @@ export function Appearance() {
       <Group title="Боковая панель" sub="sidebar">
         <SettingRow title="Числа у разделов"><Switch checked={d.sidebarCounts} onChange={(v) => void patchDevice({ sidebarCounts: v })} /></SettingRow>
         <SettingRow title="Список источников"><Switch checked={d.sidebarSources} onChange={(v) => void patchDevice({ sidebarSources: v })} /></SettingRow>
-        <SettingRow title="Показ при наведении" hint="Свёрнутая панель выезжает, когда курсор у левого края окна."><Switch checked={d.sidebarHover} onChange={(v) => void patchDevice({ sidebarHover: v })} /></SettingRow>
         <SettingRow title="Порядок и видимость разделов"><Button onClick={() => { const m = moduleOf(getState().section); setState({ settings: null, customizeNav: true, ...(m === "search" || m === "crm" ? {} : { section: "home" as const }) }); }}>Настроить панель</Button></SettingRow>
       </Group>
 

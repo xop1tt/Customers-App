@@ -42,12 +42,23 @@ export const emptyFilter = (search = ""): LeadFilter => ({ search, kind: null, s
 
 export const filterIsDefault = (f: LeadFilter) => f.kind === null && f.source === null && f.minScore === 0 && f.hideRejected && f.region === null;
 
-export function matchesSection(l: Lead, s: SectionId): boolean {
+/**
+ * Граница «новых» лидов: время завершения поиска, после которого найденные лиды ещё считаются новыми.
+ * Новые — лиды из последних `searches` поисков; `null` — поисков меньше, новые все.
+ */
+export function newSince(log: { ok: boolean; at: string | null }[], searches: number): string | null {
+  const done = log.filter((e) => e.ok && e.at);
+  return done[Math.max(1, searches) ]?.at ?? null;
+}
+
+/** `since` задан — «Новые» это найденное после этой границы (см. `newSince`); не задан — непросмотренные. */
+export function matchesSection(l: Lead, s: SectionId, since?: string | null): boolean {
   switch (s) {
     case "all":
       return !l.archived && !l.excluded;
     case "new":
-      return !l.seen && !l.archived && !l.excluded;
+      if (l.archived || l.excluded) return false;
+      return since === undefined ? !l.seen : since === null || l.discoveredAt > since;
     case "favorites":
       return l.favorite && !l.excluded;
     case "archive":
@@ -59,9 +70,9 @@ export function matchesSection(l: Lead, s: SectionId): boolean {
   }
 }
 
-export function count(leads: Lead[], s: SectionId, hideRejected: boolean): number {
+export function count(leads: Lead[], s: SectionId, hideRejected: boolean, since?: string | null): number {
   let n = 0;
-  for (const l of leads) if (matchesSection(l, s) && (s === "excluded" || !(hideRejected && l.data.relevance === "rejected"))) n++;
+  for (const l of leads) if (matchesSection(l, s, since) && (s === "excluded" || !(hideRejected && l.data.relevance === "rejected"))) n++;
   return n;
 }
 
@@ -77,9 +88,9 @@ export function matchesSearch(l: Lead, query: string): boolean {
   );
 }
 
-export function visibleLeads(leads: Lead[], section: SectionId, f: LeadFilter): Lead[] {
+export function visibleLeads(leads: Lead[], section: SectionId, f: LeadFilter, since?: string | null): Lead[] {
   return leads.filter((l) => {
-    if (!matchesSection(l, section)) return false;
+    if (!matchesSection(l, section, since)) return false;
     if (f.hideRejected && section !== "excluded" && l.data.relevance === "rejected") return false;
     if (f.kind && l.data.kind !== f.kind) return false;
     if (f.source && l.data.source !== f.source) return false;

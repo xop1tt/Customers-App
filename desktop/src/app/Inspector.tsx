@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { Lead, LeadEvent, MailState } from "../api/types";
-import { KIND_TITLE, RELEVANCE_TITLE, isNegativeReason, scoreTone } from "../lib/leads";
+import { KIND_TITLE, RELEVANCE_TITLE, isNegativeReason, scoreTone, signals } from "../lib/leads";
 import { t } from "../lib/i18n";
 import { fullRu, integer, money, plural } from "../lib/format";
 import { sourceTitle } from "../lib/sources";
@@ -68,6 +68,7 @@ function LeadInspector({ lead }: { lead: Lead }) {
 
 function Overview({ lead, onWrite }: { lead: Lead; onWrite: () => void }) {
   const d = lead.data;
+  const sigs = signals(lead);
   const account = useStore((s) => s.account);
   const [note, setNote] = useState(lead.note);
   const saved = useRef(lead.note);
@@ -104,9 +105,10 @@ function Overview({ lead, onWrite }: { lead: Lead; onWrite: () => void }) {
         </div>
       </div>
 
-      {d.score_reasons.length > 0 && (
+      {(d.score_reasons.length > 0 || sigs.length > 0) && (
         <section className="insp-sec">
           <h4>Почему такая оценка</h4>
+          {sigs.length > 0 && <div className="row insp-tags" style={{ flexWrap: "wrap", marginBottom: 6 }}>{sigs.map((x) => <Tag key={x.text} tone={x.tone}>{x.text}</Tag>)}</div>}
           <ul className="reasons">
             {d.score_reasons.map((r) => (
               <li key={r} className={isNegativeReason(r) ? "neg" : "pos"}>

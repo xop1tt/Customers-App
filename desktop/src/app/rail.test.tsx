@@ -74,18 +74,26 @@ describe("панель разделов", () => {
     expect(within(nav).queryByRole("button", { name: "Настроить панель" })).toBeNull();
   });
 
-  it("кнопка свёртки левой панели стоит в верхней строке слева и работает и при открытой, и при скрытой панели", async () => {
+  it("левая панель сворачивается растяжением и выдвигается обратно; кнопок сворачивания нет", async () => {
+    Element.prototype.setPointerCapture = () => {};
     render(<App />);
     const nav = await screen.findByLabelText("Навигация");
     const bar = document.querySelector("header.topbar") as HTMLElement;
-    expect(within(nav).queryByRole("button", { name: "Свернуть панель" })).toBeNull();
-    const first = bar.firstElementChild as HTMLElement;
-    expect(first.getAttribute("aria-label")).toBe("Свернуть панель");
-    fireEvent.click(first);
+    expect(within(bar).queryByRole("button", { name: /Свернуть|Показать панель/ })).toBeNull();
+    const handle = () => document.querySelector(".resizer") as HTMLElement;
+    expect(handle().className).not.toContain("collapsed");
+    const drag = (from: number, to: number) => {
+      fireEvent.pointerDown(handle(), { clientX: from, pointerId: 1 });
+      fireEvent.pointerMove(handle(), { clientX: to, pointerId: 1 });
+      fireEvent.pointerUp(handle(), { clientX: to, pointerId: 1 });
+    };
+    drag(260, 40);
     await waitFor(() => expect(getState().device.navOpen).toBe(false));
-    const again = (document.querySelector("header.topbar") as HTMLElement).firstElementChild as HTMLElement;
-    expect(again.getAttribute("aria-label")).toBe("Показать панель");
-    fireEvent.click(again);
+    expect(screen.queryByLabelText("Навигация")).toBeNull();
+    expect(handle().className).toContain("collapsed");
+    drag(0, 300);
     await waitFor(() => expect(getState().device.navOpen).toBe(true));
+    expect(nav).toBeDefined();
+    expect(getState().device.navWidth).toBeGreaterThanOrEqual(200);
   });
 });

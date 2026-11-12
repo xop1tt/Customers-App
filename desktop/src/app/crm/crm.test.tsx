@@ -5,6 +5,7 @@ import type { CrmRecord, WsState } from "../../api/types";
 import { resetWsMock } from "../../api/wsMock";
 import { can, cellText, ENTITIES, fromInput, toInput } from "../../lib/crm";
 import { SECTIONS } from "../../lib/leads";
+import { moduleOf } from "../../lib/modules";
 import { getState, setState } from "../../state/store";
 import { App } from "../App";
 import { canManage } from "./Collections";
@@ -161,7 +162,23 @@ describe("интерфейс CRM", () => {
     expect(btn).toHaveTextContent(wide ? "+2" : "+5");
     const topbar = document.querySelector(".topbar") as HTMLElement;
     const order = [...topbar.children].map((el) => el.className);
-    expect(order.findIndex((c) => c.includes("ws-avatars"))).toBeLessThan(order.findIndex((c) => c.includes("search-btn")));
+    expect(order.findIndex((c) => c.includes("ws-avatars"))).toBeGreaterThan(-1);
+    // «Найти лиды» есть только в модуле «Поиск».
+    expect(order.some((c) => c.includes("search-btn"))).toBe(moduleOf(getState().section) === "search");
+  });
+
+  it("в верхней строке нет «Найти лиды», синхронизации и кнопок сворачивания панелей; «Найти лиды» остаётся в поиске", async () => {
+    render(<App />);
+    const nav = await screen.findByLabelText("Навигация");
+    await waitFor(() => expect(getState().phase).toBe("ready"));
+    setState({ section: "home" });
+    const top = () => document.querySelector("header.topbar") as HTMLElement;
+    expect(await within(top()).findByRole("button", { name: "Найти лиды" })).toBeInTheDocument();
+    await openCrm();
+    await within(nav).findByText("Коллекции");
+    expect(within(top()).queryByRole("button", { name: "Найти лиды" })).toBeNull();
+    expect(top().querySelector(".sync-chip")).toBeNull();
+    expect(within(top()).queryByRole("button", { name: /Свернуть|Показать панель/ })).toBeNull();
   });
 
   it("новая коллекция создаётся из диалога с эмодзи и открывается", async () => {

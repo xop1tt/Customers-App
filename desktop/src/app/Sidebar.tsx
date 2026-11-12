@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { count, type SectionId, SECTIONS } from "../lib/leads";
+import { useNewSince } from "../state/hooks";
 import { integer } from "../lib/format";
 import { CONFIGURABLE, MAIN_GROUP, WORK_GROUP, move, ordered, toggled } from "../lib/sidebarPrefs";
 import { SOURCES } from "../lib/sources";
@@ -59,6 +60,7 @@ function NavItem({ id, active, badge, onClick }: { id: SectionId; active: boolea
 export function Sidebar({ overlay }: { overlay?: boolean }) {
   const section = useStore((s) => s.section);
   const leads = useStore((s) => s.snap.leads);
+  const since = useNewSince();
   const device = useStore((s) => s.device);
   const session = useStore((s) => s.session);
   const sync = useStore((s) => s.sync);
@@ -84,7 +86,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
-  const countOf = (id: SectionId) => (device.sidebarCounts && id !== "home" && id !== "sources" && id !== "runs" ? count(leads, id, true) : undefined);
+  const countOf = (id: SectionId) => (device.sidebarCounts && id !== "home" && id !== "sources" && id !== "runs" ? count(leads, id, true, since) : undefined);
   const visible = (id: string) => customize || !device.sidebarHidden.includes(id);
 
   const main = ordered(MAIN_GROUP, device.sidebarOrder).filter(visible) as SectionId[];
@@ -237,7 +239,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           <div className="nav-group nav-opts">
             <label className="nav-opt"><span className="grow">Числа у разделов</span><SwitchMini on={device.sidebarCounts} onChange={(v) => void patchDevice({ sidebarCounts: v })} /></label>
             <label className="nav-opt"><span className="grow">Список источников</span><SwitchMini on={device.sidebarSources} onChange={(v) => void patchDevice({ sidebarSources: v })} /></label>
-            <label className="nav-opt"><span className="grow">Показ при наведении</span><SwitchMini on={device.sidebarHover} onChange={(v) => void patchDevice({ sidebarHover: v })} /></label>
           </div>
         )}
       </nav>

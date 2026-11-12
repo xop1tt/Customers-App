@@ -113,7 +113,7 @@ body.resizing .sidebar, body.resizing .inspector { transition: none; }
 .leads { position: relative; }
 .filterbar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
 .table-wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; outline: none; }
-.thead, .tr { --cols: 40px minmax(0, 1fr) 112px 150px 68px 200px 108px; display: grid; grid-template-columns: var(--cols); align-items: center; column-gap: 10px; padding: 0 16px; }
+.thead, .tr { --cols: 40px minmax(0, 1fr) 112px 150px 68px 108px; display: grid; grid-template-columns: var(--cols); align-items: center; column-gap: 10px; padding: 0 16px; }
 .thead { flex: none; height: 32px; border-bottom: 1px solid var(--line); color: var(--text-3); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 .th { display: flex; align-items: center; gap: 4px; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; text-align: left; white-space: nowrap; }
 button.th:hover { color: var(--text); }
@@ -138,10 +138,6 @@ button.th:hover { color: var(--text); }
 .star:hover { color: var(--orange); opacity: 1; background: var(--bg-active); }
 .star.on { color: var(--orange); opacity: 1; }
 .tr:hover .star { opacity: 1; }
-@container (max-width: 940px) {
-  .thead, .tr { --cols: 40px minmax(0, 1fr) 112px 150px 68px 108px; }
-  .th-sig, .td-sig { display: none; }
-}
 @container (max-width: 800px) {
   .thead, .tr { --cols: 40px minmax(0, 1fr) 68px 108px; }
   .th-kind, .td-kind, .th-source, .td-source { display: none; }
@@ -674,3 +670,9 @@ button.pick-row:hover { background: var(--bg-hover); }
 .ws-switch-name { font-weight: 650; }
 .ws-switch-sub { font-size: var(--fs-sm); }
 .side-ws { display: flex; padding: 0 10px 8px; flex: none; }
+
+/* Свёрнутая панель: у края остаётся ручка шириной 10 px; курсор «вытянуть панель» (стрелка к панели и вертикальная линия). */
+.resizer.collapsed { width: 10px; margin: 0; }
+.resizer.collapsed::after { inset: 0 3px; }
+.resizer.collapsed.left { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12h11M12 8l4 4-4 4M20 5v14' stroke='white' stroke-width='4.2'/><path d='M5 12h11M12 8l4 4-4 4M20 5v14' stroke='black' stroke-width='2'/></svg>") 12 12, e-resize; }
+.resizer.collapsed.right { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'><path d='M19 12H8M12 8l-4 4 4 4M4 5v14' stroke='white' stroke-width='4.2'/><path d='M19 12H8M12 8l-4 4 4 4M4 5v14' stroke='black' stroke-width='2'/></svg>") 12 12, w-resize; }

@@ -412,12 +412,12 @@ mod tests {
     async fn account_prefs_validate_and_autosearch_goes_to_database() {
         let (f, core, _ids) = seeded();
         let p = core.patch_account_prefs(&json!({"autoSearchMinutes": 30, "keepBackups": 9999, "signature": "С уважением"})).unwrap();
-        assert_eq!((p["autoSearchMinutes"].clone(), p["keepBackups"].clone(), p["signature"].clone()), (json!(30), json!(365), json!("С уважением")));
-        assert_eq!(core.session().unwrap().with_store(|st| st.value("search.auto")).as_deref(), Some("30"));
+        assert_eq!((p["autoSearchMinutes"].clone(), p["keepBackups"].clone(), p["signature"].clone()), (json!(120), json!(365), json!("С уважением")));
+        assert_eq!(core.session().unwrap().with_store(|st| st.value("search.auto")).as_deref(), Some("120"));
         assert!(f.events.count("account-prefs") >= 1);
         core.logout();
         core.login("anna", "password-1", false).unwrap();
-        assert_eq!(core.account_prefs().unwrap()["autoSearchMinutes"], 30);
+        assert_eq!(core.account_prefs().unwrap()["autoSearchMinutes"], 120);
     }
 
     /// Пароль собирается во время работы теста, чтобы в коде не было постоянного пароля.
