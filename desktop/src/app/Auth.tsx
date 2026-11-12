@@ -111,22 +111,22 @@ export function AuthScreen() {
 
         {mode === "cloud" ? (
           <>
-            {stage === "signUp" && <Field label="Имя пользователя" hint="Так вас будут видеть в приложении. Изменить имя можно в настройках."><TextInput value={username} onChange={setUsername} maxLength={40} data-autofocus autoFocus /></Field>}
-            {stage !== "newPassword" && <Field label="Почта"><TextInput value={email} onChange={setEmail} placeholder="name@example.ru" type="email" disabled={stage === "confirm" || stage === "reset"} data-autofocus={stage !== "signUp"} autoFocus={stage !== "signUp"} /></Field>}
-            {(stage === "confirm" || stage === "reset") && <Field label="Код из письма"><TextInput value={code} onChange={setCode} inputMode="numeric" autoFocus /></Field>}
+            {stage === "signUp" && <Field label="Имя пользователя" hint="Так вас будут видеть в приложении. Изменить имя можно в настройках."><TextInput value={username} onChange={setUsername} name="nickname" autoComplete="nickname" maxLength={40} data-autofocus autoFocus /></Field>}
+            {stage !== "newPassword" && <Field label="Почта"><TextInput value={email} onChange={setEmail} placeholder="name@example.ru" type="email" name="email" autoComplete={stage === "signUp" ? "email" : "username"} disabled={stage === "confirm" || stage === "reset"} data-autofocus={stage !== "signUp"} autoFocus={stage !== "signUp"} /></Field>}
+            {(stage === "confirm" || stage === "reset") && <Field label="Код из письма"><TextInput value={code} onChange={setCode} inputMode="numeric" name="code" autoComplete="one-time-code" autoFocus /></Field>}
             {(stage === "signIn" || stage === "signUp" || stage === "reset" || stage === "newPassword") && (
-              <Field label={stage === "signIn" ? "Пароль" : "Новый пароль"} hint={stage !== "signIn" ? RULES : undefined}><PasswordInput value={password} onChange={setPassword} /></Field>
+              <Field label={stage === "signIn" ? "Пароль" : "Новый пароль"} hint={stage !== "signIn" ? RULES : undefined}><PasswordInput value={password} onChange={setPassword} name="password" autoComplete={stage === "signIn" ? "current-password" : "new-password"} /></Field>
             )}
-            {(stage === "signUp" || stage === "reset" || stage === "newPassword") && <Field label="Повторите пароль"><PasswordInput value={confirm} onChange={setConfirm} /></Field>}
+            {(stage === "signUp" || stage === "reset" || stage === "newPassword") && <Field label="Повторите пароль"><PasswordInput value={confirm} onChange={setConfirm} name="confirm-password" autoComplete="new-password" /></Field>}
           </>
         ) : (
           <>
             <Field label="Имя аккаунта">
-              <TextInput value={user} onChange={setUser} list="accounts" autoFocus />
+              <TextInput value={user} onChange={setUser} list="accounts" name="username" autoComplete="username" autoFocus />
               <datalist id="accounts">{accounts.map((a) => <option key={a} value={a} />)}</datalist>
             </Field>
-            <Field label="Пароль" hint={localMode === "register" ? RULES : undefined}><PasswordInput value={password} onChange={setPassword} /></Field>
-            {localMode === "register" && <Field label="Повторите пароль"><PasswordInput value={confirm} onChange={setConfirm} /></Field>}
+            <Field label="Пароль" hint={localMode === "register" ? RULES : undefined}><PasswordInput value={password} onChange={setPassword} name="password" autoComplete={localMode === "login" ? "current-password" : "new-password"} /></Field>
+            {localMode === "register" && <Field label="Повторите пароль"><PasswordInput value={confirm} onChange={setConfirm} name="confirm-password" autoComplete="new-password" /></Field>}
             <Checkbox checked={remember} onChange={setRemember} label="Запомнить на этом компьютере" />
           </>
         )}
