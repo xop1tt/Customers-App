@@ -1,20 +1,22 @@
 // Рабочее пространство: выбор и создание Workspace, участники и роли, приглашения, очередь синхронизации.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import type { WsInvitation, WsInvite, WsOp } from "../../api/types";
 import { copyText } from "../../lib/platform";
 import { fullRu, integer, shortRelative } from "../../lib/format";
 import { Avatar, Button, Group, IconButton, Notice, Select, SettingRow, Tag, TextInput } from "../../ui/kit";
-import { Dialog, confirmDialog } from "../../ui/overlay";
-import { attempt, refreshWorkspace, setState, toast, useStore } from "../../state/store";
+import { Icon } from "../../ui/icons";
+import { confirmDialog } from "../../ui/overlay";
+import { attempt, refreshWorkspace, setSection, setState, toast, useStore } from "../../state/store";
 import { useWsQuery } from "./useCrm";
 import { PipelineEditor, RolesEditor } from "./Editors";
 import { HandoverDialog, type HandoverTarget } from "./Handover";
 import { AuditDialog } from "./AuditLog";
 import { DangerZone } from "./Danger";
 import { MyRights } from "./MyRights";
-import { isHr } from "../../lib/positions";
+import { POSITIONS, assignable, canManageDepartments, isHr, isOwner } from "../../lib/positions";
+import { departmentsOf } from "../../lib/departments";
 import { useActor } from "../team/actor";
 import { RequestDialog } from "../team/Requests";
 import { usePresence } from "./Presence";
@@ -30,112 +32,231 @@ const ROLES = [
 export function WorkspaceDialog() {
   const open = useStore((s) => s.workspaceOpen);
   if (!open) return null;
-  return <WorkspaceDialogBody />;
+  return <WorkspacePanel />;
 }
 
-function WorkspaceDialogBody() {
+/** Разделы панели: подпись, якорь и условие показа. Показ зависит от прав и должности; права сервера проверяются независимо. */
+const SECTIONS = [
+  { id: "ws-overview", label: "Обзор" },
+  { id: "ws-people", label: "Люди" },
+  { id: "ws-structure", label: "Структура" },
+  { id: "ws-crm", label: "CRM" },
+  { id: "ws-access", label: "Доступ и журнал" },
+  { id: "ws-sync", label: "Синхронизация" },
+  { id: "ws-danger", label: "Владелец" },
+] as const;
+
+/** Панель справа: управление всем рабочим пространством. Разделы показываются по роли и должности. */
+function WorkspacePanel() {
   const ws = useStore((s) => s.ws);
-  const [name, setName] = useState("");
-  const [rename, setRename] = useState<string | null>(null);
-  const [token, setToken] = useState("");
+  const ref = useRef<HTMLElement>(null);
   const [editor, setEditor] = useState<"pipelines" | "roles" | "fields" | null>(null);
   const [audit, setAudit] = useState(false);
   const close = () => setState({ workspaceOpen: false });
-  if (!ws) {
-    return (
-      <Dialog title="Рабочее пространство" onClose={close} width={520}>
-        <Notice tone="error">База рабочего пространства не открылась. Проверьте журнал ошибок в настройках «Отчёты».</Notice>
-      </Dialog>
-    );
-  }
-  const current = ws.workspaces.find((w) => w.id === ws.active);
-  const perms = ws.permissions;
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    ref.current?.focus();
+    return () => { prev?.focus?.(); };
+  }, []);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector(".popover, .scrim")) { e.stopPropagation(); close(); }
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, []);
+  const current = ws?.workspaces.find((w) => w.id === ws.active);
+  const perms = ws?.permissions ?? [];
+  const cloud = !!ws?.isCloud;
+  const showDanger = cloud && !!current && !current.personal;
+  const visible = (id: string) => {
+    if (!ws || !current) return id === "ws-overview";
+    switch (id) {
+      case "ws-people": return cloud;
+      case "ws-structure": return cloud;
+      case "ws-danger": return showDanger;
+      default: return true;
+    }
+  };
+  const goTo = (id: string) => ref.current?.querySelector<HTMLElement>(`#${id}`)?.scrollIntoView?.({ block: "start", behavior: "smooth" });
   const done = async (p: Promise<unknown>) => { const r = await attempt(() => p); await refreshWorkspace(); return r; };
 
   return (
-    <Dialog title="Рабочее пространство" onClose={close} width={600} className="ws-dialog">
-      <Group title="Рабочее пространство" note={ws.isCloud ? "Данные CRM общие для участников и синхронизируются через облако." : "Локальная учётная запись: рабочее пространство хранится только на этом компьютере. Совместная работа — в облачной учётной записи."}>
-        <SettingRow title="Текущий">
-          <Select value={ws.active ?? ""} width={260} onChange={(id) => void done(api.wsSwitch(id))} options={ws.workspaces.map((w) => ({ value: w.id, label: w.name, hint: w.roleName }))} />
-        </SettingRow>
-        {current && perms.includes("workspace.manage") && (
-          <SettingRow title="Название">
-            {rename === null ? <Button small icon="edit" onClick={() => setRename(current.name)}>Переименовать</Button> : (
-              <div className="row" style={{ gap: 6 }}>
-                <TextInput value={rename} onChange={setRename} maxLength={120} aria-label="Новое название" />
-                <Button small variant="primary" onClick={() => void done(api.wsRenameWorkspace(rename)).then(() => setRename(null))}>Сохранить</Button>
-              </div>
-            )}
-          </SettingRow>
+    <>
+      <div className="ws-panel-scrim" onPointerDown={close} />
+      <aside ref={ref} tabIndex={-1} className="ws-panel" role="dialog" aria-label="Рабочее пространство">
+        <header className="ws-panel-head">
+          <Avatar name={current?.name ?? "?"} size={30} />
+          <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
+            <strong className="ellipsis">{current?.name ?? "Рабочее пространство"}</strong>
+            <span className="faint ellipsis" style={{ fontSize: "var(--fs-sm)" }}>Рабочее пространство{current ? ` · ${current.roleName}` : ""}</span>
+          </span>
+          <IconButton icon="x" tip="Закрыть" onClick={close} />
+        </header>
+        {ws && current && (
+          <nav className="ws-panel-nav" aria-label="Разделы рабочего пространства">
+            {SECTIONS.filter((x) => visible(x.id)).map((x) => <button key={x.id} type="button" className="ws-chip" onClick={() => goTo(x.id)}>{x.label}</button>)}
+          </nav>
         )}
-        <SettingRow title="Новое рабочее пространство" hint="Например, для отдельной команды или компании. Вы станете владельцем.">
+        <div className="ws-panel-body">
+          {!ws ? (
+            <Notice tone="error">База рабочего пространства не открылась. Проверьте журнал ошибок в настройках «Отчёты».</Notice>
+          ) : (
+            <>
+              <div id="ws-overview"><Overview done={done} /></div>
+              {cloud && current && (
+                <div id="ws-people">
+                  <MyRights />
+                  <Members />
+                  <InviteOrRequest />
+                </div>
+              )}
+              {cloud && current && <div id="ws-structure"><Structure /></div>}
+              {current && (
+                <div id="ws-crm">
+                  <Group title="Настройка CRM" note={perms.includes("workspace.manage") ? undefined : "Часть настроек доступна только владельцу и администраторам; сервер проверит права при сохранении."}>
+                    <SettingRow title="Воронки и этапы" hint="Названия, порядок, вероятность, тип этапа.">
+                      <Button small icon="edit" onClick={() => setEditor("pipelines")}>Настроить воронки</Button>
+                    </SettingRow>
+                    <SettingRow title="Свои поля" hint="Дополнительные поля в карточках компаний, контактов, лидов и сделок.">
+                      <Button small icon="edit" onClick={() => setEditor("fields")}>Настроить поля</Button>
+                    </SettingRow>
+                    {cloud && (
+                      <SettingRow title="Роли" hint="Свои роли с набором разрешений.">
+                        <Button small icon="shield" onClick={() => setEditor("roles")}>Управлять ролями</Button>
+                      </SettingRow>
+                    )}
+                    {cloud && !current.remote && (
+                      <SettingRow title="Загрузить в облако" hint="Создаст облачное рабочее пространство с копией записей этого локального. Локальный останется как есть; повторная загрузка не плодит дубли.">
+                        <Button small icon="upload" onClick={async () => {
+                          if (!(await confirmDialog({ title: `Загрузить «${current.name}» в облако?`, message: "Записи, задачи и заметки станут доступны участникам нового облачного рабочего пространства.", confirm: "Загрузить" }))) return;
+                          const r = await attempt(() => api.wsUploadLocal());
+                          await refreshWorkspace();
+                          if (r) toast(`Загружено записей: ${integer(r.copied)}${r.skipped ? `, пропущено: ${integer(r.skipped)} (см. журнал ошибок)` : ""}`, r.skipped ? "error" : "success");
+                        }}>Загрузить</Button>
+                      </SettingRow>
+                    )}
+                  </Group>
+                  {editor === "pipelines" && <PipelineEditor onClose={() => setEditor(null)} />}
+                  {editor === "fields" && <CustomFieldsEditor onClose={() => setEditor(null)} />}
+                  {editor === "roles" && <RolesEditor onClose={() => setEditor(null)} />}
+                </div>
+              )}
+              {current && (
+                <div id="ws-access">
+                  {!cloud && <MyRights />}
+                  {cloud && perms.includes("audit.view") ? (
+                    <Group title="Журнал рабочего пространства">
+                      <SettingRow title="Кто и что менял" hint="Серверный журнал: удаления, смена ответственного, участники и роли. Последнее действие над каждой записью — в разделе «Журнал».">
+                        <Button small icon="history" onClick={() => setAudit(true)}>Открыть журнал</Button>
+                      </SettingRow>
+                    </Group>
+                  ) : cloud ? (
+                    <Group title="Журнал рабочего пространства"><p className="faint" style={{ margin: "8px 0" }}>Журнал открыт владельцу и тем, кому роль даёт право просмотра журнала.</p></Group>
+                  ) : null}
+                  {audit && <AuditDialog onClose={() => setAudit(false)} />}
+                </div>
+              )}
+              <div id="ws-sync"><SyncQueue /></div>
+              {showDanger && (
+                <div id="ws-danger">
+                  <DangerZone />
+                  <Group title="Выход">
+                    <SettingRow title="Покинуть рабочее пространство" hint="Локальная копия данных этого рабочего пространства будет удалена с устройства. Владелец не может выйти, пока не передаст владение.">
+                      <Button small variant="danger" onClick={async () => {
+                        if (await confirmDialog({ title: `Покинуть «${current!.name}»?`, message: "Доступ к данным пропадёт. Вернуться можно только по новому приглашению.", confirm: "Покинуть", danger: true })) void done(api.wsLeave());
+                      }}>Покинуть</Button>
+                    </SettingRow>
+                  </Group>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+/** Обзор: выбор и создание пространства, переименование, приглашение по коду, сводка. */
+function Overview({ done }: { done: (p: Promise<unknown>) => Promise<unknown> }) {
+  const ws = useStore((s) => s.ws)!;
+  const team = useStore((s) => s.team);
+  const [name, setName] = useState("");
+  const [rename, setRename] = useState<string | null>(null);
+  const [token, setToken] = useState("");
+  const current = ws.workspaces.find((w) => w.id === ws.active);
+  const perms = ws.permissions;
+  const deps = departmentsOf(team).filter((d) => d.name).length;
+  return (
+    <Group title="Рабочее пространство" note={ws.isCloud ? "Данные CRM общие для участников и синхронизируются через облако." : "Локальная учётная запись: рабочее пространство хранится только на этом компьютере. Совместная работа — в облачной учётной записи."}>
+      {current && (
+        <div className="ws-stats" aria-label="Сводка">
+          <div className="ws-stat"><strong>{integer(ws.members.length)}</strong><span className="faint">участников</span></div>
+          {ws.isCloud && <div className="ws-stat"><strong>{integer(deps)}</strong><span className="faint">отделов</span></div>}
+          <div className="ws-stat"><strong>{current.roleName}</strong><span className="faint">ваша роль</span></div>
+          {ws.pending > 0 && <div className="ws-stat"><strong>{integer(ws.pending)}</strong><span className="faint">ждут отправки</span></div>}
+        </div>
+      )}
+      <SettingRow title="Текущий">
+        <Select value={ws.active ?? ""} width={240} onChange={(id) => void done(api.wsSwitch(id))} options={ws.workspaces.map((w) => ({ value: w.id, label: w.name, hint: w.roleName }))} />
+      </SettingRow>
+      {current && perms.includes("workspace.manage") && (
+        <SettingRow title="Название">
+          {rename === null ? <Button small icon="edit" onClick={() => setRename(current.name)}>Переименовать</Button> : (
+            <div className="row" style={{ gap: 6 }}>
+              <TextInput value={rename} onChange={setRename} maxLength={120} aria-label="Новое название" />
+              <Button small variant="primary" onClick={() => void done(api.wsRenameWorkspace(rename)).then(() => setRename(null))}>Сохранить</Button>
+            </div>
+          )}
+        </SettingRow>
+      )}
+      <SettingRow title="Новое рабочее пространство" hint="Например, для отдельной команды или компании. Вы станете владельцем.">
+        <div className="row" style={{ gap: 6 }}>
+          <TextInput value={name} onChange={setName} maxLength={120} placeholder="Название" aria-label="Название нового рабочего пространства" />
+          <Button small icon="plus" disabled={!name.trim()} onClick={() => void done(api.wsCreateWorkspace(name)).then((r) => { if (r) setName(""); })}>Создать</Button>
+        </div>
+      </SettingRow>
+      {ws.isCloud && (
+        <SettingRow title="Приглашение" hint="Вставьте ссылку или код из приглашения.">
           <div className="row" style={{ gap: 6 }}>
-            <TextInput value={name} onChange={setName} maxLength={120} placeholder="Название" aria-label="Название нового рабочего пространства" />
-            <Button small icon="plus" disabled={!name.trim()} onClick={() => void done(api.wsCreateWorkspace(name)).then((r) => { if (r) setName(""); })}>Создать</Button>
+            <TextInput value={token} onChange={setToken} placeholder="Ссылка или код из приглашения" aria-label="Код приглашения" />
+            <Button small disabled={!token.trim()} onClick={() => void done(api.wsAcceptInvitation(token)).then((r) => { if (r) { setToken(""); toast("Вы присоединились к рабочему пространству", "success"); } })}>Принять</Button>
           </div>
         </SettingRow>
-        {ws.isCloud && (
-          <SettingRow title="Приглашение" hint="Вставьте ссылку или код из приглашения.">
-            <div className="row" style={{ gap: 6 }}>
-              <TextInput value={token} onChange={setToken} placeholder="Ссылка или код из приглашения" aria-label="Код приглашения" />
-              <Button small disabled={!token.trim()} onClick={() => void done(api.wsAcceptInvitation(token)).then((r) => { if (r) { setToken(""); toast("Вы присоединились к рабочему пространству", "success"); } })}>Принять</Button>
-            </div>
-          </SettingRow>
-        )}
-      </Group>
+      )}
+    </Group>
+  );
+}
 
-      {current && (
-        <Group title="Настройка CRM">
-          <SettingRow title="Воронки и этапы" hint="Названия, порядок, вероятность, тип этапа.">
-            <Button small icon="edit" onClick={() => setEditor("pipelines")}>Настроить воронки</Button>
-          </SettingRow>
-          {ws.isCloud && !current.remote && (
-            <SettingRow title="Загрузить в облако" hint="Создаст облачное рабочее пространство с копией записей этого локального. Локальный останется как есть; повторная загрузка не плодит дубли.">
-              <Button small icon="upload" onClick={async () => {
-                if (!(await confirmDialog({ title: `Загрузить «${current.name}» в облако?`, message: "Записи, задачи и заметки станут доступны участникам нового облачного рабочего пространства.", confirm: "Загрузить" }))) return;
-                const r = await attempt(() => api.wsUploadLocal());
-                await refreshWorkspace();
-                if (r) toast(`Загружено записей: ${integer(r.copied)}${r.skipped ? `, пропущено: ${integer(r.skipped)} (см. журнал ошибок)` : ""}`, r.skipped ? "error" : "success");
-              }}>Загрузить</Button>
-            </SettingRow>
-          )}
-          <SettingRow title="Свои поля" hint="Дополнительные поля в карточках компаний, контактов, лидов и сделок.">
-            <Button small icon="edit" onClick={() => setEditor("fields")}>Настроить поля</Button>
-          </SettingRow>
-          {ws.isCloud && (
-            <SettingRow title="Роли" hint="Свои роли с набором разрешений.">
-              <Button small icon="shield" onClick={() => setEditor("roles")}>Управлять ролями</Button>
-            </SettingRow>
-          )}
-        </Group>
-      )}
-      {editor === "pipelines" && <PipelineEditor onClose={() => setEditor(null)} />}
-      {editor === "fields" && <CustomFieldsEditor onClose={() => setEditor(null)} />}
-      {editor === "roles" && <RolesEditor onClose={() => setEditor(null)} />}
-      {ws.isCloud && current && <MyRights />}
-      {ws.isCloud && current && <Members />}
-      {ws.isCloud && current && perms.includes("invitations.manage") && <InviteOrRequest />}
-      {ws.isCloud && current && perms.includes("audit.view") && (
-        <Group title="Журнал рабочего пространства">
-          <SettingRow title="Кто и что менял" hint="Серверный журнал: удаления, смена ответственного, участники и роли. Последнее действие над каждой записью — в разделе «Журнал».">
-            <Button small icon="history" onClick={() => setAudit(true)}>Открыть журнал</Button>
-          </SettingRow>
-        </Group>
-      )}
-      {audit && <AuditDialog onClose={() => setAudit(false)} />}
-      <SyncQueue />
-
-      <DangerZone />
-      {ws.isCloud && current && !current.personal && (
-        <Group title="Выход">
-          <SettingRow title="Покинуть рабочее пространство" hint="Локальная копия данных этого рабочего пространства будет удалена с устройства. Владелец не может выйти, пока не передаст владение.">
-            <Button small variant="danger" onClick={async () => {
-              if (await confirmDialog({ title: `Покинуть «${current.name}»?`, message: "Доступ к данным пропадёт. Вернуться можно только по новому приглашению.", confirm: "Покинуть", danger: true })) void done(api.wsLeave());
-            }}>Покинуть</Button>
-          </SettingRow>
-        </Group>
-      )}
-    </Dialog>
+/** Структура: должности (справочник с правами, ADR-079) и отделы. Менять их — на странице «Сотрудники», здесь видно, кто что может. */
+function Structure() {
+  const team = useStore((s) => s.team);
+  const actor = useActor();
+  const mine = assignable(actor);
+  const manageDeps = canManageDepartments(actor);
+  const deps = departmentsOf(team);
+  const open = () => { setState({ workspaceOpen: false }); setSection("people"); };
+  return (
+    <Group title="Структура" note="Должность задаёт роль и права в рабочем пространстве. Отделы — группы сотрудников; создавать и закрывать их могут владелец, заместители и руководители.">
+      <SettingRow title="Отделы" hint={deps.filter((d) => d.name).length ? deps.filter((d) => d.name).map((d) => `${d.name} (${d.members.length})`).join(", ") : "Отделов пока нет."}>
+        <Button small icon="users" onClick={() => open()}>{manageDeps ? "Управлять отделами" : "Открыть отделы"}</Button>
+      </SettingRow>
+      <SettingRow title="Ваша должность" hint={actor?.title ? actor.title : isOwner(actor) ? "Владелец" : "Не назначена"}>
+        <span className="faint">{mine.length ? `Можете назначать: ${mine.map((p) => p.name).join(", ")}` : "Назначать должности вы не можете"}</span>
+      </SettingRow>
+      <div className="col" style={{ gap: 4, marginTop: 8 }} role="list" aria-label="Должности и их возможности">
+        {POSITIONS.map((p) => (
+          <div key={p.key} role="listitem" className="ws-position">
+            <span className="grow ellipsis"><strong>{p.name}</strong><span className="faint"> · {p.hint}</span></span>
+            {p.deputy && <Tag tone="blue">Заместитель</Tag>}
+            {p.hr && <Tag tone="orange">Кадры</Tag>}
+            {p.lead && !p.deputy && <Tag>Руководящая</Tag>}
+            {mine.some((m) => m.key === p.key) && <Icon name="check" size={14} />}
+          </div>
+        ))}
+      </div>
+    </Group>
   );
 }
 

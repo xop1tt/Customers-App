@@ -157,13 +157,13 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
       {mod === "crm" && !customize && wsName && (
         <div className="side-ws">
-          <button type="button" className="ws-switch grow" onClick={() => setState({ workspaceOpen: true })} aria-haspopup="dialog" aria-label={`Рабочее пространство: ${wsName}`} data-tip="Участники, воронки, поля">
+          <button type="button" className="ws-switch grow" onClick={() => setState({ workspaceOpen: true })} aria-haspopup="dialog" aria-label={`Рабочее пространство: ${wsName}`} data-tip="Управление рабочим пространством">
             <Avatar name={wsName} size={26} />
             <span className="col grow" style={{ gap: 0, minWidth: 0, textAlign: "left" }}>
               <span className="ellipsis ws-switch-name">{wsName}</span>
               <span className="ellipsis faint ws-switch-sub">Рабочее пространство</span>
             </span>
-            <Icon name="chevronDown" size={14} className="faint" />
+            <Icon name="chevronLeft" size={14} className="faint" />
           </button>
         </div>
       )}
