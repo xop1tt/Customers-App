@@ -23,4 +23,4 @@ export function moduleOf(section: SectionId): ModuleId {
 }
 
 /** Разделы, которые можно открыть при запуске (последний открытый). Коллекция и профиль требуют выбора — не восстанавливаются. */
-export const RESTORABLE: SectionId[] = ["home", "all", "new", "favorites", "archive", "excluded", "sources", "runs", "today", "calendar", "deals", "reports", "trash", "chat", "people", "notifications"];
+export const RESTORABLE: SectionId[] = ["home", "all", "new", "favorites", "archive", "excluded", "runs", "today", "calendar", "deals", "reports", "trash", "chat", "people", "notifications"];

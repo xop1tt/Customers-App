@@ -17,7 +17,6 @@ import { TopBar } from "./TopBar";
 import { Inspector } from "./Inspector";
 import { HomePage } from "./pages/Home";
 import { LeadsPage } from "./pages/LeadsPage";
-import { SourcesPage } from "./pages/SourcesPage";
 import { RunsPage } from "./pages/RunsPage";
 import { Settings } from "./settings/Settings";
 import { Marketplace } from "./market/Marketplace";
@@ -274,7 +273,6 @@ function Shell() {
         <div className="page-host" key={section === "collection" ? `collection:${collectionId}` : section === "profile" ? `profile:${profileId ?? "me"}` : section}>
           {section === "home" && <HomePage />}
           {lead && <LeadsPage />}
-          {section === "sources" && <SourcesPage />}
           {section === "runs" && <RunsPage />}
           {section === "collection" && <CollectionPage />}
           {section === "today" && <TodayPage />}

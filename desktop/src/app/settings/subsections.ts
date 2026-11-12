@@ -1,3 +1,4 @@
+import { SOURCES } from "../../lib/sources";
 import type { SettingsSection } from "../../state/store";
 
 export interface SubSection { id: string; title: string }
@@ -17,6 +18,7 @@ export function subsectionsOf(section: SettingsSection, cloud: boolean): SubSect
     case "updates": return [{ id: "version", title: "Версия" }, { id: "history", title: "История версий" }];
     case "outreach": return [{ id: "mail", title: "Почта" }, { id: "signature", title: "Подпись" }, { id: "calls", title: "Звонки" }];
     case "reports": return [{ id: "diagnostics", title: "Диагностика" }, { id: "log", title: "Журнал ошибок" }, { id: "crashes", title: "Отчёты о сбоях" }];
+    case "sources": return SOURCES.map((s) => ({ id: s.key, title: s.title }));
     default: return [];
   }
 }

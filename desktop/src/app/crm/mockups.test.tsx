@@ -5,7 +5,7 @@ import { resetWsMock } from "../../api/wsMock";
 import { collectionGlyph, ENTITIES } from "../../lib/crm";
 import { Icon } from "../../ui/icons";
 import { canAdminister, Settings } from "../settings/Settings";
-import { openSettings, setState } from "../../state/store";
+import { getState, openSettings, refreshOverview, setSection, setState } from "../../state/store";
 
 afterEach(() => { cleanup(); openSettings(null); });
 beforeEach(async () => {
@@ -48,5 +48,21 @@ describe("настройки: администрирование по праву
     openSettings("appearance");
     render(<Settings />);
     expect(screen.queryByText("Администрирование")).toBeNull();
+  });
+});
+
+describe("источники в окне настроек", () => {
+  it("setSection(sources) открывает настройки источников, а не страницу", () => {
+    setSection("sources");
+    expect(getState().settings).toBe("sources");
+    expect(getState().section).not.toBe("sources");
+  });
+
+  it("в настройках у каждого источника свой подраздел с редактором", async () => {
+    await refreshOverview();
+    openSettings("sources", "telegram_channels");
+    render(<Settings />);
+    expect(await screen.findByText("Каналы")).toBeTruthy();
+    expect(screen.getAllByText("Источники").length).toBeGreaterThan(0);
   });
 });

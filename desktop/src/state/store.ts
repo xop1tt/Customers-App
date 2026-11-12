@@ -11,7 +11,7 @@ import { type LeadFilter, type SectionId, emptyFilter } from "../lib/leads";
 import { type LightModeReason, evaluate } from "../lib/powerPolicy";
 
 export type Phase = "loading" | "error" | "auth" | "welcome" | "ready";
-export type SettingsSection = "appearance" | "system" | "notifications" | "search" | "account" | "data" | "exclusions" | "outreach" | "reports" | "updates";
+export type SettingsSection = "appearance" | "system" | "notifications" | "search" | "account" | "data" | "exclusions" | "outreach" | "reports" | "updates" | "sources";
 export type ToastKind = "info" | "error" | "success";
 export interface Toast { id: number; kind: ToastKind; text: string }
 
@@ -45,7 +45,6 @@ export interface AppState {
   reportOpen: boolean;
   customizeNav: boolean;
   navPeek: boolean;
-  sourceKey: string;
   /** Customers 2.0: активный Workspace, его коллекции и открытая карточка. */
   ws: WsState | null;
   collections: WsCollection[];
@@ -84,7 +83,7 @@ const EMPTY_SNAP: Snapshot = { leads: [], sources: [], pipelineErrors: [], exclu
 const initial: AppState = {
   phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
-  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, quickOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, sourceKey: "fl_ru",
+  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, quickOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false,
   ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0, profileId: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [],
 };
 
@@ -295,6 +294,8 @@ export function goToRecord(table: string, id: string, preset?: Record<string, un
 }
 
 export function setSection(section: SectionId) {
+  // Источники настраиваются в окне настроек, отдельной страницы у них нет.
+  if (section === "sources") { openSettings("sources"); return; }
   setState({ section, selection: [], anchor: null, navPeek: false, collectionId: null, record: null });
   void api.patchDevicePrefs({ lastSection: section }).catch(() => {});
 }

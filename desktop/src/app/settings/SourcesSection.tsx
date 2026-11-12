@@ -1,75 +1,50 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { api } from "../../api";
 import type { OsmCategory, SearchSettings } from "../../api/types";
 import { intervalTitle, plural, shortRelative } from "../../lib/format";
 import { SOURCES, type SourceMeta, INTERVAL_OPTIONS, sourceItemCount, sourceSettings } from "../../lib/sources";
 import { feedUrl, keyword, region, telegramChannel, vkCommunity } from "../../lib/sourceInput";
-import { Button, Checkbox, Group, Notice, NumberInput, PasswordInput, Select, SettingRow, Switch, Tag, TextInput, ValueList } from "../../ui/kit";
-import { Icon } from "../../ui/icons";
+import { Button, Checkbox, Group, Notice, NumberInput, PasswordInput, Select, SettingRow, SubContext, Switch, Tag, TextInput, ValueList } from "../../ui/kit";
 import { confirmDialog } from "../../ui/overlay";
-import { attempt, refreshOverview, setState, toast, updateSettings, useStore } from "../../state/store";
+import { attempt, refreshOverview, toast, updateSettings, useStore } from "../../state/store";
 import { startSearch } from "../../state/actions";
 
 const intervals = (extra?: number[]) => [...new Set([...INTERVAL_OPTIONS, ...(extra ?? [])])].sort((a, b) => a - b).map((h) => ({ value: h, label: intervalTitle(h) }));
 
-export function SourcesPage() {
+export function SourcesSection() {
   const overview = useStore((s) => s.overview);
-  const key = useStore((s) => s.sourceKey);
   const states = useStore((s) => s.snap.sources);
   const search = useStore((s) => s.search);
+  const sub = useContext(SubContext);
   if (!overview) return null;
-  const meta = SOURCES.find((s) => s.key === key) ?? (SOURCES[0] as SourceMeta);
+  const meta = SOURCES.find((s) => s.key === sub) ?? (SOURCES[0] as SourceMeta);
+  const cfg = sourceSettings(overview.settings, meta.group);
+  const st = states.find((s) => s.source === meta.key);
+  const n = sourceItemCount(overview.settings, meta.group);
   return (
-    <div className="page sources-page">
-      <div className="src-master" role="listbox" aria-label="Источники">
-        {SOURCES.map((m) => {
-          const cfg = sourceSettings(overview.settings, m.group);
-          const st = states.find((s) => s.source === m.key);
-          const problem = overview.problems[m.key];
-          const n = sourceItemCount(overview.settings, m.group);
-          return (
-            <div key={m.key} className={`src-row${m.key === meta.key ? " active" : ""}`} role="option" aria-selected={m.key === meta.key} tabIndex={0}
-              onClick={() => setState({ sourceKey: m.key })} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setState({ sourceKey: m.key }); } }}>
-              <Icon name={m.icon} size={18} className="src-ico" />
-              <div className="col grow" style={{ gap: 2 }}>
-                <span className="ellipsis" style={{ fontWeight: 560 }}>{m.title}</span>
-                <span className="ellipsis faint" style={{ fontSize: "var(--fs-sm)" }}>
-                  {problem ?? (cfg.enabled ? `${n} ${plural(n, "запись", "записи", "записей")}${st?.last_success_at ? ` · ${shortRelative(st.last_success_at)}` : ""}` : "Выключен")}
-                </span>
-              </div>
-              {st && st.consecutive_failures > 0 && cfg.enabled && <Tag tone="orange" title={st.last_error ?? undefined}>сбои</Tag>}
-              <span onClick={(e) => e.stopPropagation()}>
-                <Switch checked={cfg.enabled} label={`Включить ${m.title}`} onChange={(v) => void updateSettings((s) => { sourceSettings(s, m.group).enabled = v; })} />
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="src-detail">
-        <div className="src-detail-inner">
-          <header className="src-detail-head">
-            <Icon name={meta.icon} size={22} />
-            <div className="col grow" style={{ gap: 2 }}>
-              <h2>{meta.title}</h2>
-              <span className="muted">{meta.note}</span>
-            </div>
-          </header>
-          {overview.problems[meta.key] && <Notice tone="warn">{overview.problems[meta.key]}</Notice>}
-          <SourceEditor meta={meta} settings={overview.settings} hasVk={overview.hasVkToken} />
-          <Group title="Действия">
-            <SettingRow title="Проверить сейчас" hint="Запустит поиск только по этому источнику.">
-              <Button icon="play" disabled={search.running || !sourceSettings(overview.settings, meta.group).enabled} onClick={() => void startSearch([meta.key])}>Запустить</Button>
-            </SettingRow>
-            <SettingRow title="Сбросить историю источника" hint="Источник снова обработает записи, которые уже видел. Лиды в базе не удаляются.">
-              <Button variant="danger" onClick={async () => {
-                const ok = await confirmDialog({ title: `Сбросить историю источника «${meta.title}»?`, message: "При следующем поиске источник заново пройдёт по доступным записям.", confirm: "Сбросить", danger: true });
-                if (ok) { await attempt(() => api.resetSourceMemory(meta.key)); toast("Память источника очищена"); }
-              }}>Сбросить</Button>
-            </SettingRow>
-          </Group>
-        </div>
-      </div>
-    </div>
+    <>
+      <Group>
+        <SettingRow title={meta.title} hint={meta.note}>
+          <Switch checked={cfg.enabled} label={`Включить ${meta.title}`} onChange={(v) => void updateSettings((s) => { sourceSettings(s, meta.group).enabled = v; })} />
+        </SettingRow>
+        <SettingRow title="Состояние" hint={cfg.enabled ? `${n} ${plural(n, "запись", "записи", "записей")}${st?.last_success_at ? ` · последняя проверка ${shortRelative(st.last_success_at)}` : ""}` : "Выключен"}>
+          {st && st.consecutive_failures > 0 && cfg.enabled && <Tag tone="orange" title={st.last_error ?? undefined}>сбои</Tag>}
+        </SettingRow>
+      </Group>
+      {overview.problems[meta.key] && <Notice tone="warn">{overview.problems[meta.key]}</Notice>}
+      <SourceEditor meta={meta} settings={overview.settings} hasVk={overview.hasVkToken} />
+      <Group title="Действия">
+        <SettingRow title="Проверить сейчас" hint="Запустит поиск только по этому источнику.">
+          <Button icon="play" disabled={search.running || !cfg.enabled} onClick={() => void startSearch([meta.key])}>Запустить</Button>
+        </SettingRow>
+        <SettingRow title="Сбросить историю источника" hint="Источник снова обработает записи, которые уже видел. Лиды в базе не удаляются.">
+          <Button variant="danger" onClick={async () => {
+            const ok = await confirmDialog({ title: `Сбросить историю источника «${meta.title}»?`, message: "При следующем поиске источник заново пройдёт по доступным записям.", confirm: "Сбросить", danger: true });
+            if (ok) { await attempt(() => api.resetSourceMemory(meta.key)); toast("Память источника очищена"); }
+          }}>Сбросить</Button>
+        </SettingRow>
+      </Group>
+    </>
   );
 }
 

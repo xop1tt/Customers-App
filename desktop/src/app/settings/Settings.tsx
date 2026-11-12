@@ -8,6 +8,7 @@ import { Appearance, SystemSection } from "./Appearance";
 import { NotificationsSection, SearchSection } from "./SearchSection";
 import { AccountSection } from "./AccountSection";
 import { DataSection, ExclusionsSection } from "./DataSection";
+import { SourcesSection } from "./SourcesSection";
 import { OutreachSection } from "./OutreachSection";
 import { ReportsSection, UpdatesSection } from "./SystemSections";
 
@@ -26,6 +27,7 @@ export const CATEGORIES: { title: string; items: Item[] }[] = [
   ] },
   { title: "Поиск клиентов", items: [
     { id: "search", title: "Автопоиск", icon: "search" },
+    { id: "sources", title: "Источники", icon: "database" },
     { id: "exclusions", title: "Исключения из поиска", icon: "ban" },
     { id: "outreach", title: "Почта и звонки", icon: "mail" },
   ] },
@@ -113,6 +115,7 @@ export function Settings() {
               {current.id === "appearance" && <Appearance />}
               {current.id === "system" && <SystemSection />}
               {current.id === "notifications" && <NotificationsSection />}
+              {current.id === "sources" && <SourcesSection />}
               {current.id === "search" && <SearchSection />}
               {current.id === "account" && <AccountSection />}
               {current.id === "data" && <DataSection />}

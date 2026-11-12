@@ -1,6 +1,6 @@
 import { intervalTitle } from "../../lib/format";
 import { Button, Group, Notice, Select, SettingRow, Switch } from "../../ui/kit";
-import { patchAccount, setSection, setState, useStore } from "../../state/store";
+import { openSettings, patchAccount, useStore } from "../../state/store";
 
 // Не чаще раза в 2 часа (решение Maksim): чаще источники не опрашиваются.
 const AUTO = [0, 120, 240, 480, 720, 1440];
@@ -21,7 +21,7 @@ export function SearchSection() {
           <Select width={170} value={a.newLeadsSearches} options={[1, 2, 3, 5, 10, 20].concat([a.newLeadsSearches]).filter((v, i, all) => all.indexOf(v) === i).sort((x, y) => x - y).map((n) => ({ value: n, label: String(n) }))} onChange={(v) => void patchAccount({ newLeadsSearches: v })} label="Новые лиды" />
         </SettingRow>
         <SettingRow title="Источники" hint={`Включено источников: ${enabled} из 4`}>
-          <Button onClick={() => { setState({ settings: null }); setSection("sources"); }}>Настроить источники</Button>
+          <Button onClick={() => openSettings("sources")}>Настроить источники</Button>
         </SettingRow>
       </Group>
       {enabled === 0 && <Notice tone="warn">Все источники выключены, поиск ничего не найдёт.</Notice>}
