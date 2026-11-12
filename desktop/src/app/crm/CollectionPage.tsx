@@ -30,7 +30,7 @@ export function CollectionPage() {
   // Отмеченные записи для массовых действий (держатся по идентификаторам, пока открыта коллекция).
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  // Удобный фильтр «чьи записи» (не право доступа: видимость задают роли, ADR-076).
+  // Удобный фильтр «чьи записи» (не право доступа: видимость задают роли, ADR-077).
   const [scope, setScope] = useState<"all" | "me" | "team" | "dept">("all");
   const team = useStore((s) => s.team);
   useEffect(() => { if (!team.length) void refreshTeam(); }, [team.length]);

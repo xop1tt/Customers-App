@@ -1,4 +1,4 @@
-// Справочник отделов поверх текста профиля (ADR-076) в демо-режиме ?team.
+// Справочник отделов поверх текста профиля (ADR-077) в демо-режиме ?team.
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

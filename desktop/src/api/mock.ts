@@ -4,7 +4,7 @@
 import catalog from "../../src-tauri/data/osm_catalog.json";
 import type {
   AccountPrefs, BootInfo, DevicePrefs, DrivesState, Exclusion, ExclusionKind, Lead, OsmCategory, SearchSettings, SearchStatus, SessionInfo, Snapshot, SourceReport,
-  SyncStatus, UpdateInfo, WsState,
+  SyncStatus, UpdateInfo, WsState, AiChatReply,
 } from "./types";
 import { wsCall } from "./wsMock";
 import { teamCall } from "./chatMock";
@@ -227,7 +227,32 @@ const drives: DrivesState = {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Демо «Интеграций» и «Ai»: настройки в памяти, отправленные сообщения запоминаются, ответы модели задаются тестом. */
+export const hubDemo = {
+  blob: {} as unknown,
+  sent: [] as { service: string; text: string }[],
+  models: ["demo-model-7b", "llama3.1"],
+  /** Ответ модели на запрос; по умолчанию — короткий текст. */
+  reply: ((_body: { messages: { role: string; content?: string | null }[] }): AiChatReply => ({ choices: [{ message: { role: "assistant", content: "Это демо-ответ локальной модели." } }] })) as (body: { messages: { role: string; content?: string | null }[] }) => AiChatReply,
+  reset() { this.blob = {}; this.sent = []; this.models = ["demo-model-7b", "llama3.1"]; this.reply = () => ({ choices: [{ message: { role: "assistant", content: "Это демо-ответ локальной модели." } }] }); },
+};
+
 export async function call(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+  if (cmd === "hub_load") return structuredClone(hubDemo.blob);
+  if (cmd === "hub_save") { hubDemo.blob = structuredClone(args.value); return null; }
+  if (cmd === "hub_send") {
+    const text = String(args.text ?? "");
+    const cfg = (args.config ?? (hubDemo.blob as { integrations?: Record<string, { enabled?: boolean }> }).integrations?.[String(args.service)]) as { enabled?: boolean } | undefined;
+    if (!cfg || (!args.config && cfg.enabled !== true)) throw { code: "", message: "Интеграция не подключена." };
+    hubDemo.sent.push({ service: String(args.service), text });
+    return "Сообщение отправлено.";
+  }
+  if (cmd === "ai_models") {
+    if (!/^https?:\/\//.test(String(args.baseUrl))) throw { code: "", message: "Адрес сервера модели: например, http://localhost:1234/v1" };
+    if (String(args.baseUrl).includes("offline")) throw { code: "", message: "Сервер модели недоступен: connection refused. Запущен ли он и включён ли локальный сервер?" };
+    return [...hubDemo.models];
+  }
+  if (cmd === "ai_chat") return hubDemo.reply(args.body as { messages: { role: string; content?: string | null }[] });
   if (cmd === "ws_market") {
     const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
     const remote = ws.workspaces.find((w) => w.id === ws.active)?.remote ?? false;

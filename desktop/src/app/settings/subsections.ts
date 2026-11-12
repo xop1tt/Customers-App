@@ -18,6 +18,7 @@ export function subsectionsOf(section: SettingsSection, cloud: boolean): SubSect
     case "updates": return [{ id: "version", title: "Версия" }, { id: "history", title: "История версий" }];
     case "outreach": return [{ id: "mail", title: "Почта" }, { id: "signature", title: "Подпись" }, { id: "calls", title: "Звонки" }];
     case "reports": return [{ id: "diagnostics", title: "Диагностика" }, { id: "log", title: "Журнал ошибок" }, { id: "crashes", title: "Отчёты о сбоях" }];
+    case "ai": return [{ id: "model", title: "Модель" }, { id: "access", title: "Доступ и подтверждения" }];
     case "sources": return SOURCES.map((s) => ({ id: s.key, title: s.title }));
     default: return [];
   }

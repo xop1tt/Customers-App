@@ -1,5 +1,7 @@
 // Канбан сделок (пакет B2): колонки этапов воронки, суммы, перенос сделки перетаскиванием или из меню.
 
+import { notifyEvent } from "../../state/hub";
+import { stageMessage } from "../../lib/hub";
 import { useMemo, useState } from "react";
 import { api } from "../../api";
 import type { CrmRecord } from "../../api/types";
@@ -46,7 +48,10 @@ export function DealBoard() {
 
   const moveTo = async (deal: CrmRecord, stage: CrmRecord) => {
     if (!canMove(deal, stage)) return;
-    if (await attempt(() => api.wsSave("deals", deal.id, { stage_id: stage.id }))) setTick((t) => t + 1);
+    if (await attempt(() => api.wsSave("deals", deal.id, { stage_id: stage.id }))) {
+      setTick((t) => t + 1);
+      void notifyEvent("deal.stage_changed", stageMessage(String(deal.title ?? deal.name ?? "Сделка"), String(stage.name), typeof deal.amount === "number" ? deal.amount : null, typeof deal.currency === "string" ? deal.currency : null));
+    }
   };
   const stageMenu = (deal: CrmRecord, anchor: DOMRect) =>
     showMenu(cols.map((c) => ({ label: String(c.stage.name), icon: c.stage.id === deal.stage_id ? "check" : undefined, disabled: !canMove(deal, c.stage), onSelect: () => void moveTo(deal, c.stage) })), anchor);

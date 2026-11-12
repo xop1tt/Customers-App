@@ -24,6 +24,7 @@ export function ModuleRail() {
     search: leads.filter((l) => !l.seen && matchesSection(l, "new", since) && l.data.relevance !== "rejected").length,
     messages: unreadTotal(chat),
     team: unreadNotifications(chat),
+    ai: 0,
   };
 
   return (

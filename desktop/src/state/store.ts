@@ -11,7 +11,7 @@ import { type LeadFilter, type SectionId, emptyFilter } from "../lib/leads";
 import { type LightModeReason, evaluate } from "../lib/powerPolicy";
 
 export type Phase = "loading" | "error" | "auth" | "welcome" | "ready";
-export type SettingsSection = "appearance" | "system" | "notifications" | "search" | "account" | "data" | "exclusions" | "outreach" | "reports" | "updates" | "sources";
+export type SettingsSection = "appearance" | "system" | "notifications" | "search" | "account" | "data" | "exclusions" | "outreach" | "reports" | "updates" | "sources" | "ai";
 export type ToastKind = "info" | "error" | "success";
 export interface Toast { id: number; kind: ToastKind; text: string }
 

@@ -702,6 +702,11 @@ export interface ChatPoll {
   live?: boolean;
 }
 
+// ---------------------------------------------------------------- локальная модель (OpenAI-совместимый ответ)
+
+export interface AiToolCall { id?: string; type?: string; function: { name: string; arguments: string | Record<string, unknown> } }
+export interface AiChatReply { choices: { message: { role: string; content: string | null; tool_calls?: AiToolCall[] }; finish_reason?: string }[] }
+
 // ---------------------------------------------------------------- маркетплейс
 
 export type MarketCategory = "crm" | "telephony" | "messaging" | "email" | "documents" | "analytics" | "marketing" | "other";
