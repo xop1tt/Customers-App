@@ -1,5 +1,5 @@
-// «Маркетплейс»: каталог интеграций сторонних компаний, установленные в Workspace, подача своих интеграций
-// и (для модераторов) проверка заявок. Окно — как «Настройки», но крупнее: каталогу нужно место.
+// «Интеграции» (прежде «Маркетплейс»): встроенные интеграции (Slack, Telegram, Notion и др.), интеграции сторонних компаний,
+// установленные в Workspace, подача своих интеграций и (для модераторов) проверка заявок. Окно — как «Настройки», но крупнее: каталогу нужно место.
 // Интеграция работает по манифесту: кнопки в карточках CRM и события на сервер разработчика, без чужого кода.
 
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +15,8 @@ import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, toast, useStore, NONE } from "../../state/store";
 import { CATEGORY_TEXT, EVENT_TEXT, SCOPE_TEXT, type MarketPage, closeMarket, openMarket, refreshMarketInstalled } from "../../state/market";
 import { openLink } from "../../state/actions";
+import { HUB_APPS } from "../../lib/hub";
+import { HubPage, HubTile, useHubStatus } from "./HubApps";
 
 const CATEGORIES = Object.keys(CATEGORY_TEXT) as MarketCategory[];
 
@@ -24,6 +26,7 @@ export function Marketplace() {
   const [moderator, setModerator] = useState(false);
   const [category, setCategory] = useState<MarketCategory | null>(null);
   const [openApp, setOpenApp] = useState<string | null>(null);
+  const [openHub, setOpenHub] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   useEffect(() => {
     if (!page || !cloud) return;
@@ -36,7 +39,7 @@ export function Marketplace() {
     return () => document.removeEventListener("keydown", key);
   }, [page]);
   if (!page) return null;
-  const go = (p: MarketPage, cat: MarketCategory | null = null) => { setOpenApp(null); setCategory(cat); openMarket(p); };
+  const go = (p: MarketPage, cat: MarketCategory | null = null) => { setOpenApp(null); setOpenHub(null); setCategory(cat); openMarket(p); };
   const titles: Record<MarketPage, string> = { catalog: "Каталог", installed: "Установленные", developer: "Для разработчиков", moderation: "Модерация" };
   const items: { id: MarketPage; icon: string; show: boolean }[] = [
     { id: "catalog", icon: "store", show: true },
@@ -47,9 +50,9 @@ export function Marketplace() {
 
   return createPortal(
     <div className="settings-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) closeMarket(); }}>
-      <div className="settings market" role="dialog" aria-modal="true" aria-label="Маркетплейс">
-        <nav className="settings-nav" aria-label="Разделы маркетплейса">
-          <h3 className="settings-title">Маркетплейс</h3>
+      <div className="settings market" role="dialog" aria-modal="true" aria-label="Интеграции">
+        <nav className="settings-nav" aria-label="Разделы интеграций">
+          <h3 className="settings-title">Интеграции</h3>
           <div className="settings-cat">
             {items.filter((x) => x.show).map((x) => (
               <div key={x.id} className="settings-item">
@@ -75,14 +78,16 @@ export function Marketplace() {
           </header>
           <div className="settings-scroll">
             <div className="settings-content market-content">
-              {!cloud ? (
-                <EmptyState icon="store" title="Маркетплейс доступен в облачной учётной записи">Войдите в облачную учётную запись, чтобы устанавливать интеграции и публиковать свои.</EmptyState>
+              {openHub ? (
+                <HubPage id={openHub} onBack={() => setOpenHub(null)} />
+              ) : (!cloud && (page === "developer" || page === "moderation" || openApp)) ? (
+                <EmptyState icon="store" title="Эта часть доступна в облачной учётной записи">Войдите в облачную учётную запись, чтобы устанавливать интеграции сторонних компаний и публиковать свои. Встроенные интеграции работают и без неё.</EmptyState>
               ) : openApp ? (
                 <AppPage id={openApp} onBack={() => setOpenApp(null)} onChanged={() => setVersion((v) => v + 1)} />
               ) : page === "catalog" ? (
-                <Catalog key={`c-${version}`} category={category} onOpen={setOpenApp} />
+                <Catalog key={`c-${version}`} category={category} cloud={cloud} onOpen={setOpenApp} onOpenHub={setOpenHub} />
               ) : page === "installed" ? (
-                <Installed key={`i-${version}`} onOpen={setOpenApp} />
+                <Installed key={`i-${version}`} cloud={cloud} onOpen={setOpenApp} onOpenHub={setOpenHub} />
               ) : page === "developer" ? (
                 <Developer />
               ) : (
@@ -99,11 +104,12 @@ export function Marketplace() {
 
 // ---------------------------------------------------------------- каталог
 
-function useCatalog(category: MarketCategory | null, query: string) {
+function useCatalog(category: MarketCategory | null, query: string, enabled = true) {
   const [apps, setApps] = useState<MarketApp[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   useEffect(() => {
+    if (!enabled) { setApps([]); return; }
     let live = true;
     const t = setTimeout(() => {
       void api.wsMarket<MarketApp[]>("market_catalog", { query: query.trim() || null, category }).then(
@@ -111,30 +117,48 @@ function useCatalog(category: MarketCategory | null, query: string) {
         (e: { message?: string }) => { if (live) { setApps([]); setError(e?.message ?? "Каталог не загрузился."); } });
     }, query ? 200 : 0);
     return () => { live = false; clearTimeout(t); };
-  }, [category, query, tick]);
+  }, [category, query, tick, enabled]);
   return { apps, error, reload: () => setTick((x) => x + 1) };
 }
 
-function Catalog({ category, onOpen }: { category: MarketCategory | null; onOpen: (id: string) => void }) {
+function Catalog({ category, cloud, onOpen, onOpenHub }: { category: MarketCategory | null; cloud: boolean; onOpen: (id: string) => void; onOpenHub: (id: string) => void }) {
   const [query, setQuery] = useState("");
-  const { apps, error } = useCatalog(category, query);
+  const { apps, error } = useCatalog(category, query, cloud);
+  const status = useHubStatus();
+  const q = query.trim().toLowerCase();
+  const own = HUB_APPS.filter((a) => (!category || a.category === category) && (!q || `${a.name} ${a.tagline} ${CATEGORY_TEXT[a.category]}`.toLowerCase().includes(q)));
   return (
     <div className="col" style={{ gap: 16, alignItems: "stretch" }}>
       <div className="market-hero">
         <div className="col" style={{ gap: 4 }}>
           <h2>Интеграции для Customers</h2>
-          <span className="faint">Телефония, документы, аналитика и мессенджеры от сторонних компаний. Каждая интеграция проверена модератором.</span>
+          <span className="faint">Мессенджеры, Notion, Битрикс24, диски и интеграции сторонних компаний. Встроенные работают на вашем компьютере: ключи хранятся только у вас.</span>
         </div>
         <TextInput value={query} onChange={setQuery} icon="search" placeholder="Название, задача или разработчик" aria-label="Поиск интеграций" wrapClass="market-search" onClear={query ? () => setQuery("") : undefined} />
       </div>
-      {error && <Notice tone="warn">{error}</Notice>}
-      {apps === null ? <div className="center-fill"><Spinner /></div> : apps.length === 0 ? (
-        <EmptyState icon="store" title={query || category ? "Ничего не нашлось" : "Пока пусто"}>{query || category ? "Измените запрос или категорию." : "Здесь появятся интеграции, когда разработчики их опубликуют."}</EmptyState>
-      ) : (
-        <ul className="market-grid" aria-label="Интеграции">
-          {apps.map((a) => <li key={a.id}><AppTile app={a} onOpen={() => onOpen(a.id)} /></li>)}
-        </ul>
+      {own.length > 0 && (
+        <section className="col" style={{ gap: 10 }}>
+          <h3>Встроенные</h3>
+          <ul className="market-grid" aria-label="Встроенные интеграции">
+            {own.map((a) => <li key={a.id}><HubTile app={a} status={status[a.id]} onOpen={() => onOpenHub(a.id)} /></li>)}
+          </ul>
+        </section>
       )}
+      <section className="col" style={{ gap: 10 }}>
+        <h3>От сторонних разработчиков</h3>
+        {!cloud ? <Notice>Интеграции сторонних компаний ставятся в облачное рабочее пространство: войдите в облачную учётную запись.</Notice> : (
+          <>
+            {error && <Notice tone="warn">{error}</Notice>}
+            {apps === null ? <div className="center-fill"><Spinner /></div> : apps.length === 0 ? (
+              <EmptyState icon="store" title={query || category ? "Ничего не нашлось" : "Пока пусто"}>{query || category ? "Измените запрос или категорию." : "Здесь появятся интеграции, когда разработчики их опубликуют. Каждая проверена модератором."}</EmptyState>
+            ) : (
+              <ul className="market-grid" aria-label="Интеграции">
+                {apps.map((a) => <li key={a.id}><AppTile app={a} onOpen={() => onOpen(a.id)} /></li>)}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }
@@ -265,17 +289,26 @@ function ManifestFacts({ m }: { m: MarketManifest }) {
 
 // ---------------------------------------------------------------- установленные
 
-function Installed({ onOpen }: { onOpen: (id: string) => void }) {
+function Installed({ cloud, onOpen, onOpenHub }: { cloud: boolean; onOpen: (id: string) => void; onOpenHub: (id: string) => void }) {
   const remote = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.remote ?? false);
-  const { apps, error } = useCatalog(null, "");
-  if (!remote) return <EmptyState icon="store" title="Интеграции ставятся в облачное рабочее пространство">Переключитесь на общее рабочее пространство команды.</EmptyState>;
+  const { apps, error } = useCatalog(null, "", cloud);
+  const status = useHubStatus();
+  const own = HUB_APPS.filter((a) => status[a.id] !== "none");
   const mine = (apps ?? []).filter((a) => a.installed);
   return (
     <div className="col" style={{ gap: 12, alignItems: "stretch" }}>
       {error && <Notice tone="warn">{error}</Notice>}
-      {apps === null ? <div className="center-fill"><Spinner /></div> : mine.length === 0 ? (
-        <EmptyState icon="store" title="Ничего не установлено">Выберите интеграцию в каталоге: её кнопки появятся в карточках CRM этого рабочего пространства.</EmptyState>
-      ) : (
+      {own.length === 0 && mine.length === 0 && apps !== null && (
+        <EmptyState icon="store" title="Ничего не установлено">Выберите интеграцию в каталоге.</EmptyState>
+      )}
+      {own.length > 0 && (
+        <ul className="market-grid" aria-label="Установленные встроенные интеграции">
+          {own.map((a) => <li key={a.id}><HubTile app={a} status={status[a.id]} onOpen={() => onOpenHub(a.id)} /></li>)}
+        </ul>
+      )}
+      {cloud && !remote && <Notice>Интеграции сторонних компаний ставятся в облачное рабочее пространство: переключитесь на общее пространство команды.</Notice>}
+      {cloud && remote && apps === null && <div className="center-fill"><Spinner /></div>}
+      {mine.length > 0 && (
         <ul className="market-grid" aria-label="Установленные интеграции">
           {mine.map((a) => (
             <li key={a.id}>

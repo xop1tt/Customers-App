@@ -11,6 +11,7 @@ import { DataSection, ExclusionsSection } from "./DataSection";
 import { SourcesSection } from "./SourcesSection";
 import { OutreachSection } from "./OutreachSection";
 import { ReportsSection, UpdatesSection } from "./SystemSections";
+import { AiSection } from "./AiSection";
 
 interface Item { id: SettingsSection; title: string; icon: string }
 
@@ -30,6 +31,9 @@ export const CATEGORIES: { title: string; items: Item[] }[] = [
     { id: "sources", title: "Источники", icon: "database" },
     { id: "exclusions", title: "Исключения из поиска", icon: "ban" },
     { id: "outreach", title: "Почта и звонки", icon: "mail" },
+  ] },
+  { title: "Ai", items: [
+    { id: "ai", title: "Локальная модель", icon: "bot" },
   ] },
   { title: "Данные", items: [
     { id: "data", title: "Копии и перенос", icon: "database" },
@@ -123,6 +127,7 @@ export function Settings() {
               {current.id === "outreach" && <OutreachSection />}
               {current.id === "reports" && <ReportsSection />}
               {current.id === "updates" && <UpdatesSection />}
+              {current.id === "ai" && <AiSection />}
             </div>
             </SubContext.Provider>
           </div>

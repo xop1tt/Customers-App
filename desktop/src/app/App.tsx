@@ -21,6 +21,8 @@ import { RunsPage } from "./pages/RunsPage";
 import { Settings } from "./settings/Settings";
 import { Marketplace } from "./market/Marketplace";
 import { useMarketInstalled } from "../state/market";
+import { useHubSync } from "../state/hub";
+import { AiPage } from "./pages/AiPage";
 import { ReportDialog } from "./settings/SystemSections";
 import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
@@ -223,6 +225,7 @@ function Shell() {
   const profileId = useStore((st) => st.profileId);
   useChatPolling();
   useMarketInstalled();
+  useHubSync();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
   const crm = section === "collection" || section === "today" || section === "calendar" || section === "deals" || section === "reports" || section === "trash";
   const leadOpen = lead && (inspLive !== null ? inspLive > 0 && !floatInsp : device.inspectorShown && (!floatInsp || selected === 1));
@@ -284,6 +287,7 @@ function Shell() {
           {section === "people" && <PeoplePage />}
           {section === "chat" && <ChatPage />}
           {section === "notifications" && <NotificationsPage />}
+          {section === "ai" && <AiPage />}
         </div>
       </main>
       {showInsp && floatInsp && (
