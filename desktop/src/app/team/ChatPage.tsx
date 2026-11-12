@@ -13,6 +13,7 @@ import { Dialog, type MenuItem, confirmDialog, showMenu } from "../../ui/overlay
 import { attempt, openProfile, useStore } from "../../state/store";
 import { conversationTitle, memberName, messageMember, openChat, openCrmCard, pollChat, refreshTeam } from "../../state/team";
 import { PersonAvatar } from "./PeoplePage";
+import { AccountBar } from "../Sidebar";
 
 const PAGE = 50;
 
@@ -66,6 +67,7 @@ export function ChatPage() {
             {shown.map((c) => <ConversationRow key={c.id} c={c} active={c.id === open} team={team} me={me} />)}
           </ul>
         )}
+        <div className="chat-list-foot"><AccountBar /></div>
       </aside>
       <section className="chat-main">
         {current ? <Conversation key={current.id} c={current} onChanged={reload} /> : (

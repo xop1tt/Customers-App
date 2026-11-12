@@ -37,7 +37,8 @@ const fit = (s: { w: number; h: number }) => ({
 });
 
 export function AiDrawer() {
-  const open = useStore((s) => s.aiOpen);
+  const aiOn = useHub().ai.enabled;
+  const open = useStore((s) => s.aiOpen) && aiOn;
   const [size, setSize] = useState(() => fit(loadSize()));
   const sizeRef = useRef(size);
   sizeRef.current = size;

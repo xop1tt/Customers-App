@@ -62,6 +62,7 @@ export function ProfilePage() {
   return (
     <div className="page scroll">
       <div className="profile">
+        <div><Button small variant="ghost" icon="chevronLeft" onClick={() => setState({ section: "people" })}>Назад</Button></div>
         <header className="profile-head">
           <span className="person-avatar big">
             <Avatar name={m.display_name} src={m.avatar} size={96} />
@@ -152,7 +153,7 @@ export function EditMemberDialog({ member, team, onClose }: { member: TeamMember
   const [manager, setManager] = useState(member.manager_id ?? "");
   const [hired, setHired] = useState(member.hired_on ?? "");
   const [busy, setBusy] = useState(false);
-  const mayDepartments = canManageDepartments(actor) && !self;
+  const mayDepartments = canManageDepartments(actor);
   const mayPosition = !self && assignable(actor, member).length > 0;
   const departments = [...new Set(team.map((m) => m.department.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru"));
   const NEW = "\u0000new";
@@ -172,6 +173,7 @@ export function EditMemberDialog({ member, team, onClose }: { member: TeamMember
     ...(department && !departments.includes(department) ? [{ value: department, label: department }] : []),
     ...(mayDepartments ? [{ value: NEW, label: "Новый отдел…" }] : []),
   ];
+  const isLead = member.role === "owner" || !!positionOf(title)?.lead;
   const depName = (department === NEW ? newDep : department).trim();
   const save = async () => {
     setBusy(true);
@@ -192,7 +194,7 @@ export function EditMemberDialog({ member, team, onClose }: { member: TeamMember
       </>
     }>
       <div className="col" style={{ gap: 14, alignItems: "stretch" }}>
-        <Field label="Должность" hint={mayPosition ? "Должность выдаёт роль и права: руководящая — права руководителя." : self ? "Свою должность меняет тот, кто выше по должности." : "Должность назначает тот, кто выше по должности."}>
+        <Field label="Должность" hint={mayPosition ? "Должность выдаёт роль и права: руководящая — права руководителя." : self ? (member.role === "owner" ? "Вы владелец: эта должность не меняется." : "Свою должность меняет тот, кто выше по должности.") : "Должность назначает тот, кто выше по должности."}>
           <Select value={title} onChange={setTitle} options={positionOptions} disabled={!mayPosition} label="Должность" />
         </Field>
         <Field label="Отдел" hint={mayDepartments ? undefined : "Отделы создают и распределяют владелец, заместители и руководители."}>
@@ -203,7 +205,11 @@ export function EditMemberDialog({ member, team, onClose }: { member: TeamMember
             <TextInput value={newDep} onChange={setNewDep} maxLength={120} placeholder="Например, отдел продаж" aria-label="Название нового отдела" autoFocus />
           </Field>
         )}
-        <Field label="Руководитель"><Select value={manager} onChange={setManager} options={options} /></Field>
+        {/* Руководитель — не выбор: руководящая должность (и владелец) делает им автоматически. */}
+        <Field label="Руководитель" hint="Определяется должностью: руководящая должность и владелец — руководители автоматически.">
+          <div className="row" style={{ gap: 8 }}><Tag tone={isLead ? "green" : "gray"} icon={isLead ? "check" : undefined}>{isLead ? "Да" : "Нет"}</Tag>{isLead && <span className="faint">{member.role === "owner" && !positionOf(title)?.lead ? "Владелец" : title}</span>}</div>
+        </Field>
+        {member.role !== "owner" && <Field label="Подчиняется"><Select value={manager} onChange={setManager} options={options} label="Подчиняется" /></Field>}
         <Field label="В компании с" hint="По умолчанию — дата входа в рабочее пространство.">
           <TextInput type="date" value={hired} onChange={setHired} aria-label="Дата прихода в компанию" />
         </Field>
