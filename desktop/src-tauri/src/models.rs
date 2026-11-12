@@ -218,6 +218,8 @@ impl LeadData {
             .and_then(Value::as_array)
             .map(|a| a.iter().filter_map(|x| serde_json::from_value(x.clone()).ok()).collect())
             .unwrap_or_default();
+        // Отметка «перенесён в CRM»: без неё интерфейс снова предлагает «Добавить в CRM», а обновление лида поиском стирает её.
+        d.crm = o.get("crm").filter(|v| v.is_object()).cloned();
         d
     }
 
@@ -426,6 +428,21 @@ mod tests {
         let out = d.to_value();
         assert_eq!(out["published_at"], "2026-11-05T09:42:00Z");
         assert_eq!(LeadData::from_value(&out), d);
+    }
+
+    /// Найдено приёмочной проверкой e2e: отметка «в CRM» терялась при чтении лида, и интерфейс снова предлагал перенос.
+    #[test]
+    fn crm_mark_survives_reading_and_roundtrip() {
+        let v: Value = serde_json::from_str(
+            r#"{"kind":"order","source":"fl_ru","external_id":"1","title":"Заказ",
+                "crm":{"workspace_id":"w","company_id":"c","contact_id":null,"deal_id":"d","converted_at":"2026-11-12T01:00:00Z"}}"#,
+        )
+        .unwrap();
+        let d = LeadData::from_value(&v);
+        assert_eq!(d.crm.as_ref().and_then(|m| m["deal_id"].as_str()), Some("d"));
+        assert_eq!(d.to_value()["crm"]["company_id"], "c");
+        assert_eq!(LeadData::from_value(&d.to_value()), d);
+        assert!(LeadData::from_value(&json!({"title": "Без отметки", "crm": "не объект"})).crm.is_none());
     }
 
     #[test]

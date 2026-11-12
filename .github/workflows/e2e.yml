@@ -1,0 +1,165 @@
+name: E2E
+
+# Приёмочные проверки настоящего приложения на macOS и Windows (docs/E2E.md).
+# Собирается то же приложение (Tauri 2), что и в релизе, но с флагом компиляции `--cfg e2e`: в окно после загрузки вставляется сценарий
+# (desktop/e2e), который нажимает кнопки и вызывает команды ядра, как интерфейс, и сверяет результат с эталоном (desktop/e2e/golden).
+# WebDriver не нужен: для WKWebView на macOS его нет, а сценарий внутри окна работает одинаково и в WKWebView, и в WebView2.
+# На каждый PR идут все детерминированные сценарии (около минуты после сборки); ночью и вручную добавляются проверки с настоящей сетью.
+# Секреты не используются; релиз собирается без флага e2e (release-check это проверяет).
+on:
+  pull_request:   # без фильтра путей: нужные файлы определяет задача changes
+  push:
+    branches: [main]
+    paths: ["desktop/**", ".github/workflows/e2e.yml"]
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      live:
+        description: "Добавить проверки с настоящей сетью (GitHub, ленты источников)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # Быстрее сборка, как в release.yml: без LTO и с 16 единицами компиляции. panic = abort остаётся, как в релизе.
+  CARGO_PROFILE_RELEASE_LTO: "off"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+
+jobs:
+  changes:
+    name: Changed files
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only "$BASE" HEAD | grep -Eq '^(desktop/|\.github/workflows/e2e\.yml$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  e2e:
+    name: E2E (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-15
+            args: --bundles app
+            bin: src-tauri/target/release/bundle/macos/Customers.app/Contents/MacOS/customers
+          - name: Windows
+            os: windows-latest
+            args: --no-bundle
+            bin: src-tauri/target/release/customers.exe
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --no-audit --no-fund
+
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            desktop/src-tauri/target
+          key: cargo-e2e-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-e2e-${{ runner.os }}-
+
+      # Тот же сборочный путь, что у релиза (tauri build: встроенный интерфейс, custom-protocol), плюс флаг компиляции e2e.
+      - name: Build the app with the e2e harness
+        env:
+          RUSTFLAGS: --cfg e2e
+        run: npx tauri build ${{ matrix.args }}
+
+      # Связка ключей не должна просить пароль у раннера без экранного сеанса: отдельная разблокированная связка.
+      - name: Unlocked keychain (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          security create-keychain -p "" e2e.keychain
+          security set-keychain-settings e2e.keychain
+          security unlock-keychain -p "" e2e.keychain
+          security default-keychain -s e2e.keychain
+          security list-keychains -d user -s e2e.keychain
+
+      - name: Run the acceptance scenarios
+        shell: bash
+        env:
+          BIN: ${{ matrix.bin }}
+          LIVE: ${{ github.event_name == 'schedule' || inputs.live }}
+        run: |
+          extra=""
+          if [ "$LIVE" = "true" ]; then extra="--live"; fi
+          node e2e/run.cjs --bin "$BIN" --dir "$RUNNER_TEMP/e2e" $extra
+
+      # Отчёты, журнал приложения и снимки экрана нужны, когда проверка не прошла.
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-${{ matrix.name }}
+          path: |
+            ${{ runner.temp }}/e2e/summary.txt
+            ${{ runner.temp }}/e2e/report-*.json
+            ${{ runner.temp }}/e2e/report-*.log
+            ${{ runner.temp }}/e2e/shots/
+            ${{ runner.temp }}/e2e/logs/
+            ${{ runner.temp }}/e2e/out/companies.csv
+            ${{ runner.temp }}/e2e/out/deals-en.csv
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Единственная проверка, которую при желании делают обязательной: успех или «пропущено» у всех задач выше.
+  gate:
+    name: E2E gate
+    if: always()
+    needs: [changes, e2e]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All jobs passed or were skipped by the path filter
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::Задача завершилась со статусом: $r"; exit 1 ;;
+            esac
+          done

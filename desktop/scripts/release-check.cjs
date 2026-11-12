@@ -51,6 +51,12 @@ check(otherConfs.length === 0, "одна конфигурация Tauri (без 
 
 // ---------------------------------------------------------------- без отладочных возможностей
 check(!/^\[features\]/m.test(cargo) || !/^beta\s*=/m.test(cargo.split("[features]")[1] ?? ""), "Cargo: признака beta нет", "Cargo: объявлен признак beta — Beta-сборки удалены (ADR-034)");
+// Флаг компиляции e2e (приёмочные проверки, docs/E2E.md) существует только для сборки в e2e.yml: в релиз он попасть не должен.
+for (const wf of ["release.yml", "desktop.yml"]) {
+  const f = path.join(root, "..", ".github", "workflows", wf);
+  if (fs.existsSync(f)) check(!/e2e|--cfg/i.test(fs.readFileSync(f, "utf8")), `${wf}: флага e2e нет`, `${wf}: упоминает e2e или --cfg — релизная сборка не должна включать тестовый драйвер`);
+}
+check(!/--cfg\s+e2e/.test(read("src-tauri/tauri.conf.json")) && !fs.existsSync(path.join(root, "src-tauri/.cargo/config.toml")), "флаг e2e не задан в конфигурации сборки", "флаг e2e задан в tauri.conf.json или .cargo/config.toml — он попал бы в релиз");
 const tauriDep = (cargo.match(/^tauri\s*=\s*\{[^}]*\}/m) || [""])[0];
 check(!/devtools/.test(tauriDep), "инструменты разработчика WebView не включены", "tauri собран с devtools — их не должно быть в релизе");
 const lib = read("src-tauri/src/lib.rs");

@@ -1,0 +1,10 @@
+{
+  "company": { "name": "ООО «Альфа Логистика»", "phones": ["+7 495 123-45-67"], "emails": ["info@alfa.example"], "industry": "Логистика", "address": "Москва, Тверская, 1" },
+  "contact": { "first_name": "Иван", "last_name": "Петров", "position": "Директор", "phones": ["+7 916 111-22-33"], "emails": ["ivan@alfa.example"] },
+  "contactFullName": "Иван Петров",
+  "deal": { "title": "Поставка пилотной партии", "amount": 150000, "currency": "RUB" },
+  "task": { "title": "Позвонить Ивану Петрову", "priority": "high" },
+  "note": "Договорились о демонстрации в пятницу",
+  "activity": "Исходящий звонок: обсудили условия",
+  "searchWord": "Альфа"
+}
