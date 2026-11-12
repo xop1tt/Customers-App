@@ -73,6 +73,17 @@ export function stopChat() {
   emit();
 }
 
+/** Сообщить, что модель закончила или ждёт ответа — если пользователь сейчас не смотрит в чат Ai. */
+function attention(title: string, body: string) {
+  if (!getHub().ai.notify || typeof document === "undefined") return;
+  const focused = document.hasFocus();
+  if (focused && getState().aiOpen) return;
+  if (focused) toast(`${title}: ${body}`);
+  else void api.aiNotify(title, body).catch(() => {});
+}
+
+const brief = (t: string, n = 140) => { const x = t.replace(/\s+/g, " ").trim(); return x.length > n ? `${x.slice(0, n)}…` : x; };
+
 /** Индекс последнего сообщения пользователя с вложением: только в нём изображения и звук отправляются повторно. */
 const lastHeavy = () => history.map((m, i) => (m.role === "user" && Array.isArray(m.content) && m.content.some((p) => p.type !== "text") ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
 
@@ -207,6 +218,7 @@ async function handleCall(call: AiToolCall, cfg: AiConfig, my: number): Promise<
   const confirm = needsConfirm(cfg.mode, tool.risk);
   const id = push({ kind: "action", tool: tool.name, risk: tool.risk, summary: tool.summary(args), status: confirm ? "pending" : "running", confirm });
   if (confirm) {
+    attention("Ai ждёт ответа", brief(tool.summary(args)));
     const ok = await new Promise<boolean>((resolve) => waiting.set(id, resolve));
     if (my !== epoch) return "Отменено.";
     if (!ok) { patch(id, { status: "rejected" }); return "Пользователь отклонил это действие."; }
@@ -233,6 +245,8 @@ export async function askAi(text: string, files: AiAttachment[] = []): Promise<v
   push({ kind: "user", text: t, ...(files.length ? { files: files.map((f) => f.name) } : {}) });
   history.push({ role: "user", content: userContent(t, files) });
   if (history.length > 40) history = history.slice(-40);
+  let outcome = "";
+  let failed = false;
   try {
     for (let step = 0; step <= cfg.maxSteps; step++) {
       const tools = step < cfg.maxSteps ? toolSpecs(cfg.allow) : [];
@@ -246,7 +260,7 @@ export async function askAi(text: string, files: AiAttachment[] = []): Promise<v
       if (!msg) throw { message: "Модель вернула пустой ответ." };
       const calls = (msg.tool_calls ?? []).filter((c) => c?.function?.name);
       history.push({ role: "assistant", content: msg.content ?? "", ...(calls.length ? { tool_calls: calls.map((c, i) => ({ ...c, id: c.id ?? `call_${step}_${i}`, type: "function" })) } : {}) });
-      if (msg.content?.trim()) push({ kind: "assistant", text: msg.content.trim() });
+      if (msg.content?.trim()) { push({ kind: "assistant", text: msg.content.trim() }); outcome = msg.content.trim(); }
       if (!calls.length) break;
       for (const [i, c] of calls.entries()) {
         const out = await handleCall(c, cfg, my);
@@ -256,9 +270,13 @@ export async function askAi(text: string, files: AiAttachment[] = []): Promise<v
       if (step === cfg.maxSteps) push({ kind: "error", text: "Достигнут предел шагов. Напишите «продолжай», если нужно." });
     }
   } catch (e) {
-    if (my === epoch) push({ kind: "error", text: errText(e) });
+    if (my === epoch) { push({ kind: "error", text: errText(e) }); failed = true; outcome = errText(e); }
   } finally {
-    if (my === epoch) { busy = false; emit(); }
+    if (my === epoch) {
+      busy = false;
+      emit();
+      attention(failed ? "Ai не смог ответить" : "Ai закончил", brief(outcome || "Готово."));
+    }
   }
 }
 

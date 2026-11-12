@@ -1,6 +1,6 @@
 // Чат Ai как выдвижная панель: кнопка в рейке, растягивание, вложения, изменение событий и назначение ответственных с проверкой прав.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api";
 import { hubDemo } from "../api/mock";
 import { addWsMockMember, resetWsMock, setWsMockRole } from "../api/wsMock";
@@ -238,5 +238,59 @@ describe("изменение событий и ответственные по �
     await run("сними ответственного");
     expect(seen[0]).toContain("Отказано");
     expect((await api.wsCard("tasks", task.id)).record.assignee_id).toBe(other);
+  });
+});
+
+describe("уведомления Ai", () => {
+  const focus = (v: boolean) => vi.spyOn(document, "hasFocus").mockReturnValue(v);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("окно не на виду: системное уведомление, когда модель закончила и когда ждёт подтверждения", async () => {
+    await connect({ mode: "writes" });
+    await ready();
+    focus(false);
+    hubDemo.reply = () => ({ choices: [{ message: { role: "assistant", content: "Всё сделал." } }] });
+    await act(async () => { await askAi("привет"); });
+    expect(hubDemo.notified).toEqual([{ title: "Ai закончил", body: "Всё сделал." }]);
+
+    hubDemo.notified = [];
+    script([{ name: "create_task", args: { title: "Позвонить" } }], "Готово.");
+    const p = askAi("создай задачу");
+    openAi();
+    await screen.findByRole("button", { name: "Выполнить" });
+    expect(hubDemo.notified[0]).toMatchObject({ title: "Ai ждёт ответа" });
+    expect(hubDemo.notified[0]!.body).toContain("Создать задачу");
+    fireEvent.click(screen.getByRole("button", { name: "Выполнить" }));
+    await act(async () => { await p; });
+    expect(hubDemo.notified.at(-1)).toMatchObject({ title: "Ai закончил", body: "Готово." });
+  });
+
+  it("окно в фокусе и чат закрыт — подсказка; чат открыт перед вами — тишина", async () => {
+    await connect();
+    await ready();
+    focus(true);
+    hubDemo.reply = () => ({ choices: [{ message: { role: "assistant", content: "Готов." } }] });
+    await act(async () => { await askAi("раз"); });
+    expect(await screen.findByText("Ai закончил: Готов.")).toBeInTheDocument();
+    expect(hubDemo.notified).toHaveLength(0);
+    openAi();
+    await screen.findByLabelText("Сообщение помощнику");
+    await act(async () => { await askAi("два"); });
+    expect(screen.queryAllByText("Ai закончил: Готов.")).toHaveLength(1);
+    expect(hubDemo.notified).toHaveLength(0);
+  });
+
+  it("настройка «Уведомлять об Ai» выключает все уведомления", async () => {
+    await connect({ notify: false });
+    await ready();
+    focus(false);
+    await act(async () => { await askAi("привет"); });
+    expect(hubDemo.notified).toHaveLength(0);
+    act(() => setState({ settings: "ai", settingsSub: "access" }));
+    const settings = await screen.findByRole("dialog", { name: "Настройки" });
+    const sw = await within(settings).findByRole("switch", { name: "Уведомлять, когда модель закончила или требует ответа" });
+    expect(sw).not.toBeChecked();
+    fireEvent.click(sw);
+    await waitFor(() => expect(JSON.stringify(hubDemo.blob)).toContain("\"notify\":true"));
   });
 });

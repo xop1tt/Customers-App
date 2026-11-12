@@ -1005,6 +1005,8 @@ export const EN: Record<string, string> = {
   "Ширина чата": "Chat width",
   "Выбрать файлы": "Choose files",
   "Стоп": "Stop",
+  "Уведомлять об Ai": "Notify about Ai",
+  "Уведомлять, когда модель закончила или требует ответа": "Notify when the model is done or needs an answer",
   "Модель понимает изображения": "Model understands images",
   "Модель понимает звук": "Model understands audio",
   "Локальная модель": "Local model",

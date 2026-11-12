@@ -168,6 +168,8 @@ export interface AiConfig {
   vision: boolean;
   /** Модель понимает звук (wav, mp3). */
   audio: boolean;
+  /** Уведомлять, когда модель закончила или ждёт ответа (подтверждения действия), если чат Ai сейчас не на виду. */
+  notify: boolean;
 }
 
 export type AiGroup = "read" | "navigate" | "settings" | "data" | "messages";
@@ -189,7 +191,7 @@ export const AI_PROVIDERS: { id: AiProvider; title: string; url: string; hint: s
 
 export const defaultAi = (): AiConfig => ({
   enabled: false, provider: "lmstudio", baseUrl: AI_PROVIDERS[0]!.url, model: "", apiKey: "", mode: "writes", system: "", temperature: 0.2, maxSteps: 6,
-  allow: ["read", "navigate", "settings", "data", "messages"], vision: false, audio: false,
+  allow: ["read", "navigate", "settings", "data", "messages"], vision: false, audio: false, notify: true,
 });
 
 export interface HubConfig { integrations: Record<string, HubIntegration>; ai: AiConfig }
@@ -220,6 +222,7 @@ export function normalizeHub(raw: unknown): HubConfig {
     allow: Array.isArray(a.allow) ? a.allow.filter((g): g is AiGroup => AI_GROUPS.some((x) => x.id === g)) : d.allow,
     vision: a.vision === true,
     audio: a.audio === true,
+    notify: a.notify !== false,
   };
   return { integrations, ai };
 }

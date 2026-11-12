@@ -90,6 +90,9 @@ export function AiSection() {
             <Checkbox checked={ai.allow.includes(g.id)} onChange={(v) => toggleGroup(g.id, v)} label={`Разрешить: ${g.title}`} />
           </SettingRow>
         ))}
+        <SettingRow title="Уведомлять об Ai" hint="Сообщать, когда модель закончила или ждёт вашего ответа (подтверждения действия). Если окно не на виду — системным уведомлением, если вы в другом разделе при закрытом чате — подсказкой. Пока чат открыт перед вами, уведомлений нет.">
+          <Switch checked={ai.notify} onChange={(v) => void saveAi({ notify: v })} label="Уведомлять, когда модель закончила или требует ответа" />
+        </SettingRow>
         <SettingRow title="Модель понимает изображения" hint="Включите, если выбрана мультимодальная модель (например, с «vision»): тогда в чат можно прикладывать картинки. Текстовые файлы (txt, csv, json и др.) работают с любой моделью.">
           <Switch checked={ai.vision} onChange={(v) => void saveAi({ vision: v })} label="Модель понимает изображения" />
         </SettingRow>
