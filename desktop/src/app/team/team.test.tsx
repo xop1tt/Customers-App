@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.hoisted(() => { window.history.replaceState({}, "", "/?team"); });
 
 import { resetChatMock } from "../../api/chatMock";
-import { resetWsMock } from "../../api/wsMock";
+import { resetWsMock, setWsMockRole } from "../../api/wsMock";
 import { getState } from "../../state/store";
 import { App } from "../App";
 
@@ -72,11 +72,27 @@ describe("сотрудники и профили", () => {
     fireEvent.click(await screen.findByText("Глеб Орлов"));
     fireEvent.click(await screen.findByRole("button", { name: "Изменить карточку" }));
     const dialog = await screen.findByRole("dialog", { name: /Карточка: Глеб Орлов/ });
-    const title = within(dialog).getByPlaceholderText("Например, менеджер по продажам");
-    fireEvent.change(title, { target: { value: "Старший менеджер" } });
+    // Должность — выпадающий список справочника, а не текст (ADR-079); руководитель-менеджер (ранг 60) её не назначает.
+    expect(within(dialog).getByRole("button", { name: "Должность" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Отдел" })).toBeDisabled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(await screen.findByText("Старший менеджер · Продажи")).toBeInTheDocument();
+  });
+
+  it("владелец назначает должность из списка, и ей выдаётся роль", async () => {
+    setWsMockRole("owner");
+    const n = await nav();
+    fireEvent.click(within(n).getByRole("button", { name: /Сотрудники/ }));
+    fireEvent.click(await screen.findByText("Глеб Орлов"));
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить карточку" }));
+    const dialog = await screen.findByRole("dialog", { name: /Карточка: Глеб Орлов/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Должность" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^Менеджер\s*Работает/ }));
+    expect(within(dialog).queryByPlaceholderText("Например, менеджер по продажам")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await screen.findByText("Менеджер · Продажи")).toBeInTheDocument();
+    expect(getState().ws?.members.find((m) => m.displayName === "Глеб Орлов")?.role).toBe("manager");
   });
 
   it("свой профиль открывается из меню и ведёт в настройки", async () => {

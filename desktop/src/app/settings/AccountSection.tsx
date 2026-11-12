@@ -6,6 +6,10 @@ import { Avatar, Button, Field, Group, Notice, PasswordInput, SettingRow, Sub, S
 import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, leaveSession, toast, useStore } from "../../state/store";
 import { syncView } from "../Sidebar";
+import { nameLocked } from "../../lib/positions";
+import { useActor } from "../team/actor";
+import { RequestDialog } from "../team/Requests";
+import { refreshTeam } from "../../state/team";
 
 const PASSWORD_RULES = "Пароль: не короче 8 символов, строчные и заглавные буквы и цифры.";
 
@@ -35,6 +39,14 @@ function ProfileGroup() {
   const session = useStore((s) => s.session);
   const [name, setName] = useState(session?.displayName ?? "");
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const ws = useStore((s) => s.ws);
+  const team = useStore((s) => s.team);
+  const actor = useActor();
+  useEffect(() => { if (ws?.workspaces.find((w) => w.id === ws.active)?.remote) void refreshTeam(); }, [ws?.active]);
+  // В облачном рабочем пространстве имя задаёт ответственный при оформлении; сотрудник меняет его только через руководителя (ADR-079).
+  const locked = !!ws?.workspaces.find((w) => w.id === ws.active)?.remote && nameLocked(actor);
+  const meMember = team.find((m) => m.user_id === ws?.me);
   const file = useRef<HTMLInputElement>(null);
   useEffect(() => setName(session?.displayName ?? ""), [session?.displayName]);
   if (!session) return null;
@@ -55,10 +67,15 @@ function ProfileGroup() {
         <Button icon="upload" onClick={() => file.current?.click()}>{session.avatar ? "Заменить" : "Выбрать"}</Button>
         {session.avatar && <Button variant="ghost" onClick={() => void attempt(() => api.setProfile(undefined, ""))}>Убрать</Button>}
       </SettingRow>
-      <SettingRow title="Имя" hint="Показывается в приложении вместо адреса почты.">
-        <TextInput value={name} onChange={setName} maxLength={40} wrapClass="w-name" onKeyDown={(e) => { if (e.key === "Enter" && name.trim() && name.trim() !== session.displayName) void saveName(); }} />
-        <Button busy={busy} disabled={!name.trim() || name.trim() === session.displayName} onClick={() => void saveName()}>Сохранить</Button>
+      <SettingRow title="Имя" hint={locked ? "Имя профиля задал ответственный при оформлении. Изменить его можно только с разрешения руководителя." : "Показывается в приложении вместо адреса почты."}>
+        <TextInput value={name} onChange={setName} maxLength={40} wrapClass="w-name" disabled={locked} aria-label="Имя" onKeyDown={(e) => { if (!locked && e.key === "Enter" && name.trim() && name.trim() !== session.displayName) void saveName(); }} />
+        {locked ? (
+          <Button icon="mail" disabled={!meMember} onClick={() => setAsking(true)}>Запрос на смену имени</Button>
+        ) : (
+          <Button busy={busy} disabled={!name.trim() || name.trim() === session.displayName} onClick={() => void saveName()}>Сохранить</Button>
+        )}
       </SettingRow>
+      {asking && meMember && <RequestDialog kind="name" author={meMember} team={team} current={session.displayName} onClose={() => setAsking(false)} />}
     </Group>
   );
 }
