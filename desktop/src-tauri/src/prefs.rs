@@ -24,6 +24,9 @@ pub fn normalize_color(raw: &str) -> Option<String> {
     (s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit())).then(|| format!("#{}", s.to_uppercase()))
 }
 
+/// Самый частый автопоиск: раз в 2 часа.
+pub const MIN_AUTO_SEARCH_MINUTES: u32 = 120;
+
 /// Настройки этого компьютера, не относящиеся к учётной записи.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -175,6 +178,8 @@ fn normalized_hours(h: u32) -> u32 {
 #[serde(rename_all = "camelCase", default)]
 pub struct AccountPrefs {
     pub auto_search_minutes: u32,
+    /// Сколько последних поисков считать «новыми»: лиды, найденные в них, показываются в разделе «Новые».
+    pub new_leads_searches: u32,
     pub signature: String,
     /// Папка резервных копий; пусто — стандартная.
     pub backup_directory: String,
@@ -203,7 +208,8 @@ pub struct AccountPrefs {
 impl Default for AccountPrefs {
     fn default() -> Self {
         Self {
-            auto_search_minutes: 60,
+            auto_search_minutes: MIN_AUTO_SEARCH_MINUTES,
+            new_leads_searches: 1,
             signature: String::new(),
             backup_directory: String::new(),
             auto_backup: true,
@@ -226,7 +232,11 @@ impl Default for AccountPrefs {
 
 impl AccountPrefs {
     pub fn normalize(&mut self) {
-        self.auto_search_minutes = self.auto_search_minutes.min(24 * 60);
+        // Автопоиск: выключен (0) или не чаще раза в 2 часа (решение Maksim), не реже раза в сутки.
+        if self.auto_search_minutes != 0 {
+            self.auto_search_minutes = self.auto_search_minutes.clamp(MIN_AUTO_SEARCH_MINUTES, 24 * 60);
+        }
+        self.new_leads_searches = self.new_leads_searches.clamp(1, 50);
         self.keep_backups = self.keep_backups.clamp(1, 365);
         // До версии 2 «выключено» записывалось при любом сохранении настроек, даже если пользователь
         // его не трогал, поэтому старое значение не считается выбором: звонок подтверждается по умолчанию.
@@ -429,7 +439,7 @@ mod tests {
         fs::write(dir.path().join("bad.json"), "{не json").unwrap();
         assert_eq!(PrefsFile::<DevicePrefs>::load(&dir.path().join("bad.json")).value, DevicePrefs::default());
         let a = PrefsFile::<AccountPrefs>::load(&dir.path().join("prefs.json")).value;
-        assert_eq!((a.auto_search_minutes, a.keep_backups, a.auto_backup, a.confirm_calls, a.mail_delivery.as_str()), (60, 14, true, true, "mailApp"));
+        assert_eq!((a.auto_search_minutes, a.keep_backups, a.auto_backup, a.confirm_calls, a.mail_delivery.as_str()), (120, 14, true, true, "mailApp"));
     }
 
     #[test]
@@ -443,6 +453,33 @@ mod tests {
         assert!(!p.nav_open && p.compact_rows);
         assert_eq!((p.remembered_user.as_deref(), p.last_section.as_str(), p.list_sort.as_str()), (Some("anna"), "favorites", "score"));
         assert_eq!(p.last_update_check().unwrap().timestamp(), 1_793_871_720);
+    }
+
+    #[test]
+    fn auto_search_is_off_or_at_most_every_two_hours() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut f = PrefsFile::<AccountPrefs>::load(&dir.path().join("prefs.json"));
+        assert_eq!(f.value.auto_search_minutes, 120);
+        f.patch(&json!({"autoSearchMinutes": 15}));
+        assert_eq!(f.value.auto_search_minutes, 120, "чаще, чем раз в 2 часа, нельзя");
+        f.patch(&json!({"autoSearchMinutes": 0}));
+        assert_eq!(f.value.auto_search_minutes, 0, "выключить можно");
+        f.patch(&json!({"autoSearchMinutes": 480}));
+        assert_eq!(f.value.auto_search_minutes, 480);
+    }
+
+    #[test]
+    fn new_leads_searches_defaults_to_one_and_stays_in_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("prefs.json");
+        assert_eq!(PrefsFile::<AccountPrefs>::load(&path).value.new_leads_searches, 1);
+        let mut f = PrefsFile::<AccountPrefs>::load(&path);
+        assert!(f.patch(&json!({"newLeadsSearches": 3})));
+        assert_eq!(f.value.new_leads_searches, 3);
+        assert!(f.patch(&json!({"newLeadsSearches": 0})));
+        assert_eq!(f.value.new_leads_searches, 1, "ноль не бывает: хотя бы последний поиск");
+        assert!(f.patch(&json!({"newLeadsSearches": 999})));
+        assert_eq!(f.value.new_leads_searches, 50);
     }
 
     #[test]
@@ -528,7 +565,7 @@ mod tests {
         assert!(acc.patch(&legacy_account_patch(&d, "Anna")));
         assert_eq!(
             (acc.value.auto_search_minutes, acc.value.backup_directory.as_str(), acc.value.keep_backups, acc.value.welcome_done),
-            (30, "/Users/a/Копии", 14, true)
+            (120, "/Users/a/Копии", 14, true)
         );
         assert_eq!(acc.value.mail_account, r#"{"email":"a@b.c"}"#);
         assert_eq!(legacy_notion_config(&d, "Anna").as_deref(), Some(r#"{"database":"x"}"#));

@@ -174,6 +174,8 @@ export interface DevicePrefs {
 
 export interface AccountPrefs {
   autoSearchMinutes: number;
+  /** Сколько последних поисков считать «новыми» (1–50). */
+  newLeadsSearches: number;
   signature: string;
   backupDirectory: string;
   autoBackup: boolean;

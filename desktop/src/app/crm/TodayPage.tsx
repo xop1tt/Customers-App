@@ -7,6 +7,7 @@ import { STALE_DAYS, todayGroups } from "../../lib/board";
 import { can, ENTITIES } from "../../lib/crm";
 import { integer, plural } from "../../lib/format";
 import { matchesSection } from "../../lib/leads";
+import { useNewSince } from "../../state/hooks";
 import { Button, Checkbox, EmptyState, Score, Segmented, Spinner } from "../../ui/kit";
 import { attempt, openRecord, select, setSection, useStore } from "../../state/store";
 import { useLookup, useWsQuery } from "./useCrm";
@@ -19,6 +20,7 @@ const day = (iso: unknown) => new Date(String(iso)).toLocaleDateString("ru-RU", 
 export function TodayPage() {
   const ws = useStore((s) => s.ws);
   const leads = useStore((s) => s.snap.leads);
+  const since = useNewSince();
   const lk = useLookup();
   const [scope, setScope] = useState<"mine" | "all">("mine");
   const [tick, setTick] = useState(0);
@@ -36,8 +38,8 @@ export function TodayPage() {
   const perms = ws?.permissions ?? [];
   const me = ws?.me;
   const g = todayGroups(data.tasks, data.deals, new Date(), scope === "mine" ? me : undefined);
-  const fresh = leads.filter((l) => matchesSection(l, "new")).sort((a, b) => b.data.score - a.data.score).slice(0, 5);
-  const freshTotal = leads.filter((l) => matchesSection(l, "new")).length;
+  const fresh = leads.filter((l) => matchesSection(l, "new", since)).sort((a, b) => b.data.score - a.data.score).slice(0, 5);
+  const freshTotal = leads.filter((l) => matchesSection(l, "new", since)).length;
 
   const done = async (t: CrmRecord) => {
     if (await attempt(() => api.wsSave("tasks", t.id, { status: "done" }))) setTick((n) => n + 1);

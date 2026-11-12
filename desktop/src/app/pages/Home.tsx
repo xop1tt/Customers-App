@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { dailyCounts, isNew, SECTIONS, count } from "../../lib/leads";
+import { dailyCounts, matchesSection, SECTIONS, count } from "../../lib/leads";
+import { useNewSince } from "../../state/hooks";
 import { dateOnly, dayShort, integer, plural, shortRelative } from "../../lib/format";
 import { SOURCES, sourceItemCount, sourceSettings } from "../../lib/sources";
 import { Button, EmptyState, Notice, Score, Tag } from "../../ui/kit";
@@ -25,7 +26,8 @@ export function HomePage() {
   const overview = useStore((s) => s.overview);
   const search = useStore((s) => s.search);
 
-  const fresh = useMemo(() => leads.filter(isNew).sort((a, b) => b.data.score - a.data.score), [leads]);
+  const since = useNewSince();
+  const fresh = useMemo(() => leads.filter((l) => matchesSection(l, "new", since)).sort((a, b) => b.data.score - a.data.score), [leads, since]);
   const series = useMemo(() => dailyCounts(leads, 14), [leads]);
   const max = Math.max(4, ...series.map((p) => p.orders + p.organizations));
   const total = count(leads, "all", true);

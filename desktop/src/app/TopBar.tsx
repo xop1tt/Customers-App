@@ -1,49 +1,36 @@
 import { SECTIONS, isLeadList } from "../lib/leads";
-import { integer, shortRelative } from "../lib/format";
+import { integer } from "../lib/format";
 import { Avatar, Button, IconButton, Spinner, TextInput } from "../ui/kit";
 import { Icon } from "../ui/icons";
 import { sourceTitle } from "../lib/sources";
-import { openRecord, patchDevice, setFilter, setState, useStore } from "../state/store";
+import { setFilter, setState, useStore } from "../state/store";
 import { startSearch, stopSearch } from "../state/actions";
 import { visibleLeads } from "../lib/leads";
 import { useMemo, useRef, useState } from "react";
 import { Popover } from "../ui/overlay";
-import { useViewportWidth } from "../state/hooks";
+import { useNewSince, useViewportWidth } from "../state/hooks";
 import { modKey } from "../lib/platform";
 import { toggleQuick } from "./QuickSearch";
 import { moduleOf } from "../lib/modules";
 import { collectionGlyph } from "../lib/crm";
 
-export function TopBar({ narrow }: { narrow: boolean }) {
-  const navPeek = useStore((s) => s.navPeek);
+export function TopBar() {
   const section = useStore((s) => s.section);
   const filter = useStore((s) => s.filter);
   const leads = useStore((s) => s.snap.leads);
-  const device = useStore((s) => s.device);
   const search = useStore((s) => s.search);
-  const sync = useStore((s) => s.sync);
   const ws = useStore((s) => s.ws);
   const sourceTitleKey = filter.source;
   const collection = useStore((s) => (s.section === "collection" ? s.collections.find((c) => c.id === s.collectionId) : undefined));
   const lead = isLeadList(section);
-  const shown = useMemo(() => (lead ? visibleLeads(leads, section, filter).length : 0), [leads, section, filter, lead]);
+  const since = useNewSince();
+  const shown = useMemo(() => (lead ? visibleLeads(leads, section, filter, since).length : 0), [leads, section, filter, lead, since]);
 
   const cg = collection ? collectionGlyph(collection) : null;
   const topGlyph = cg && "emoji" in cg ? cg.emoji : <Icon name={cg && "icon" in cg ? cg.icon : SECTIONS[section].icon} size={22} />;
 
-  const syncText = sync?.enabled
-    ? sync.kind === "syncing" ? "Синхронизация…" : sync.kind === "offline" ? "Нет сети" : sync.kind === "failed" ? "Ошибка синхронизации" : sync.lastSync ? `Синхронизировано ${shortRelative(sync.lastSync)}` : "Синхронизация включена"
-    : null;
-
   return (
     <header className="topbar">
-      {/* Кнопка левой панели всегда на левом краю строки: свернуть или показать. */}
-      <IconButton
-        icon="sidebar"
-        tip={(narrow ? navPeek : device.navOpen) ? "Свернуть панель" : "Показать панель"}
-        aria-label={(narrow ? navPeek : device.navOpen) ? "Свернуть панель" : "Показать панель"}
-        onClick={() => (narrow ? setState({ navPeek: !navPeek }) : void patchDevice({ navOpen: !device.navOpen }))}
-      />
       <div className="topbar-title">
         <span className="topbar-emoji" aria-hidden="true">{topGlyph}</span>
         <h2 className="ellipsis">{collection ? collection.name : SECTIONS[section].title}{sourceTitleKey && section === "all" ? <span className="muted"> · {sourceTitle(sourceTitleKey)}</span> : null}</h2>
@@ -62,24 +49,19 @@ export function TopBar({ narrow }: { narrow: boolean }) {
           aria-label="Поиск по лидам"
         />
       )}
-      {syncText && (
-        <span className={`sync-chip ${sync?.kind === "failed" || sync?.kind === "offline" ? "bad" : ""}`} data-tip={sync?.message ?? undefined}>
-          <Icon name={sync?.kind === "offline" || sync?.kind === "failed" ? "cloudOff" : "cloud"} size={13} />
-          <span className="ellipsis">{syncText}</span>
-        </span>
-      )}
       {ws && <IconButton icon="search" tip={`Быстрый поиск (${modKey()}+K)`} aria-label="Быстрый поиск" onClick={toggleQuick} />}
       <WorkspaceAvatars />
-      {search.running ? (
-        <Button onClick={() => void stopSearch()} icon="stop" className="search-btn">
-          <span className="ellipsis search-progress">{search.progress ?? "Идёт поиск…"}</span>
-        </Button>
+      {/* «Найти лиды» — только в модуле «Поиск»; в CRM кнопки нет. */}
+      {moduleOf(section) === "search" && (search.running ? (
+        <>
+          <Button onClick={() => void stopSearch()} icon="stop" className="search-btn">
+            <span className="ellipsis search-progress">{search.progress ?? "Идёт поиск…"}</span>
+          </Button>
+          <Spinner size={14} />
+        </>
       ) : (
-        <Button variant={moduleOf(section) === "search" ? "primary" : undefined} icon="search" onClick={() => void startSearch()} className="search-btn">Найти лиды</Button>
-      )}
-      {!search.running && ws?.active && section === "today" && <Button variant="primary" icon="plus" onClick={() => openRecord("deals", "new")}>Новая сделка</Button>}
-      {search.running && <Spinner size={14} />}
-      {lead && <IconButton icon="panelRight" tip={device.inspectorShown ? "Скрыть панель сведений" : "Показать панель сведений"} active={device.inspectorShown} onClick={() => void patchDevice({ inspectorShown: !device.inspectorShown })} />}
+        <Button variant="primary" icon="search" onClick={() => void startSearch()} className="search-btn">Найти лиды</Button>
+      ))}
     </header>
   );
 }

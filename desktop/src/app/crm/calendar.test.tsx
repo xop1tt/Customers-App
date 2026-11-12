@@ -37,6 +37,8 @@ describe("календарь CRM", () => {
     await api.wsSave("activities", null, { type: "meeting", summary: "Показали макеты", occurred_at: at(day, 12), entity_type: "company", entity_id: company.id, payload: {} });
     render(<CalendarPage />);
     await screen.findByRole("grid");
+    // Неделя показывает все записи дня: в месяце лишнее сворачивается в «ещё N», а стартовые записи демо зависят от времени суток.
+    fireEvent.click(screen.getByRole("tab", { name: "Неделя" }));
     const box = cell(day);
     const chip = await within(box).findByRole("button", { name: "15:30 Встреча с клиентом" });
     expect(box.className).toContain("today");
@@ -105,6 +107,8 @@ describe("календарь CRM", () => {
     setState({ ws: await api.wsState() });
     render(<CalendarPage />);
     await screen.findByRole("grid");
+    // Неделя показывает все записи дня: в месяце лишнее сворачивается в «ещё N», а стартовые записи демо зависят от времени суток.
+    fireEvent.click(screen.getByRole("tab", { name: "Неделя" }));
     // «Мои»: чужая задача скрыта, пока не выбран показ всех.
     await within(cell(day)).findByRole("button", { name: "10:00 Звонок: Созвон" });
     expect(within(cell(day)).queryByText("Чужая задача")).toBeNull();

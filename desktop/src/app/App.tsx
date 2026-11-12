@@ -1,8 +1,7 @@
 import { QuickSearch, toggleQuick } from "./QuickSearch";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { isLeadList } from "../lib/leads";
-import { HoverReveal } from "../lib/hoverReveal";
 import { applyAccent, applyTheme, resolveTheme, systemIsDark } from "../lib/theme";
 import { resolveLanguage, setLanguage, systemLanguage } from "../lib/i18n";
 import { BASE_AUTO } from "../lib/autoScale";
@@ -18,7 +17,6 @@ import { TopBar } from "./TopBar";
 import { Inspector } from "./Inspector";
 import { HomePage } from "./pages/Home";
 import { LeadsPage } from "./pages/LeadsPage";
-import { SourcesPage } from "./pages/SourcesPage";
 import { RunsPage } from "./pages/RunsPage";
 import { Settings } from "./settings/Settings";
 import { Marketplace } from "./market/Marketplace";
@@ -151,66 +149,45 @@ function Toasts() {
   );
 }
 
-/** Ручка для изменения ширины панели; итоговое значение сохраняется при отпускании. */
-function Resizer({ side, value, min, max, onLive, onCommit }: { side: "left" | "right"; value: number; min: number; max: number; onLive: (v: number) => void; onCommit: (v: number) => void }) {
+/**
+ * Ручка у края панели. Тянется в обе стороны: если потянуть до `collapseAt` и меньше, панель сворачивается (0);
+ * у свёрнутой панели ручка остаётся у края, курсор над ней — «вытянуть панель», зажатием панель выдвигается.
+ * `value` — текущая ширина (0 — свёрнута); итог сохраняется при отпускании.
+ */
+function Resizer({ side, value, min, max, collapseAt, defaultW, onLive, onCommit }: { side: "left" | "right"; value: number; min: number; max: number; collapseAt: number; defaultW: number; onLive: (v: number) => void; onCommit: (v: number) => void }) {
   const start = useRef<{ x: number; w: number } | null>(null);
   const last = useRef(value);
+  const finish = () => { document.body.classList.remove("resizing"); if (start.current) { start.current = null; onCommit(last.current); } };
   return (
     <div
-      className="resizer"
+      className={`resizer${value === 0 ? ` collapsed ${side}` : ""}`}
       role="separator"
       aria-orientation="vertical"
+      aria-label="Ширина панели"
       aria-valuenow={value}
       tabIndex={0}
       onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture(e.pointerId); start.current = { x: e.clientX, w: value }; last.current = value; document.body.classList.add("resizing"); }}
       onPointerMove={(e) => {
         if (!start.current) return;
         const dx = e.clientX - start.current.x;
-        const w = clamp(Math.round(start.current.w + (side === "left" ? dx : -dx)), min, max);
+        const raw = Math.round(start.current.w + (side === "left" ? dx : -dx));
+        const w = raw < collapseAt ? 0 : clamp(raw, min, max);
         last.current = w;
         onLive(w);
       }}
-      onPointerUp={() => { document.body.classList.remove("resizing"); if (start.current) { start.current = null; onCommit(last.current); } }}
-      onPointerCancel={() => { document.body.classList.remove("resizing"); if (start.current) { start.current = null; onCommit(last.current); } }}
-      onDoubleClick={() => onCommit(side === "left" ? 260 : 400)}
+      onPointerUp={finish}
+      onPointerCancel={finish}
+      onDoubleClick={() => onCommit(value === 0 ? defaultW : 0)}
       onKeyDown={(e) => {
         const step = e.shiftKey ? 40 : 12;
         if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
           e.preventDefault();
           const sign = (e.key === "ArrowRight" ? 1 : -1) * (side === "left" ? 1 : -1);
-          onCommit(clamp(value + sign * step, min, max));
+          const next = value + sign * step;
+          onCommit(next < collapseAt ? 0 : clamp(value === 0 ? min : next, min, max));
         }
       }}
     />
-  );
-}
-
-function HoverNav() {
-  const [revealed, setRevealed] = useState(false);
-  const hr = useRef(new HoverReveal());
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const now = () => performance.now() / 1000;
-  const schedule = useCallback(() => {
-    if (timer.current) clearTimeout(timer.current);
-    const delay = hr.current.nextDelay(now());
-    if (delay === null) return;
-    timer.current = setTimeout(() => {
-      hr.current.setBusy(!!document.querySelector(".popover, .scrim"), now());
-      if (hr.current.tick(now())) setRevealed(hr.current.revealed);
-      schedule();
-    }, delay * 1000 + 5);
-  }, []);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  const touch = (fn: () => void) => { fn(); schedule(); };
-  return (
-    <>
-      <div className="hover-edge" onPointerEnter={() => touch(() => hr.current.setEdge(true, now()))} onPointerLeave={() => touch(() => hr.current.setEdge(false, now()))} />
-      {revealed && (
-        <div className="hover-panel" onPointerEnter={() => touch(() => hr.current.setPanel(true, now()))} onPointerLeave={() => touch(() => hr.current.setPanel(false, now()))}>
-          <Sidebar overlay />
-        </div>
-      )}
-    </>
   );
 }
 
@@ -222,8 +199,10 @@ function Shell() {
   const [navLive, setNavLive] = useState<number | null>(null);
   const [inspLive, setInspLive] = useState<number | null>(null);
   const lead = isLeadList(section);
-  const navW = navLive ?? device.navWidth;
-  const inspW = inspLive ?? device.inspectorWidth;
+  // Видимая ширина левой панели: при перетаскивании — живое значение, иначе сохранённое (0 — свёрнута).
+  const navVis = navLive ?? (device.navOpen ? device.navWidth : 0);
+  const navW = navVis || device.navWidth;
+  const inspW = inspLive && inspLive > 0 ? inspLive : device.inspectorWidth;
 
   useEffect(() => {
     void api.whatsNew().then((w) => { if (w.show) setState({ whatsNewOpen: true }); }).catch(() => {});
@@ -233,7 +212,7 @@ function Shell() {
   const width = useViewportWidth();
   const narrow = width < 900;
   // Рабочая область не должна становиться уже MIN_CENTER: иначе панель сведений наезжает на кнопки верхней панели.
-  const navTaken = RAIL_W + (narrow || !device.navOpen ? 0 : navW);
+  const navTaken = RAIL_W + (narrow ? 0 : navVis);
   const room = width - navTaken - MIN_CENTER;
   const floatInsp = room < INSP_MIN;
   const inspDock = clamp(inspW, INSP_MIN, Math.max(INSP_MIN, Math.min(INSP_MAX, room)));
@@ -246,7 +225,14 @@ function Shell() {
   useMarketInstalled();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
   const crm = section === "collection" || section === "today" || section === "calendar" || section === "deals" || section === "reports" || section === "trash";
-  const showInsp = (lead && device.inspectorShown && (!floatInsp || selected === 1)) || (crm && !!crmRecord);
+  const leadOpen = lead && (inspLive !== null ? inspLive > 0 && !floatInsp : device.inspectorShown && (!floatInsp || selected === 1));
+  const showInsp = leadOpen || (crm && !!crmRecord && inspLive !== 0);
+  const inspHandle = !floatInsp && (lead || (crm && !!crmRecord));
+  const commitInsp = (w: number) => {
+    setInspLive(null);
+    if (crm) { if (w === 0) setState({ record: null }); else void patchDevice({ inspectorWidth: w }); return; }
+    void patchDevice(w === 0 ? { inspectorShown: false } : { inspectorShown: true, inspectorWidth: w });
+  };
   const InspectorBody = crm ? CrmCard : Inspector;
   // Esc закрывает панель карточки, если не открыто другое окно и курсор не в поле ввода.
   useEffect(() => {
@@ -266,24 +252,27 @@ function Shell() {
     <div className="shell" style={{ ["--rail-w" as string]: `${RAIL_W}px`, ["--nav-w" as string]: `${navW}px`, ["--insp-w" as string]: `${floatInsp ? Math.min(inspW, 460) : inspDock}px` }}>
       <ModuleRail />
       {narrow ? (
-        peek && (
-          <>
-            <div className="scrim-nav" onPointerDown={() => setState({ navPeek: false })} />
-            <div className="hover-panel"><Sidebar overlay /></div>
-          </>
-        )
-      ) : device.navOpen ? (
         <>
-          <Sidebar />
-          <Resizer side="left" value={navW} min={200} max={380} onLive={setNavLive} onCommit={(v) => { setNavLive(null); void patchDevice({ navWidth: v }); }} />
+          {!peek && <div className="hover-edge" onPointerEnter={() => setState({ navPeek: true })} onPointerDown={() => setState({ navPeek: true })} />}
+          {peek && (
+            <>
+              <div className="scrim-nav" onPointerDown={() => setState({ navPeek: false })} />
+              <div className="hover-panel"><Sidebar overlay /></div>
+            </>
+          )}
         </>
-      ) : device.sidebarHover ? <HoverNav /> : null}
+      ) : (
+        <>
+          {navVis > 0 && <Sidebar />}
+          <Resizer side="left" value={navVis} min={200} max={380} collapseAt={140} defaultW={260} onLive={setNavLive}
+            onCommit={(w) => { setNavLive(null); void patchDevice(w === 0 ? { navOpen: false } : { navOpen: true, navWidth: w }); }} />
+        </>
+      )}
       <main className="center">
-        <TopBar narrow={narrow} />
+        <TopBar />
         <div className="page-host" key={section === "collection" ? `collection:${collectionId}` : section === "profile" ? `profile:${profileId ?? "me"}` : section}>
           {section === "home" && <HomePage />}
           {lead && <LeadsPage />}
-          {section === "sources" && <SourcesPage />}
           {section === "runs" && <RunsPage />}
           {section === "collection" && <CollectionPage />}
           {section === "today" && <TodayPage />}
@@ -297,20 +286,19 @@ function Shell() {
           {section === "notifications" && <NotificationsPage />}
         </div>
       </main>
-      {showInsp && (
-        floatInsp ? (
-          <aside className="inspector float" aria-label={inspLabel}>
-            {!crm && <IconButton icon="x" tip="Закрыть" className="inspector-close" onClick={() => select([])} />}
-            <InspectorBody />
-          </aside>
-        ) : (
-          <>
-            <Resizer side="right" value={inspDock} min={INSP_MIN} max={Math.max(INSP_MIN, Math.min(INSP_MAX, room))} onLive={setInspLive} onCommit={(v) => { setInspLive(null); void patchDevice({ inspectorWidth: v }); }} />
-            <aside className="inspector" aria-label={inspLabel}>
-              <InspectorBody />
-            </aside>
-          </>
-        )
+      {showInsp && floatInsp && (
+        <aside className="inspector float" aria-label={inspLabel}>
+          {!crm && <IconButton icon="x" tip="Закрыть" className="inspector-close" onClick={() => select([])} />}
+          <InspectorBody />
+        </aside>
+      )}
+      {inspHandle && (
+        <Resizer side="right" value={showInsp ? inspDock : 0} min={INSP_MIN} max={Math.max(INSP_MIN, Math.min(INSP_MAX, room))} collapseAt={INSP_MIN - 100} defaultW={400} onLive={setInspLive} onCommit={commitInsp} />
+      )}
+      {showInsp && !floatInsp && (
+        <aside className="inspector" aria-label={inspLabel}>
+          <InspectorBody />
+        </aside>
       )}
       {exportOpen && <ExportDialog />}
       {whatsNew && <WhatsNewDialog />}

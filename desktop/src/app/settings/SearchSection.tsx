@@ -1,8 +1,9 @@
 import { intervalTitle } from "../../lib/format";
 import { Button, Group, Notice, Select, SettingRow, Switch } from "../../ui/kit";
-import { patchAccount, setSection, setState, useStore } from "../../state/store";
+import { openSettings, patchAccount, useStore } from "../../state/store";
 
-const AUTO = [0, 15, 30, 60, 120, 240, 480, 720, 1440];
+// Не чаще раза в 2 часа (решение Maksim): чаще источники не опрашиваются.
+const AUTO = [0, 120, 240, 480, 720, 1440];
 const autoTitle = (m: number) => (m === 0 ? "Выключен" : m < 60 ? `Каждые ${m} мин` : intervalTitle(m / 60));
 
 export function SearchSection() {
@@ -16,8 +17,11 @@ export function SearchSection() {
         <SettingRow title="Запускать поиск автоматически">
           <Select width={170} value={a.autoSearchMinutes} options={[...new Set([...AUTO, a.autoSearchMinutes])].sort((x, y) => x - y).map((m) => ({ value: m, label: autoTitle(m) }))} onChange={(v) => void patchAccount({ autoSearchMinutes: v })} label="Автопоиск" />
         </SettingRow>
+        <SettingRow title="Новыми считать лиды из последних поисков" hint="Столько последних поисков попадают в раздел «Новые». Синий кружок рядом с лидом пропадает, когда вы его открыли, а сам лид остаётся в списке.">
+          <Select width={170} value={a.newLeadsSearches} options={[1, 2, 3, 5, 10, 20].concat([a.newLeadsSearches]).filter((v, i, all) => all.indexOf(v) === i).sort((x, y) => x - y).map((n) => ({ value: n, label: String(n) }))} onChange={(v) => void patchAccount({ newLeadsSearches: v })} label="Новые лиды" />
+        </SettingRow>
         <SettingRow title="Источники" hint={`Включено источников: ${enabled} из 4`}>
-          <Button onClick={() => { setState({ settings: null }); setSection("sources"); }}>Настроить источники</Button>
+          <Button onClick={() => openSettings("sources")}>Настроить источники</Button>
         </SettingRow>
       </Group>
       {enabled === 0 && <Notice tone="warn">Все источники выключены, поиск ничего не найдёт.</Notice>}

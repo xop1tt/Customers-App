@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Lead } from "../api/types";
-import { count, dailyCounts, emptyFilter, signals, sortLeads, subtitle, visibleLeads } from "./leads";
+import { count, dailyCounts, emptyFilter, newSince, signals, sortLeads, subtitle, visibleLeads } from "./leads";
 
 function lead(id: string, over: Partial<Lead> = {}, data: Partial<Lead["data"]> = {}): Lead {
   return {
@@ -83,5 +83,22 @@ describe("график", () => {
     expect(points).toHaveLength(14);
     expect(points[13]).toMatchObject({ organizations: 1, orders: 0 });
     expect(points[12]).toMatchObject({ organizations: 0, orders: 1 });
+  });
+});
+
+describe("граница «новых» лидов", () => {
+  const log = (...at: string[]) => at.map((t) => ({ ok: true, at: t }));
+  it("берёт время поиска, предшествующего последним X", () => {
+    const l = log("2026-11-12T10:00:00Z", "2026-11-12T09:00:00Z", "2026-11-12T08:00:00Z");
+    expect(newSince(l, 1)).toBe("2026-11-12T09:00:00Z");
+    expect(newSince(l, 2)).toBe("2026-11-12T08:00:00Z");
+  });
+  it("если поисков не больше X, новыми остаются все", () => {
+    expect(newSince(log("2026-11-12T10:00:00Z"), 1)).toBeNull();
+    expect(newSince([], 3)).toBeNull();
+  });
+  it("неудачные поиски не считаются", () => {
+    const l = [{ ok: false, at: "2026-11-12T11:00:00Z" }, ...log("2026-11-12T10:00:00Z", "2026-11-12T09:00:00Z")];
+    expect(newSince(l, 1)).toBe("2026-11-12T09:00:00Z");
   });
 });

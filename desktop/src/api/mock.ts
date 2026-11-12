@@ -128,7 +128,7 @@ const baseDevice: DevicePrefs = {
 let device: DevicePrefs = { ...baseDevice };
 
 let account: AccountPrefs = {
-  autoSearchMinutes: 60, signature: "", backupDirectory: "~/Documents/Customers Backups/anna", autoBackup: true, keepBackups: 14, dataPath: null,
+  autoSearchMinutes: 120, newLeadsSearches: 1, signature: "", backupDirectory: "~/Documents/Customers Backups/anna", autoBackup: true, keepBackups: 14, dataPath: null,
   notifyNewLeads: true, notifyErrors: true, notifySync: false, notifyMessages: true, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1, callApp: "system",
   welcomeDone: !demo.has("welcome"), exportLastTab: "file",
 };

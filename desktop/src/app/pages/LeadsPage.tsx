@@ -1,5 +1,6 @@
+import { useNewSince } from "../../state/hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KIND_TITLE, type LeadFilter, type SortKey, allRegions, allSources, emptyFilter, filterIsDefault, isLeadList, sortLeads, signals, subtitle, visibleLeads } from "../../lib/leads";
+import { KIND_TITLE, type LeadFilter, type SortKey, allRegions, allSources, emptyFilter, filterIsDefault, isLeadList, sortLeads, subtitle, visibleLeads } from "../../lib/leads";
 import { integer, plural, shortRelative } from "../../lib/format";
 import { sourceTitle } from "../../lib/sources";
 import { modKey } from "../../lib/platform";
@@ -23,7 +24,8 @@ export function LeadsPage() {
 
   const sortKey = (SORT_KEYS.includes(device.listSort as SortKey) ? device.listSort : "score") as SortKey;
   const desc = device.listSortDescending;
-  const rows = useMemo(() => sortLeads(visibleLeads(leads, section, filter), sortKey, desc), [leads, section, filter, sortKey, desc]);
+  const since = useNewSince();
+  const rows = useMemo(() => sortLeads(visibleLeads(leads, section, filter, since), sortKey, desc), [leads, section, filter, sortKey, desc, since]);
   const rowH = device.compactRows ? 34 : 48;
   const selected = useMemo(() => new Set(selection), [selection]);
 
@@ -133,7 +135,7 @@ export function LeadsPage() {
 
   const sources = useMemo(() => allSources(leads), [leads]);
   const regions = useMemo(() => allRegions(leads), [leads]);
-  const total = useMemo(() => visibleLeads(leads, section, emptyFilter()).length, [leads, section]);
+  const total = useMemo(() => visibleLeads(leads, section, emptyFilter(), since).length, [leads, section, since]);
   const sec = isLeadList(section);
   if (!sec) return null;
 
@@ -167,7 +169,6 @@ export function LeadsPage() {
           {head("kind", "Тип", "th-kind")}
           {head("source", "Источник", "th-source")}
           {head("score", "Оценка", "th-score")}
-          <span className="th th-sig">Сигналы</span>
           {head("discovered", "Найден", "th-found")}
         </div>
         <div ref={scroller} className="tbody" onScroll={(e) => setView({ top: e.currentTarget.scrollTop, height: e.currentTarget.clientHeight })}>
@@ -196,7 +197,6 @@ export function LeadsPage() {
 
 function LeadRow({ lead, y, h, selected, onPick, onMenu }: { lead: Lead; y: number; h: number; selected: boolean; onPick: (l: Lead, e: React.MouseEvent) => void; onMenu: (l: Lead, e: React.MouseEvent) => void }) {
   const d = lead.data;
-  const sig = signals(lead);
   const sub = subtitle(lead);
   const fresh = !lead.seen && !lead.archived && !lead.excluded;
   return (
@@ -223,7 +223,6 @@ function LeadRow({ lead, y, h, selected, onPick, onMenu }: { lead: Lead; y: numb
       <span className="td td-kind"><Tag tone={d.kind === "order" ? "blue" : "gray"}>{KIND_TITLE[d.kind]}</Tag></span>
       <span className="td td-source ellipsis muted">{sourceTitle(d.source)}</span>
       <span className="td td-score"><Score value={d.score} /></span>
-      <span className="td td-sig">{sig.map((s) => <Tag key={s.text} tone={s.tone}>{s.text}</Tag>)}</span>
       <span className="td td-found muted num">{shortRelative(lead.discoveredAt)}</span>
     </div>
   );

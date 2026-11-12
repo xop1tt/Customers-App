@@ -1,6 +1,7 @@
 // Рейка модулей слева (пакет C2, вариант B макетов C1): CRM, поиск клиентов, сообщения, команда, внизу — настройки.
 
-import { count } from "../lib/leads";
+import { matchesSection } from "../lib/leads";
+import { useNewSince } from "../state/hooks";
 import { integer } from "../lib/format";
 import { MODULES, moduleOf, type ModuleId } from "../lib/modules";
 import { Icon } from "../ui/icons";
@@ -14,12 +15,13 @@ export const RAIL_W = 64;
 export function ModuleRail() {
   const section = useStore((s) => s.section);
   const leads = useStore((s) => s.snap.leads);
+  const since = useNewSince();
   const chat = useStore((s) => s.chat);
   const hasWs = useStore((s) => !!s.ws?.active);
   const current = moduleOf(section);
   const badge: Record<ModuleId, number> = {
     crm: 0,
-    search: count(leads, "new", true),
+    search: leads.filter((l) => !l.seen && matchesSection(l, "new", since) && l.data.relevance !== "rejected").length,
     messages: unreadTotal(chat),
     team: unreadNotifications(chat),
   };
