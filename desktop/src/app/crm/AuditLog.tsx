@@ -34,7 +34,7 @@ export function AuditDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => { void load(0); }, [load]);
 
   return (
-    <Dialog title="Журнал действий" onClose={onClose} width={640}>
+    <Dialog title="Журнал рабочего пространства" onClose={onClose} width={640}>
       <div className="col" style={{ gap: 12, alignItems: "stretch" }}>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <Select value={actor} onChange={setActor} label="Сотрудник" width={220} options={[{ value: "", label: "Все сотрудники" }, ...members.map((m) => ({ value: m.userId, label: m.displayName }))]} />

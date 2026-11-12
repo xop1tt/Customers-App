@@ -110,8 +110,8 @@ function WorkspaceDialogBody() {
       {ws.isCloud && current && <Members />}
       {ws.isCloud && current && perms.includes("invitations.manage") && <Invite />}
       {ws.isCloud && current && perms.includes("audit.view") && (
-        <Group title="Журнал действий">
-          <SettingRow title="Кто и что менял" hint="Удаления и восстановления записей, смена ответственного, изменения участников и ролей.">
+        <Group title="Журнал рабочего пространства">
+          <SettingRow title="Кто и что менял" hint="Серверный журнал: удаления, смена ответственного, участники и роли. Последнее действие над каждой записью — в разделе «Журнал».">
             <Button small icon="history" onClick={() => setAudit(true)}>Открыть журнал</Button>
           </SettingRow>
         </Group>

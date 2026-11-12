@@ -181,13 +181,14 @@ export function toInput(kind: FieldKind, v: unknown): string {
 }
 
 /** Право на действие по таблице разрешений Workspace (то же решает сервер; здесь — чтобы не показывать лишнего). */
-export function can(perms: string[], action: "view" | "create" | "edit" | "delete" | "export" | "collections" | "pipelines" | "invite" | "members" | "workspace", record?: CrmRecord | null, me?: string): boolean {
+export function can(perms: string[], action: "view" | "create" | "edit" | "delete" | "export" | "collections" | "pipelines" | "invite" | "members" | "workspace" | "audit", record?: CrmRecord | null, me?: string): boolean {
   const has = (p: string) => perms.includes(p);
   switch (action) {
     case "view": return has("records.view");
     case "create": return has("records.create");
     case "delete": return has("records.delete");
     case "export": return has("records.export");
+    case "audit": return has("audit.view");
     case "collections": return has("collections.manage");
     case "pipelines": return has("pipelines.manage");
     case "invite": return has("invitations.manage");
