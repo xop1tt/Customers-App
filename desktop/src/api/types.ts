@@ -601,6 +601,9 @@ export interface WsInvitation { id: string; email: string; role: string; roleNam
 export interface WsAuditItem { id: number; actor_id: string | null; action: string; entity_type: string | null; entity_id: string | null; at: string; details: Record<string, unknown> }
 export interface WsAuditQuery { actor?: string | null; action?: string | null; entityId?: string | null; offset?: number }
 
+/** Входящее приглашение: адресовано почте вашей учётной записи; принять можно в приложении, без ссылки. */
+export interface WsIncoming { id: string; workspaceName: string; roleName: string; invitedByName: string; createdAt: string; expiresAt: string }
+
 export interface WsInvite { id: string; email: string; role: string; expiresAt: string; token: string; link: string }
 
 // ---------------------------------------------------------------- сотрудники, чат и уведомления

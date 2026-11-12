@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
-import type { WsInvitation, WsInvite, WsOp } from "../../api/types";
+import type { WsIncoming, WsInvitation, WsInvite, WsOp } from "../../api/types";
 import { copyText } from "../../lib/platform";
 import { fullRu, integer, shortRelative } from "../../lib/format";
 import { Avatar, Button, Group, IconButton, Notice, Select, SettingRow, Tag, TextInput } from "../../ui/kit";
@@ -103,6 +103,7 @@ function WorkspacePanel() {
             <Notice tone="error">База рабочего пространства не открылась. Проверьте журнал ошибок в настройках «Отчёты».</Notice>
           ) : (
             <>
+              <IncomingCards done={done} />
               <div id="ws-overview"><Overview done={done} /></div>
               {cloud && current && (
                 <div id="ws-people">
@@ -175,6 +176,32 @@ function WorkspacePanel() {
         </div>
       </aside>
     </>
+  );
+}
+
+/** Входящие приглашения: адресованы почте вашей учётной записи, принимаются кнопкой, без ссылки (ADR-082). */
+function IncomingCards({ done }: { done: (p: Promise<unknown>) => Promise<unknown> }) {
+  const list = useStore((s) => s.incoming);
+  if (!list.length) return null;
+  const accept = async (i: WsIncoming) => { const r = await done(api.wsAcceptIncoming(i.id)); if (r) toast(`Вы присоединились к «${i.workspaceName}»`, "success"); };
+  const decline = async (i: WsIncoming) => {
+    if (!(await confirmDialog({ title: `Отклонить приглашение в «${i.workspaceName}»?`, message: "Руководитель сможет пригласить вас снова.", confirm: "Отклонить", danger: true }))) return;
+    await done(api.wsDeclineIncoming(i.id));
+  };
+  return (
+    <section className="ws-incoming" aria-label="Приглашения">
+      <h4>Вас приглашают · {integer(list.length)}</h4>
+      {list.map((i) => (
+        <div key={i.id} className="ws-incoming-card">
+          <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
+            <strong className="ellipsis">{i.workspaceName}</strong>
+            <span className="faint">{i.invitedByName} приглашает вас на роль «{i.roleName}». Действует до {fullRu(i.expiresAt)}.</span>
+          </span>
+          <Button small variant="primary" onClick={() => void accept(i)}>Принять</Button>
+          <Button small variant="ghost" onClick={() => void decline(i)}>Отклонить</Button>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -328,7 +355,7 @@ function Invite() {
     if (r) { setSent(r); setEmail(""); setVersion((v) => v + 1); }
   };
   return (
-    <Group title="Пригласить" note="Письмо не отправляется автоматически: передайте ссылку приглашённому сами. Она действует 7 дней и показывается один раз.">
+    <Group title="Пригласить" note="Если у человека есть учётная запись с этой почтой, он увидит приглашение в приложении (красный значок у учётной записи). Ссылку можно передать и самому: она действует 7 дней и показывается один раз.">
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         <TextInput value={email} onChange={setEmail} type="email" placeholder="почта коллеги" aria-label="Почта приглашённого" wrapClass="grow" />
         <Select value={role} onChange={setRole} options={ROLES} width={160} />

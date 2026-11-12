@@ -5,7 +5,7 @@ import { MODULES, moduleOf, RESTORABLE, type ModuleId } from "../lib/modules";
 import { api } from "../api";
 import { on } from "../api/backend";
 import type {
-  AccountPrefs, AuthCallback, BootInfo, ChatPoll, MarketInstalled, TeamMember, DevicePrefs, SearchOverview, SearchStatus, SessionInfo, Snapshot, SyncStatus, UpdateInfo, WsCollection, WsState,
+  AccountPrefs, AuthCallback, BootInfo, ChatPoll, MarketInstalled, TeamMember, DevicePrefs, SearchOverview, SearchStatus, SessionInfo, Snapshot, SyncStatus, UpdateInfo, WsCollection, WsIncoming, WsState,
 } from "../api/types";
 import { type LeadFilter, type SectionId, emptyFilter } from "../lib/leads";
 import { type LightModeReason, evaluate } from "../lib/powerPolicy";
@@ -54,6 +54,8 @@ export interface AppState {
   /** Открытая карточка CRM; `preset` — значения полей новой записи (например, срок задачи из календаря). */
   record: { table: string; id: string; preset?: Record<string, unknown> } | null;
   workspaceOpen: boolean;
+  /** Входящие приглашения в рабочие пространства (красный пузырёк у учётной записи). */
+  incoming: WsIncoming[];
   /** Открытое окно маркетплейса (раздел) или null. */
   market: "catalog" | "installed" | "developer" | "moderation" | null;
   /** Установленные интеграции активного Workspace: кнопки в карточках CRM. */
@@ -86,7 +88,7 @@ const initial: AppState = {
   phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
   section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, quickOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, aiOpen: false,
-  ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0, profileId: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [],
+  ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, incoming: [], collectionEdit: null, wsVersion: 0, profileId: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [],
 };
 
 let state = initial;
@@ -200,7 +202,7 @@ export async function leaveSession() {
   setState({ phase: "auth", session: null, snap: EMPTY_SNAP, account: null, overview: null, settings: null, exportOpen: false, selection: [], ...NO_WORKSPACE });
 }
 
-const NO_WORKSPACE: Partial<AppState> = { ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [] };
+const NO_WORKSPACE: Partial<AppState> = { ws: null, collections: [], incoming: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [] };
 
 // ---------------------------------------------------------------- Workspace и коллекции
 
@@ -208,14 +210,14 @@ let wsTimer: ReturnType<typeof setTimeout> | null = null;
 /** Состояние Workspace и список коллекций. Ошибка (нет сессии, база недоступна) не ломает генератор лидов. */
 export async function refreshWorkspace() {
   try {
-    const [ws, collections] = await Promise.all([api.wsState(), api.wsCollections()]);
+    const [ws, collections, incoming] = await Promise.all([api.wsState(), api.wsCollections(), api.wsIncoming()]);
     setState((s) => {
       const known = s.collectionId && collections.some((c) => c.id === s.collectionId);
       const lost = s.section === "collection" && !known;
-      return { ws, collections, ...(lost ? { section: "home" as SectionId, collectionId: null, record: null } : {}), wsVersion: s.wsVersion + 1 };
+      return { ws, collections, incoming, ...(lost ? { section: "home" as SectionId, collectionId: null, record: null } : {}), wsVersion: s.wsVersion + 1 };
     });
   } catch {
-    setState({ ws: null, collections: [] });
+    setState({ ws: null, collections: [], incoming: [] });
   }
 }
 const scheduleWorkspace = () => {

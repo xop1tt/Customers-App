@@ -718,6 +718,12 @@ button.pick-row:hover { background: var(--bg-hover); }
 .ai-tools { padding: 10px 2px; font-size: var(--fs-sm); }
 .ai-tools ul { padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 
+.avatar-wrap { position: relative; display: inline-flex; flex: none; }
+.red-badge { position: absolute; top: -4px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--red); color: #1a0f0f; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+.red-badge.menu-badge { position: static; margin-left: auto; }
+.ws-incoming { margin-bottom: 18px; padding: 12px; border: 1px solid var(--red, #e5484d); border-radius: var(--r-md, 8px); display: flex; flex-direction: column; gap: 8px; }
+.ws-incoming h4 { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
+.ws-incoming-card { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* Панель управления рабочим пространством справа */
 .ws-panel-scrim { position: fixed; inset: 0; z-index: 80; background: var(--scrim); animation: fade-in 120ms; }
 .ws-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 81; width: min(560px, 100vw); display: flex; flex-direction: column; background: var(--bg-side); border-left: 1px solid var(--line-strong); box-shadow: var(--shadow-pop); animation: slide-in-right 150ms var(--ease); outline: none; }
