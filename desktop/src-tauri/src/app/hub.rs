@@ -246,7 +246,7 @@ mod tests {
 
     fn signed_in(f: &super::super::testing::Fixture) -> Arc<Core> {
         let core = Core::new(f.env.clone());
-        let pw = format!("{}-{}", "pass", "1".repeat(8));
+        let pw = uuid::Uuid::new_v4().to_string();
         core.register("anna", &pw, &pw, false).unwrap();
         core
     }
