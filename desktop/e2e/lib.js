@@ -36,6 +36,8 @@ const E2E = (() => {
     try { await invokeRaw(cmd, args ?? {}); } catch (e) { return String(e && e.message ? e.message : e); }
     throw new Error(`команда ${cmd} должна была отклонить запрос`);
   };
+  /** Переключает режим тестового сервера (запрос уходит из ядра приложения). */
+  const mock = async (mode) => { await emit("e2e-mock", mode); await sleep(hasCore ? 600 : 10); };
   const shot = async (name) => { await emit("e2e-shot", name); await sleep(hasCore ? 1200 : 50); };
 
   // ---- DOM
@@ -143,5 +145,5 @@ const E2E = (() => {
     return report;
   };
 
-  return { C, hasCore, sleep, short, core, coreFails, emit, log, shot, $, $$, norm, shown, withText, dom, waitFor, click, clickText, type, key, check, eq, same, golden, healthy, dismissToasts, utf8b64, scenario, skipIf, run, pageErrors };
+  return { C, hasCore, sleep, short, core, coreFails, emit, log, mock, shot, $, $$, norm, shown, withText, dom, waitFor, click, clickText, type, key, check, eq, same, golden, healthy, dismissToasts, utf8b64, scenario, skipIf, run, pageErrors };
 })();

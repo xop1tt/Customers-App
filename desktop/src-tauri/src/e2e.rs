@@ -10,6 +10,7 @@
 //! * `CUSTOMERS_E2E_SCRIPT` — путь к сценарию, `CUSTOMERS_E2E_CONFIG` — настройки сценария (JSON);
 //! * `CUSTOMERS_E2E_OUT` — путь к файлу отчёта; рядом пишется журнал `<имя>.log`;
 //! * `CUSTOMERS_E2E_REWRITE` — подмена адресов запросов ядра: `https://узел=http://127.0.0.1:порт;…`;
+//! * `CUSTOMERS_E2E_CONTROL` — адрес, на который событие `e2e-mock` передаёт режим тестового сервера;
 //! * `CUSTOMERS_E2E_TIMEOUT` — предел времени в секундах (по умолчанию 420).
 
 use crate::paths::AppPaths;
@@ -129,6 +130,16 @@ pub fn install(app: &AppHandle) {
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(500));
             app.exit(if failed == 0 { 0 } else { 1 });
+        });
+    });
+    // Сценарий переключает поведение тестового сервера (например, «вышла новая версия»): запрос уходит из ядра, не из страницы.
+    app.listen("e2e-mock", |event| {
+        let (Some(url), mode) = (var("CUSTOMERS_E2E_CONTROL"), payload_text(event.payload())) else { return };
+        log_line(&format!("тестовый сервер: режим {mode}"));
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = reqwest::Client::new().post(url).body(mode).send().await {
+                log_line(&format!("тестовый сервер не ответил: {e}"));
+            }
         });
     });
     app.listen("e2e-log", |event| log_line(&payload_text(event.payload())));

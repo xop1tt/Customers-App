@@ -56,6 +56,7 @@ async function launch({ phase, server }) {
     CUSTOMERS_E2E_CONFIG: JSON.stringify(config),
     CUSTOMERS_E2E_OUT: report,
     CUSTOMERS_E2E_REWRITE: server.rewrite,
+    CUSTOMERS_E2E_CONTROL: server.control,
     CUSTOMERS_E2E_TIMEOUT: String(timeoutSec),
     WEBKIT_DISABLE_COMPOSITING_MODE: "1",
     WEBKIT_DISABLE_DMABUF_RENDERER: "1",
@@ -108,6 +109,7 @@ function show(data) {
 (async () => {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(path.join(dir, "data"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "out"), { recursive: true }); // сюда сценарии пишут файлы выгрузки и копий
   // Язык интерфейса задан заранее: сценарии ищут русские подписи (английский проверяется отдельным сценарием).
   fs.writeFileSync(path.join(dir, "data", "device.json"), JSON.stringify({ language: "ru" }));
   const server = await mock.start();

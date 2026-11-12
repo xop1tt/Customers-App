@@ -1,0 +1,16 @@
+{
+  "csv": [
+    "Компания,Телефон компании,Почта компании,Контакт,Должность,Телефон,Почта,Сделка,Сумма,Заметка",
+    "ООО «Бета Сервис»,+7 812 555-01-01,office@beta.example,Мария Сидорова,Менеджер,+7 921 000-11-22,maria@beta.example,Договор на обслуживание,90000,Пришла с выставки",
+    "ИП Гамма,,,Олег Кузнецов,,+7 903 777-88-99,,,,",
+    "ООО «Альфа Логистика»,,,,,,,Допродажа,50000,Дубликат по названию"
+  ],
+  "rows": 3,
+  "mapping": ["company.name", "company.phone", "company.email", "contact.full_name", "contact.position", "contact.phone", "contact.email", "deal.title", "deal.amount", "note"],
+  "preview": [3, 2, 1, 0],
+  "result": [2, 2, 2, 2, 0],
+  "addedCompanies": 2,
+  "exportKeys": ["name", "phones", "emails", "address", "industry"],
+  "dealExportKeys": ["title", "amount", "currency"],
+  "exportCount": 3
+}

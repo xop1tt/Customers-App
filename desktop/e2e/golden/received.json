@@ -1,0 +1,22 @@
+{
+  "rssRequests": {
+    "min": 2
+  },
+  "webhook": {
+    "posts": 4,
+    "jsonHas": [
+      "lead.exported",
+      "Нужен сайт для кофейни с онлайн-меню",
+      "Telegram-бот для записи клиентов"
+    ]
+  },
+  "dav": {
+    "minPuts": 2
+  },
+  "b24": {
+    "min": 2
+  },
+  "github": {
+    "min": 3
+  }
+}

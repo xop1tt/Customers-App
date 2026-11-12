@@ -1,0 +1,7 @@
+{
+  "leads": [
+    { "title": "Нужен сайт для кофейни с онлайн-меню", "emails": ["order101@e2e.example"] },
+    { "title": "Telegram-бот для записи клиентов", "emails": ["order102@e2e.example"] }
+  ],
+  "note": "Позвонить после обеда"
+}

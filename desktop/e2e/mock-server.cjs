@@ -11,6 +11,7 @@ const HOSTS = {
   hooks: "https://hooks.e2e.example",
   dav: "https://dav.e2e.example",
   b24: "https://b24.e2e.example",
+  dl: "https://dl.e2e.example",
 };
 
 const RSS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -23,9 +24,22 @@ const RSS = `<?xml version="1.0" encoding="UTF-8"?>
 <description>Нужен логотип для пекарни</description><pubDate>__DATE__</pubDate></item>
 </channel></rss>`;
 
+/** Ответ GitHub о релизе: тег, описание, установщики для macOS и Windows с контрольной суммой, которая не совпадёт с файлом. */
+function release(tag) {
+  const v = tag.replace(/^v/, "");
+  const zero = "0".repeat(64);
+  const asset = (name) => ({ name, browser_download_url: `https://dl.e2e.example/${name}`, size: 1024, digest: `sha256:${zero}` });
+  return {
+    tag_name: tag, name: `Customers ${v}`, draft: false, prerelease: false,
+    body: `## Что нового\n- Проверочный релиз ${v}\n- Исправления`, html_url: `https://github.com/xop1tt/Customers-App/releases/tag/${tag}`,
+    published_at: "2026-11-12T00:00:00Z",
+    assets: [asset(`Customers-${tag}-macOS.dmg`), asset(`Customers-${tag}-windows-x64-setup.exe`)],
+  };
+}
+
 function start({ version = "1.0.0" } = {}) {
   const received = { rssRequests: [], webhook: [], dav: [], b24: [], github: [], other: [] };
-  const state = { release: null };
+  const state = { mode: "none" }; // none | uptodate:<версия> | available | error — переключается сценарием через событие e2e-mock
 
   const server = http.createServer((req, res) => {
     const chunks = [];
@@ -60,13 +74,18 @@ function start({ version = "1.0.0" } = {}) {
       }
       if (path.startsWith("/b24")) {
         received.b24.push({ ...entry, body: body.toString("utf8").slice(0, 2000) });
+        if (/crm\.lead\.add\.json$/.test(path)) return json(200, { result: 1000 + received.b24.length, time: {} });
         return json(200, { result: { ID: "1", NAME: "E2E", ADMIN: true, id: 1 }, time: {} });
       }
+      if (path === "/__control") { state.mode = body.toString("utf8"); received.control = (received.control || []).concat(state.mode); return json(200, { mode: state.mode }); }
+      if (path.startsWith("/dl/")) { received.dl = (received.dl || []).concat(path); res.writeHead(200, { "content-type": "application/octet-stream" }); return res.end(Buffer.alloc(1024, 7)); }
       if (path.startsWith("/github")) {
         received.github.push(entry);
-        if (/\/releases(\/latest|\?|$)/.test(path + url.search) && state.release) {
+        const tag = state.mode === "available" ? "v99.0.0" : state.mode.startsWith("uptodate:") ? `v${state.mode.split(":")[1]}` : null;
+        if (state.mode === "error") return json(500, { message: "Server Error" });
+        if (/\/releases(\/latest|\?|$)/.test(path + url.search) && tag) {
           const list = /\/releases$/.test(path);
-          return json(200, list ? [state.release] : state.release);
+          return json(200, list ? [release(tag)] : release(tag));
         }
         return json(404, { message: "Not Found" });
       }
@@ -80,7 +99,7 @@ function start({ version = "1.0.0" } = {}) {
       const port = server.address().port;
       const base = `http://127.0.0.1:${port}`;
       const rewrite = Object.entries(HOSTS).map(([k, host]) => `${host}=${base}/${k}`).join(";");
-      resolve({ port, base, rewrite, received, state, hosts: HOSTS, close: () => new Promise((r) => server.close(r)) });
+      resolve({ port, base, rewrite, received, state, hosts: HOSTS, control: `${base}/__control`, close: () => new Promise((r) => server.close(r)) });
     });
   });
 }
