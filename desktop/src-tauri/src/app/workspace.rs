@@ -93,6 +93,15 @@ fn cloud_err(e: CloudError) -> CmdError {
     CmdError::from(e)
 }
 
+/// Идентификатор из интерфейса попадает в адрес запроса: допускаем только UUID.
+fn check_uuid(v: &str) -> CmdResult<()> {
+    if v.len() == 36 && v.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
+        Ok(())
+    } else {
+        Err(CmdError::msg("Недопустимый идентификатор."))
+    }
+}
+
 impl Core {
     fn ws_dir(&self, s: &Session) -> PathBuf {
         s.dir.join("workspaces")
@@ -694,6 +703,83 @@ impl Core {
         let token = r["token"].as_str().unwrap_or_default();
         Ok(json!({"id": r["id"], "email": r["email"], "role": r["role"], "expiresAt": r["expires_at"], "token": token,
                   "link": format!("{}://invite?token={token}", crate::identity::APP.url_scheme)}))
+    }
+
+    /// Открытые приглашения активного Workspace (не принятые, не отозванные). Токена здесь нет: он показывается один раз.
+    pub async fn ws_invitations(self: &Arc<Self>) -> CmdResult<Value> {
+        let s = self.require()?;
+        let c = self.ws_catalog(&s)?;
+        let Some(active) = c.active_info().filter(|w| w.remote).cloned() else {
+            return Ok(json!([]));
+        };
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        let rows = sync::select(
+            &cloud,
+            &format!(
+                "workspace_invitations?select=id,email_norm,created_at,expires_at,sent_count,last_sent_at,invited_by,roles(key,name)&workspace_id=eq.{}&accepted_at=is.null&revoked_at=is.null&order=created_at.desc&limit=100",
+                active.id
+            ),
+        )
+        .await
+        .map_err(cloud_err)?;
+        let list: Vec<Value> = rows
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| {
+                json!({"id": r["id"], "email": r["email_norm"], "role": r["roles"]["key"], "roleName": r["roles"]["name"], "createdAt": r["created_at"],
+                       "expiresAt": r["expires_at"], "sentCount": r["sent_count"], "lastSentAt": r["last_sent_at"], "invitedBy": r["invited_by"]})
+            })
+            .collect();
+        Ok(Value::Array(list))
+    }
+
+    pub async fn ws_revoke_invitation(self: &Arc<Self>, id: &str) -> CmdResult<Value> {
+        check_uuid(id)?;
+        self.ws_rpc("revoke_invitation", json!({"p_invitation": id}), false).await?;
+        Ok(json!(true))
+    }
+
+    /// Повторная отправка: новый токен и срок; приложение снова показывает ссылку (раз в 10 минут, не больше 5 раз — проверяет база).
+    pub async fn ws_resend_invitation(self: &Arc<Self>, id: &str) -> CmdResult<Value> {
+        check_uuid(id)?;
+        let r = self.ws_rpc("resend_invitation", json!({"p_invitation": id}), false).await?;
+        let token = r["token"].as_str().unwrap_or_default();
+        Ok(json!({"id": r["id"], "email": r["email"], "expiresAt": r["expires_at"], "token": token,
+                  "link": format!("{}://invite?token={token}", crate::identity::APP.url_scheme)}))
+    }
+
+    /// Журнал действий Workspace (право `audit.view`, проверяет база): последние записи с необязательным отбором.
+    pub async fn ws_audit(self: &Arc<Self>, actor: Option<String>, action: Option<String>, entity_id: Option<String>, offset: Option<i64>) -> CmdResult<Value> {
+        let s = self.require()?;
+        let c = self.ws_catalog(&s)?;
+        let Some(active) = c.active_info().filter(|w| w.remote).cloned() else {
+            return Ok(json!({"items": [], "more": false}));
+        };
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        let mut q = format!("audit_log?select=id,actor_id,action,entity_type,entity_id,at,details&workspace_id=eq.{}&order=at.desc,id.desc", active.id);
+        if let Some(a) = actor.filter(|x| !x.is_empty()) {
+            check_uuid(&a)?;
+            q.push_str(&format!("&actor_id=eq.{a}"));
+        }
+        if let Some(a) = action.filter(|x| !x.is_empty()) {
+            if !a.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.') {
+                return Err(CmdError::msg("Недопустимое действие в отборе."));
+            }
+            q.push_str(&format!("&action=eq.{a}"));
+        }
+        if let Some(e) = entity_id.filter(|x| !x.is_empty()) {
+            check_uuid(&e)?;
+            q.push_str(&format!("&entity_id=eq.{e}"));
+        }
+        const PAGE: i64 = 100;
+        q.push_str(&format!("&limit={}&offset={}", PAGE + 1, offset.unwrap_or(0).clamp(0, 100_000)));
+        let rows = sync::select(&cloud, &q).await.map_err(cloud_err)?;
+        let mut items = rows.as_array().cloned().unwrap_or_default();
+        let more = items.len() as i64 > PAGE;
+        items.truncate(PAGE as usize);
+        Ok(json!({"items": items, "more": more}))
     }
 
     pub async fn ws_accept_invitation(self: &Arc<Self>, token: &str) -> CmdResult<Value> {
@@ -1482,6 +1568,24 @@ mod team_tests {
         let core = Core::new(f.env.clone());
         core.register("anna", &password(), &password(), false).unwrap();
         (f, core)
+    }
+
+    #[test]
+    fn ids_from_the_interface_must_be_uuids() {
+        assert!(check_uuid("00000000-0000-4000-8000-000000000003").is_ok());
+        for bad in ["", "abc", "00000000-0000-4000-8000-000000000003&limit=1", "00000000-0000-4000-8000-00000000000z", "../../etc"] {
+            assert!(check_uuid(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[tokio::test]
+    async fn invitations_and_audit_are_empty_for_a_local_workspace() {
+        let (_f, core) = local();
+        assert_eq!(core.ws_invitations().await.unwrap(), json!([]));
+        let a = core.ws_audit(None, None, None, None).await.unwrap();
+        assert_eq!(a, json!({"items": [], "more": false}));
+        assert!(core.ws_audit(Some("x&y".into()), None, None, None).await.is_ok(), "локальное пространство: отбор не проверяется, облака нет");
+        assert!(core.ws_revoke_invitation("не-идентификатор").await.is_err());
     }
 
     #[tokio::test]
