@@ -205,6 +205,9 @@ function Shell() {
   // Видимая ширина левой панели: при перетаскивании — живое значение, иначе сохранённое (0 — свёрнута).
   const navVis = navLive ?? (device.navOpen ? device.navWidth : 0);
   const navW = navVis || device.navWidth;
+  // В чате панели разделов нет: слева сразу список обсуждений (с учётной записью внизу), справа окно чата.
+  const chatCloud = useStore((s) => (s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.remote ?? false) && !s.chat?.missing);
+  const noNav = section === "chat" && chatCloud;
   const inspW = inspLive && inspLive > 0 ? inspLive : device.inspectorWidth;
 
   useEffect(() => {
@@ -215,7 +218,7 @@ function Shell() {
   const width = useViewportWidth();
   const narrow = width < 900;
   // Рабочая область не должна становиться уже MIN_CENTER: иначе панель сведений наезжает на кнопки верхней панели.
-  const navTaken = RAIL_W + (narrow ? 0 : navVis);
+  const navTaken = RAIL_W + (narrow || noNav ? 0 : navVis);
   const room = width - navTaken - MIN_CENTER;
   const floatInsp = room < INSP_MIN;
   const inspDock = clamp(inspW, INSP_MIN, Math.max(INSP_MIN, Math.min(INSP_MAX, room)));
@@ -253,9 +256,9 @@ function Shell() {
   const inspLabel = crm ? "Карточка записи" : "Сведения о лиде";
 
   return (
-    <div className="shell" style={{ ["--rail-w" as string]: `${RAIL_W}px`, ["--nav-w" as string]: `${navW}px`, ["--insp-w" as string]: `${floatInsp ? Math.min(inspW, 460) : inspDock}px` }}>
+    <div className="shell" style={{ ["--rail-w" as string]: `${RAIL_W}px`, ["--nav-w" as string]: `${navW}px`, ["--nav-vis" as string]: `${narrow || noNav ? 0 : navVis}px`, ["--insp-w" as string]: `${floatInsp ? Math.min(inspW, 460) : inspDock}px` }}>
       <ModuleRail />
-      {narrow ? (
+      {noNav ? null : narrow ? (
         <>
           {!peek && <div className="hover-edge" onPointerEnter={() => setState({ navPeek: true })} onPointerDown={() => setState({ navPeek: true })} />}
           {peek && (

@@ -30,7 +30,7 @@ describe("панель рабочего пространства", () => {
   it("сотрудник не видит опасную зону и не может назначать должности", async () => {
     const panel = await open("employee");
     expect(within(panel).queryByText("Опасная зона")).toBeNull();
-    expect(within(panel).getByText("Назначать должности вы не можете")).toBeTruthy();
+    expect(within(panel).getByText(/Назначать должности вы не можете/)).toBeTruthy();
   });
 
   it("«Управлять отделами» открывает «Сотрудников» и закрывает панель; крестик закрывает", async () => {

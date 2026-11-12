@@ -1,6 +1,7 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetWsMock } from "../api/wsMock";
+import { saveAi } from "../state/hub";
 import { getState, setState } from "../state/store";
 import { App } from "./App";
 
@@ -99,5 +100,15 @@ describe("панель разделов", () => {
     await waitFor(() => expect(getState().device.navOpen).toBe(true));
     expect(nav).toBeDefined();
     expect(getState().device.navWidth).toBeGreaterThanOrEqual(200);
+  });
+
+  it("значок Ai есть по умолчанию; выключатель помощника убирает его из рейки", async () => {
+    render(<App />);
+    await screen.findByLabelText("Навигация");
+    expect(within(rail()).getByRole("button", { name: "Ai" })).toBeInTheDocument();
+    await act(async () => { await saveAi({ enabled: false }); });
+    await waitFor(() => expect(within(rail()).queryByRole("button", { name: "Ai" })).toBeNull());
+    await act(async () => { await saveAi({ enabled: true }); });
+    await waitFor(() => expect(within(rail()).getByRole("button", { name: "Ai" })).toBeInTheDocument());
   });
 });

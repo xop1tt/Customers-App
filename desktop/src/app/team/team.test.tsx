@@ -6,21 +6,21 @@ vi.hoisted(() => { window.history.replaceState({}, "", "/?team"); });
 
 import { resetChatMock } from "../../api/chatMock";
 import { resetWsMock, setWsMockRole } from "../../api/wsMock";
-import { getState } from "../../state/store";
+import { getState, setState } from "../../state/store";
 import { App } from "../App";
 
 afterEach(cleanup);
-beforeEach(() => { resetWsMock(); resetChatMock(); });
+beforeEach(() => { resetWsMock(); resetChatMock(); setState({ section: "home", record: null }); });
 
 async function nav() {
   render(<App />);
-  const n = await screen.findByLabelText("Навигация");
+  await screen.findByLabelText("Навигация");
   // Бейдж непрочитанного появляется после первого опроса.
   await waitFor(() => expect(getState().chat?.available).toBe(true));
   // Группа «Команда» — в модуле «Команда» рейки (C2).
   fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Команда/ }));
-  await within(n).findByRole("button", { name: /Сотрудники/ });
-  return n;
+  await within(screen.getByLabelText("Навигация")).findByRole("button", { name: /Сотрудники/ });
+  return screen.getByLabelText("Навигация");
 }
 
 describe("команда в левой панели", () => {
@@ -29,12 +29,17 @@ describe("команда в левой панели", () => {
     const rail = within(screen.getByRole("navigation", { name: "Модули" }));
     await waitFor(() => expect(rail.getByRole("button", { name: "Сообщения, новых: 3" })).toBeInTheDocument());
     expect(Array.from(n.querySelectorAll(".side-scroll .nav-item")).some((b) => /Сообщения/.test(b.textContent ?? ""))).toBe(false);
-    expect(within(within(n).getByRole("button", { name: /Входящие/ })).getByLabelText("Непрочитанных: 2")).toBeInTheDocument();
+    // Уведомления — колокольчик у учётной записи с красным числом; в группе «Команда» их больше нет.
+    const bell = within(n).getByRole("button", { name: "Уведомления, новых: 2" });
+    expect(bell.parentElement?.querySelector(".red-badge")?.textContent).toBe("2");
+    expect(within(n).queryByRole("button", { name: /Входящие/ })).toBeNull();
     fireEvent.click(within(n).getByRole("button", { name: "Команда" }));
     // В свёрнутой группе остаётся только открытый раздел («Сотрудники»).
-    await waitFor(() => expect(within(n).queryByRole("button", { name: /Входящие/ })).toBeNull());
+    await waitFor(() => expect(getState().device.sidebarCollapsed).toContain("team"));
+    expect(within(n).getByRole("button", { name: /Сотрудники/ })).toBeInTheDocument();
     fireEvent.click(within(n).getByRole("button", { name: "Команда" }));
-    expect(await within(n).findByRole("button", { name: /Входящие/ })).toBeInTheDocument();
+    await waitFor(() => expect(getState().device.sidebarCollapsed).not.toContain("team"));
+    expect(await within(n).findByRole("button", { name: /Сотрудники/ })).toBeInTheDocument();
   });
 });
 
@@ -61,6 +66,11 @@ describe("сотрудники и профили", () => {
     const facts = screen.getByText("Руководитель").closest(".profile-fact") as HTMLElement;
     expect(within(facts).getByRole("button", { name: /anna|Анна/i })).toBeInTheDocument();
 
+    // Кнопка «Назад» возвращает к списку сотрудников.
+    fireEvent.click(screen.getByRole("button", { name: "Назад" }));
+    await waitFor(() => expect(getState().section).toBe("people"));
+    fireEvent.click(await screen.findByText("Вера Ким"));
+    await screen.findByRole("heading", { name: "Вера Ким" });
     fireEvent.click(screen.getByRole("button", { name: "Отправить сообщение" }));
     await waitFor(() => expect(getState().section).toBe("chat"));
     expect(await screen.findByRole("heading", { name: "Вера Ким" })).toBeInTheDocument();
@@ -176,7 +186,7 @@ describe("сообщения", () => {
 describe("уведомления", () => {
   it("список упоминаний, переход к обсуждению отмечает прочитанным", async () => {
     const n = await nav();
-    fireEvent.click(within(n).getByRole("button", { name: /Входящие/ }));
+    fireEvent.click(within(n).getByRole("button", { name: /^Уведомления/ }));
     const list = await screen.findByRole("list", { name: "Входящие" });
     expect(within(list).getByText("Глеб Орлов упоминает вас в заметке")).toBeInTheDocument();
     fireEvent.click(within(list).getByText("Вера Ким упоминает вас в обсуждении"));

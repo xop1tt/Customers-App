@@ -7,7 +7,7 @@ describe("настройки Ai", () => {
     const c = normalizeHub({ integrations: { slack: { enabled: true, webhook: "https://hooks.slack.com/services/secret" } }, ai: { mode: "x", temperature: 9, maxSteps: 99, allow: ["read", "bad", "messages"] } });
     expect(c).not.toHaveProperty("integrations");
     expect(JSON.stringify(c)).not.toContain("hooks.slack.com");
-    expect(c.ai).toMatchObject({ mode: "writes", temperature: 2, maxSteps: 12, allow: ["read"], enabled: false });
+    expect(c.ai).toMatchObject({ mode: "writes", temperature: 2, maxSteps: 12, allow: ["read"], enabled: true });
     expect(normalizeHub(null).ai).toEqual(defaultAi());
   });
   it("распознаёт локальные адреса", () => {

@@ -53,8 +53,8 @@ export function PeoplePage() {
         ) : shown.length === 0 ? (
           <EmptyState icon="users" title="Никого не нашлось">Измените запрос поиска.</EmptyState>
         ) : view === "list" || q ? (
-          <ul className="people-list" aria-label="Сотрудники">
-            {shown.map((m) => <PersonRow key={m.user_id} m={m} depth={0} />)}
+          <ul className="people-list cards" aria-label="Сотрудники">
+            {shown.map((m) => <PersonRow key={m.user_id} m={m} depth={0} card />)}
           </ul>
         ) : (
           <ul className="people-list" aria-label="Структура">
@@ -75,14 +75,14 @@ function TreeRows({ node, depth }: { node: TreeNode; depth: number }) {
   );
 }
 
-export function PersonRow({ m, depth, reports }: { m: TeamMember; depth: number; reports?: number }) {
+export function PersonRow({ m, depth, reports, card }: { m: TeamMember; depth: number; reports?: number; card?: boolean }) {
   const me = useStore((s) => s.ws?.me);
   const cloud = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.remote ?? false);
   const sub = [m.title, m.department].filter(Boolean).join(" · ");
   return (
-    <li className="person-row" style={{ paddingLeft: 10 + depth * 22 }}>
+    <li className={`person-row${card ? " card" : ""}`} style={card ? undefined : { paddingLeft: 10 + depth * 22 }}>
       <button type="button" className="person-main" onClick={() => openProfile(m.user_id === me ? null : m.user_id)}>
-        <PersonAvatar m={m} />
+        <PersonAvatar m={m} size={card ? 48 : 32} />
         <span className="col grow" style={{ gap: 1, minWidth: 0 }}>
           <span className="ellipsis person-name">{m.display_name}{m.user_id === me && <span className="faint"> · вы</span>}</span>
           <span className="ellipsis faint person-sub">{sub || presenceText(m, shortRelative)}</span>

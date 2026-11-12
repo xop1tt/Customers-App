@@ -75,7 +75,7 @@ export function stopChat() {
 
 /** Сообщить, что модель закончила или ждёт ответа — если пользователь сейчас не смотрит в чат Ai. */
 function attention(title: string, body: string) {
-  if (!getHub().ai.notify || typeof document === "undefined") return;
+  if (!getHub().ai.enabled || !getHub().ai.notify || typeof document === "undefined") return;
   const focused = document.hasFocus();
   if (focused && getState().aiOpen) return;
   if (focused) toast(`${title}: ${body}`);
@@ -227,6 +227,7 @@ async function handleCall(call: AiToolCall, cfg: AiConfig, my: number): Promise<
 
 export async function askAi(text: string, files: AiAttachment[] = []): Promise<void> {
   const cfg = getHub().ai;
+  if (!cfg.enabled) return;
   const t = text.trim();
   if (!t || busy) return;
   if (!cfg.enabled || !cfg.baseUrl || !cfg.model) { toast("Подключите модель в «Настройки → Ai».", "error"); return; }

@@ -43,7 +43,7 @@ export const AI_PROVIDERS: { id: AiProvider; title: string; url: string; hint: s
 ];
 
 export const defaultAi = (): AiConfig => ({
-  enabled: false, provider: "lmstudio", baseUrl: AI_PROVIDERS[0]!.url, model: "", apiKey: "", mode: "writes", system: "", temperature: 0.2, maxSteps: 6,
+  enabled: true, provider: "lmstudio", baseUrl: AI_PROVIDERS[0]!.url, model: "", apiKey: "", mode: "writes", system: "", temperature: 0.2, maxSteps: 6,
   allow: ["read", "navigate", "settings", "data"], vision: false, audio: false, notify: true,
 });
 
@@ -55,7 +55,7 @@ export function normalizeHub(raw: unknown): HubConfig {
   const d = defaultAi();
   const a = o.ai ?? {};
   const ai: AiConfig = {
-    enabled: a.enabled === true,
+    enabled: a.enabled !== false,
     provider: AI_PROVIDERS.some((p) => p.id === a.provider) ? (a.provider as AiProvider) : d.provider,
     baseUrl: typeof a.baseUrl === "string" ? a.baseUrl : d.baseUrl,
     model: typeof a.model === "string" ? a.model : "",

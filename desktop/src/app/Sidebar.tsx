@@ -64,7 +64,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const since = useNewSince();
   const device = useStore((s) => s.device);
   const session = useStore((s) => s.session);
-  const sync = useStore((s) => s.sync);
   const update = useStore((s) => s.update);
   const customizeFlag = useStore((s) => s.customizeNav);
   const sourceFilter = useStore((s) => s.filter.source);
@@ -85,9 +84,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const showSearch = mod === "search";
   const showCrm = mod === "crm";
   const showTeam = !customize && (mod === "team" || mod === "messages");
-  const incoming = useStore((s) => s.incoming.length);
-  const accountBtn = useRef<HTMLButtonElement>(null);
-  const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
   const countOf = (id: SectionId) => (device.sidebarCounts && id !== "home" && id !== "sources" && id !== "runs" ? count(leads, id, true, since) : undefined);
   const visible = (id: string) => customize || !device.sidebarHidden.includes(id);
@@ -101,14 +97,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
   const perScore = new Map<number, number>();
   for (const n of SCORE_STEPS) perScore.set(n, leads.filter((l) => !l.archived && !l.excluded && l.data.score >= n).length);
-
-  const helpItems = (): MenuItem[] => [
-    { label: "Что нового", icon: "sparkles", onSelect: () => setState({ whatsNewOpen: true }) },
-    { label: "Страница релизов", icon: "external", onSelect: () => void openLink(update?.releasesPage ?? "https://github.com/xop1tt/Customers-App/releases") },
-    { label: "Сообщить о проблеме", icon: "report", onSelect: () => setState({ reportOpen: true }) },
-  ];
-
-  const updateReady = updateVisible(update);
 
   /** Перетаскивание строк в режиме настройки панели. */
   const [drag, setDrag] = useState<{ group: string; from: number; over: number } | null>(null);
@@ -217,8 +205,8 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
         {showTeam && (
           <div className="nav-group">
             {mod === "team" && <GroupTitle id="team" title="Команда" />}
-            {((mod === "messages" ? ["chat"] : ["people", "notifications"]) as ("chat" | "people" | "notifications")[]).filter((id) => mod === "messages" || !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
-              const n = id === "chat" ? unreadTotal(chat) : id === "notifications" ? unreadNotifications(chat) : 0;
+            {((mod === "messages" ? ["chat"] : ["people"]) as ("chat" | "people")[]).filter((id) => mod === "messages" || !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
+              const n = id === "chat" ? unreadTotal(chat) : 0;
               const active = section === id || (id === "people" && section === "profile");
               return (
                 <button key={id} type="button" className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => setSection(id)}>
@@ -247,14 +235,38 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
       </nav>
 
       <div className="side-foot">
+        {updateVisible(update) && <UpdateButton />}
         {customize ? (
           <Button variant="primary" icon="check" onClick={() => setState({ customizeNav: false })}>Готово</Button>
         ) : (
           <>
-            {updateReady && <UpdateButton />}
             {canCustomize && <button type="button" className="nav-item" onClick={() => setState({ customizeNav: true })}><Icon name="edit" size={16} /><span>Настроить панель</span></button>}
           </>
         )}
+        <AccountBar withUpdate={false} />
+      </div>
+    </aside>
+  );
+}
+
+/** Учётная запись внизу левой панели: кнопка «Обновить», аватар с меню, уведомления (колокольчик) и справка. Показывается и в чате, где панели разделов нет. */
+export function AccountBar({ withUpdate = true }: { withUpdate?: boolean } = {}) {
+  const session = useStore((s) => s.session);
+  const sync = useStore((s) => s.sync);
+  const update = useStore((s) => s.update);
+  const chat = useStore((s) => s.chat);
+  const incoming = useStore((s) => s.incoming.length);
+  const accountBtn = useRef<HTMLButtonElement>(null);
+  const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
+  const notes = unreadNotifications(chat);
+  const helpItems = (): MenuItem[] => [
+    { label: "Что нового", icon: "sparkles", onSelect: () => setState({ whatsNewOpen: true }) },
+    { label: "Страница релизов", icon: "external", onSelect: () => void openLink(update?.releasesPage ?? "https://github.com/xop1tt/Customers-App/releases") },
+    { label: "Сообщить о проблеме", icon: "report", onSelect: () => setState({ reportOpen: true }) },
+  ];
+  return (
+    <>
+      {withUpdate && updateVisible(update) && <UpdateButton />}
         <div className="row side-account-row">
           <button ref={accountBtn} type="button" className="account-btn" onClick={() => setAccountRect(accountBtn.current?.getBoundingClientRect() ?? null)} aria-haspopup="menu" aria-label={incoming > 0 ? `Учётная запись, приглашений: ${incoming}` : "Учётная запись"}>
             <span className="avatar-wrap">
@@ -266,9 +278,14 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
               {session?.isCloud && <SyncBadge sync={sync} />}
             </span>
           </button>
+          {(session?.isCloud || chat?.available) && (
+            <span className="avatar-wrap">
+              <IconButton icon="bell" tip="Уведомления" aria-label={notes > 0 ? `Уведомления, новых: ${notes}` : "Уведомления"} onClick={() => setSection("notifications")} />
+              {notes > 0 && <span className="red-badge" aria-hidden="true">{notes > 99 ? "99+" : integer(notes)}</span>}
+            </span>
+          )}
           <IconButton icon="help" tip="Справка" onClick={(e) => showMenu(helpItems(), e.currentTarget.getBoundingClientRect(), "top-start")} />
         </div>
-      </div>
       {accountRect && (
         <Popover anchor={accountRect} onClose={() => setAccountRect(null)} ignore={accountBtn.current} minWidth={Math.max(accountRect.width, 220)} className="popover-menu" placement="top-start">
           <ul className="menu">
@@ -281,7 +298,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </ul>
         </Popover>
       )}
-    </aside>
+    </>
   );
 }
 
