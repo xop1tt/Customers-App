@@ -6,6 +6,7 @@ vi.hoisted(() => { window.history.replaceState({}, "", "/?team"); });
 
 import { resetChatMock } from "../../api/chatMock";
 import { resetWsMock, setWsMockRole } from "../../api/wsMock";
+import { isMuted, loadPrefs, shouldToast } from "../../lib/notifyPrefs";
 import { getState, setState } from "../../state/store";
 import { App } from "../App";
 
@@ -180,6 +181,26 @@ describe("сообщения", () => {
     const pick = await screen.findByRole("dialog", { name: "Добавить в обсуждение" });
     fireEvent.click(within(pick).getByText("Глеб Орлов"));
     await waitFor(() => expect(within(members).getByText("Глеб Орлов")).toBeInTheDocument());
+  });
+});
+
+describe("колокольчик: правый клик", () => {
+  it("меню: прочитать все, настройки, отключение на время и «пока не включу»", async () => {
+    const n = await nav();
+    const bell = within(n).getByRole("button", { name: /^Уведомления/ });
+    fireEvent.contextMenu(bell);
+    fireEvent.click(within(await screen.findByRole("menuitem", { name: /Прочитать все/ })).getByRole("button"));
+    await waitFor(() => expect(getState().chat?.notifications.every((x) => x.read)).toBe(true));
+    fireEvent.contextMenu(bell);
+    fireEvent.click(within(await screen.findByRole("menuitem", { name: /Отключить уведомления/ })).getByRole("button"));
+    fireEvent.click(within(await screen.findByRole("menuitem", { name: "2 часа" })).getByRole("button"));
+    expect(isMuted(loadPrefs())).toBe(true);
+    expect(loadPrefs().muteUntil).toBeGreaterThan(Date.now() + 1.9 * 3_600_000);
+    expect(shouldToast("message", loadPrefs())).toBe(false);
+    await waitFor(() => expect(within(n).getByRole("button", { name: "Уведомления отключены" })).toBeInTheDocument());
+    fireEvent.contextMenu(within(n).getByRole("button", { name: "Уведомления отключены" }));
+    fireEvent.click(within(await screen.findByRole("menuitem", { name: /Включить уведомления/ })).getByRole("button"));
+    expect(isMuted(loadPrefs())).toBe(false);
   });
 });
 

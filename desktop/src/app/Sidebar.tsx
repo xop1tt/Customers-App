@@ -1,5 +1,5 @@
 import { can } from "../lib/crm";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { count, type SectionId, SECTIONS } from "../lib/leads";
 import { useNewSince } from "../state/hooks";
 import { integer } from "../lib/format";
@@ -11,11 +11,12 @@ import { api } from "../api";
 import { Icon } from "../ui/icons";
 import { type MenuItem, Popover, showMenu } from "../ui/overlay";
 import type { SyncStatus, UpdateInfo } from "../api/types";
-import { attempt, leaveSession, openCollection, openProfile, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
+import { attempt, toast, leaveSession, openCollection, openProfile, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
 import { CollectionsGroup } from "./crm/Collections";
 import { openLink } from "../state/actions";
 import { GroupTitle, useCollapsed } from "./SideGroup";
-import { unreadNotifications, unreadTotal } from "../state/team";
+import { pollChat, unreadNotifications, unreadTotal } from "../state/team";
+import { isMuted, loadPrefs, setMute } from "../lib/notifyPrefs";
 import { openMarket } from "../state/market";
 
 const SCORE_STEPS = [90, 70, 50, 30];
@@ -258,7 +259,36 @@ export function AccountBar({ withUpdate = true }: { withUpdate?: boolean } = {})
   const incoming = useStore((s) => s.incoming.length);
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
-  const notes = unreadNotifications(chat);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((n) => n + 1);
+    window.addEventListener("customers:notify-prefs", bump);
+    const t = setInterval(bump, 30_000);
+    return () => { window.removeEventListener("customers:notify-prefs", bump); clearInterval(t); };
+  }, []);
+  const muted = isMuted(loadPrefs());
+  const notes = muted ? 0 : unreadNotifications(chat);
+  const bellMenu = (rect: DOMRect): MenuItem[] => {
+    const unread = unreadNotifications(chat);
+    const mute = (h?: number) => () => { setMute(h); toast("Уведомления отключены."); };
+    const durations = (): MenuItem[] => [
+      { label: "Назад", icon: "chevronLeft", onSelect: () => setTimeout(() => showMenu(bellMenu(rect), rect, "top-start"), 0) },
+      { separator: true },
+      { label: "1 час", onSelect: mute(1) },
+      { label: "2 часа", onSelect: mute(2) },
+      { label: "12 часов", onSelect: mute(12) },
+      { label: "24 часа", onSelect: mute(24) },
+      { label: "Пока не включу", onSelect: mute() },
+    ];
+    return [
+      { label: "Прочитать все", icon: "check", disabled: unread === 0, onSelect: () => void attempt(() => api.wsChat("notifications_mark_read", { ids: null })).then(() => pollChat()) },
+      { label: "Настройки уведомлений", icon: "settings", onSelect: () => openSettings("notifications") },
+      { separator: true },
+      muted
+        ? { label: "Включить уведомления", icon: "bell", onSelect: () => { setMute(0); toast("Уведомления включены."); } }
+        : { label: "Отключить уведомления", icon: "bellOff", hint: "›", onSelect: () => setTimeout(() => showMenu(durations(), rect, "top-start"), 0) },
+    ];
+  };
   const helpItems = (): MenuItem[] => [
     { label: "Что нового", icon: "sparkles", onSelect: () => setState({ whatsNewOpen: true }) },
     { label: "Страница релизов", icon: "external", onSelect: () => void openLink(update?.releasesPage ?? "https://github.com/xop1tt/Customers-App/releases") },
@@ -280,7 +310,8 @@ export function AccountBar({ withUpdate = true }: { withUpdate?: boolean } = {})
           </button>
           {(session?.isCloud || chat?.available) && (
             <span className="avatar-wrap">
-              <IconButton icon="bell" tip="Уведомления" aria-label={notes > 0 ? `Уведомления, новых: ${notes}` : "Уведомления"} onClick={() => setSection("notifications")} />
+              <IconButton icon={muted ? "bellOff" : "bell"} tip={muted ? "Уведомления отключены" : "Уведомления"} aria-label={notes > 0 ? `Уведомления, новых: ${notes}` : muted ? "Уведомления отключены" : "Уведомления"} onClick={() => setSection("notifications")}
+                onContextMenu={(e: React.MouseEvent<HTMLElement>) => { e.preventDefault(); showMenu(bellMenu(e.currentTarget.getBoundingClientRect()), e.currentTarget.getBoundingClientRect(), "top-start"); }} />
               {notes > 0 && <span className="red-badge" aria-hidden="true">{notes > 99 ? "99+" : integer(notes)}</span>}
             </span>
           )}
