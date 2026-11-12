@@ -1,3 +1,4 @@
+import { can } from "../lib/crm";
 import { useRef, useState } from "react";
 import { count, type SectionId, SECTIONS } from "../lib/leads";
 import { useNewSince } from "../state/hooks";
@@ -74,6 +75,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const teamShut = useCollapsed("team");
   const chat = useStore((s) => s.chat);
   const hasWs = useStore((s) => !!s.ws?.active);
+  const perms = useStore((s) => s.ws?.permissions);
   const wsName = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.name ?? null);
   // Панель разделов показывает группы открытого модуля рейки; в режиме настройки — все настраиваемые группы.
   const mod = moduleOf(section);
@@ -171,7 +173,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
         {session && !customize && hasWs && mod === "crm" && (
           <div className="nav-group">
-            {(["today", "calendar", "deals", "reports", "trash"] as SectionId[]).map((id) => <NavItem key={id} id={id} active={section === id} onClick={() => setSection(id)} />)}
+            {((["today", "calendar", "deals", "reports", "trash"] as SectionId[]).concat(can(perms ?? [], "audit") ? ["journal"] : [])).map((id) => <NavItem key={id} id={id} active={section === id} onClick={() => setSection(id)} />)}
           </div>
         )}
 
