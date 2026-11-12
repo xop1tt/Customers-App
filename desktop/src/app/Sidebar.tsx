@@ -85,6 +85,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const showSearch = mod === "search";
   const showCrm = mod === "crm";
   const showTeam = !customize && (mod === "team" || mod === "messages");
+  const incoming = useStore((s) => s.incoming.length);
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
 
@@ -255,8 +256,11 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </>
         )}
         <div className="row side-account-row">
-          <button ref={accountBtn} type="button" className="account-btn" onClick={() => setAccountRect(accountBtn.current?.getBoundingClientRect() ?? null)} aria-haspopup="menu" aria-label="Учётная запись">
-            <Avatar name={session?.displayName ?? "?"} src={session?.avatar} size={28} />
+          <button ref={accountBtn} type="button" className="account-btn" onClick={() => setAccountRect(accountBtn.current?.getBoundingClientRect() ?? null)} aria-haspopup="menu" aria-label={incoming > 0 ? `Учётная запись, приглашений: ${incoming}` : "Учётная запись"}>
+            <span className="avatar-wrap">
+              <Avatar name={session?.displayName ?? "?"} src={session?.avatar} size={28} />
+              {incoming > 0 && <span className="red-badge" aria-label={`Приглашений: ${incoming}`}>{incoming}</span>}
+            </span>
             <span className="side-name-row grow">
               <span className="ellipsis side-name">{session?.displayName}</span>
               {session?.isCloud && <SyncBadge sync={sync} />}
@@ -270,7 +274,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           <ul className="menu">
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openProfile(null); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Профиль</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("appearance"); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Настройки</button></li>
-            <li><button className="menu-item" onClick={() => { setAccountRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство</button></li>
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство{incoming > 0 && <span className="red-badge menu-badge" aria-label={`Приглашений: ${incoming}`}>{incoming}</span>}</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openMarket(); }}><span className="menu-icon"><Icon name="store" size={14} /></span>Интеграции</button></li>
             <li className="menu-sep" />
             <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>

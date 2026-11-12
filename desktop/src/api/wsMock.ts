@@ -95,6 +95,9 @@ function seed(id: string, demo: boolean): Map<string, Row[]> {
 
 const demoParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
 const workspaces: Ws[] = [];
+/** Почта демо-учётной записи: приглашение на этот адрес приходит во «входящие» (ADR-082). */
+export const DEMO_EMAIL = "anna@customers.demo";
+const incoming: { id: string; workspaceName: string; role: string; roleName: string; invitedByName: string; createdAt: string; expiresAt: string }[] = [];
 let active: string | null = null;
 
 function ensure(): Ws {
@@ -117,6 +120,7 @@ function ensure(): Ws {
 export function resetWsMock() {
   workspaces.length = 0;
   invitations.clear();
+  incoming.length = 0;
   auditLog.clear();
   lastMerge = null;
   active = null;
@@ -579,6 +583,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       if (list.some((i) => i.email === email)) fail("Этому адресу уже отправлено открытое приглашение.");
       const inv = { id: uid(), email, role: s("role"), roleName: ROLE_NAME[s("role")] ?? s("role"), createdAt: now(), expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(), sentCount: 1, lastSentAt: now(), invitedBy: ME, token };
       invitations.set(ws.info.id, [inv, ...list]);
+      if (email === DEMO_EMAIL) incoming.unshift({ id: inv.id, workspaceName: ws.info.name, role: inv.role, roleName: inv.roleName, invitedByName: ws.members.find((x) => x.userId === ME)?.displayName ?? "Коллега", createdAt: inv.createdAt, expiresAt: inv.expiresAt });
       return { id: inv.id, email, role: inv.role, expiresAt: inv.expiresAt, token, link: `customers://invite?token=${token}` };
     }
     case "ws_invitations": {
@@ -642,6 +647,22 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       ws.members = ws.members.filter((x) => x.userId !== s("user"));
       audit(ws.info.id, ME, "member_removed", "member", s("user"));
       return state();
+    case "ws_incoming": return demoParams.has("team") ? incoming.map(({ role: _r, ...i }) => i) : [];
+    case "ws_accept_incoming": {
+      const at = incoming.findIndex((i) => i.id === s("id"));
+      if (at < 0) fail("Приглашение не найдено или срок истёк.");
+      const [inv] = incoming.splice(at, 1);
+      const id = `ws-${uid()}`;
+      const members = [member(ME, "Анна", inv!.role)];
+      workspaces.push({ info: { ...info(id, inv!.workspaceName, inv!.role, false, members.length), remote: true }, members, tables: seed(id, false), prefs: new Map(), conflicts: [] });
+      active = id;
+      return state();
+    }
+    case "ws_decline_incoming": {
+      const at = incoming.findIndex((i) => i.id === s("id"));
+      if (at >= 0) incoming.splice(at, 1);
+      return true;
+    }
     case "ws_accept_invitation": case "ws_leave": return remoteOnly();
     default: return null;
   }

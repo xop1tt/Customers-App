@@ -1,5 +1,5 @@
 // Панель управления рабочим пространством справа: разделы по роли, структура, закрытие.
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../api";
 import { resetWsMock, setWsMockRole } from "../../api/wsMock";
@@ -41,5 +41,35 @@ describe("панель рабочего пространства", () => {
     setState({ workspaceOpen: true });
     fireEvent.click(within(await screen.findByRole("dialog", { name: "Рабочее пространство" })).getByRole("button", { name: "Закрыть" }));
     expect(getState().workspaceOpen).toBe(false);
+  });
+});
+
+describe("входящие приглашения", () => {
+  it("приглашение на почту учётной записи приходит в приложение и принимается кнопкой", async () => {
+    const { DEMO_EMAIL } = await import("../../api/wsMock");
+    setWsMockRole("owner");
+    expect(await api.wsIncoming()).toEqual([]);
+    await api.wsInvite(DEMO_EMAIL, "manager");
+    await api.wsInvite("other@firma.ru", "viewer");
+    const list = await api.wsIncoming();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ workspaceName: "Отдел продаж", roleName: "Менеджер" });
+    setState({ ws: await api.wsState(), incoming: list, workspaceOpen: true });
+    render(<WorkspaceDialog />);
+    const card = await screen.findByLabelText("Приглашения");
+    fireEvent.click(within(card).getByRole("button", { name: "Принять" }));
+    await waitFor(() => expect(getState().incoming).toHaveLength(0));
+    expect(getState().ws?.workspaces.filter((w) => w.name === "Отдел продаж")).toHaveLength(2);
+    expect(await api.wsIncoming()).toEqual([]);
+  });
+
+  it("отклонить убирает приглашение", async () => {
+    const { DEMO_EMAIL } = await import("../../api/wsMock");
+    setWsMockRole("owner");
+    await api.wsInvite(DEMO_EMAIL, "viewer");
+    const [inv] = await api.wsIncoming();
+    await api.wsDeclineIncoming(inv!.id);
+    expect(await api.wsIncoming()).toEqual([]);
+    await expect(api.wsAcceptIncoming(inv!.id)).rejects.toThrow(/не найдено/);
   });
 });

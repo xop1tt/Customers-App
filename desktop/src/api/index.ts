@@ -6,7 +6,7 @@ import type {
   AccountPrefs, AuthCallback, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
-  CrmRecord, WsAuditItem, WsAuditQuery, WsCard, WsCollection, WsConflict, WsConverted, WsInvitation, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll,
+  CrmRecord, WsAuditItem, WsAuditQuery, WsCard, WsCollection, WsConflict, WsConverted, WsInvitation, WsIncoming, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll,
   AiChatReply, ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
 } from "./types";
 
@@ -154,6 +154,10 @@ export const api = {
   wsAudit: (q: WsAuditQuery = {}) => call<{ items: WsAuditItem[]; more: boolean }>("ws_audit", { actor: q.actor ?? null, action: q.action ?? null, entityId: q.entityId ?? null, offset: q.offset ?? 0 }),
   wsTransferOwnership: (user: string) => call<WsState>("ws_transfer_ownership", { user }),
   wsDeleteWorkspace: (confirmName: string) => call<WsState>("ws_delete_workspace", { confirmName }),
+  // Приглашения «по почте»: ядро получит команды вместе с новой базой (ADR-082); до этого список всегда пуст.
+  wsIncoming: () => call<WsIncoming[]>("ws_incoming").catch(() => [] as WsIncoming[]),
+  wsAcceptIncoming: (id: string) => call<WsState>("ws_accept_incoming", { id }),
+  wsDeclineIncoming: (id: string) => call<boolean>("ws_decline_incoming", { id }),
   wsAcceptInvitation: (token: string) => call<WsState>("ws_accept_invitation", { token }),
   wsSetMemberRole: (user: string, role: string) => call<WsState>("ws_set_member_role", { user, role }),
   wsRemoveMember: (user: string) => call<WsState>("ws_remove_member", { user }),
