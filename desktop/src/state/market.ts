@@ -1,16 +1,16 @@
-// Маркетплейс: окно каталога и кнопки установленных интеграций в карточках CRM.
+// Коннекторы (прежде «Маркетплейс»): окно каталога и кнопки установленных коннекторов в карточках CRM.
 
 import { useEffect } from "react";
 import { api } from "../api";
 import type { MarketAction, MarketInstalled } from "../api/types";
 import { getState, setState, useStore } from "./store";
 
-export type MarketPage = "catalog" | "installed" | "developer" | "moderation";
+export type MarketPage = "catalog" | "installed" | "review" | "developer";
 
 export const openMarket = (page: MarketPage = "catalog") => setState({ market: page });
 export const closeMarket = () => setState({ market: null });
 
-/** Кнопки интеграций активного Workspace (только включённые и опубликованные). */
+/** Кнопки коннекторов активного Workspace (только включённые и опубликованные). */
 export async function refreshMarketInstalled(): Promise<void> {
   try {
     setState({ marketInstalled: await api.wsMarket<MarketInstalled[]>("market_installed") });
@@ -28,7 +28,7 @@ export function useMarketInstalled() {
   }, [cloud, active]);
 }
 
-/** Действия интеграций для карточки этого типа. */
+/** Действия коннекторов для карточки этого типа. */
 export function actionsFor(list: MarketInstalled[], entity: string): { app: MarketInstalled; action: MarketAction }[] {
   return list.flatMap((app) => app.actions.filter((a) => a.entity === entity).map((action) => ({ app, action })));
 }

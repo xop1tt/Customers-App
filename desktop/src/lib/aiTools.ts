@@ -1,7 +1,7 @@
 // Что модель может делать в приложении. Каждое действие — именованный инструмент с проверяемыми аргументами и уровнем риска;
 // какие из них нужно подтверждать, решает режим из настроек Ai. Исполняет инструменты `state/ai.ts`, здесь только правила.
 
-import { type AiConfig, type AiGroup, type AiMode, MESSENGERS } from "./hub";
+import type { AiConfig, AiGroup, AiMode } from "./hub";
 
 /** read — чтение; nav — переходы; setting — настройки приложения; soft — легко обратимые правки данных; write — прочие правки;
  *  external — данные уходят из компьютера; danger — удаление. */
@@ -42,7 +42,7 @@ export const AI_TOOLS: AiTool[] = [
   { name: "get_settings", group: "read", risk: "read", description: "Текущие настройки оформления и интерфейса.", parameters: { type: "object", properties: {} }, summary: () => "Прочитать настройки" },
   { name: "open_section", group: "navigate", risk: "nav", description: "Открыть раздел приложения.", parameters: { type: "object", properties: { section: { type: "string", enum: [...NAV_SECTIONS] } }, required: ["section"] }, summary: (a) => `Открыть раздел «${String(a.section)}»` },
   { name: "open_settings", group: "navigate", risk: "nav", description: "Открыть окно настроек на нужной странице.", parameters: { type: "object", properties: { section: { type: "string", enum: [...SETTINGS_SECTIONS] } }, required: ["section"] }, summary: (a) => `Открыть настройки «${String(a.section)}»` },
-  { name: "open_integrations", group: "navigate", risk: "nav", description: "Открыть окно «Интеграции» (каталог или установленные).", parameters: { type: "object", properties: { page: { type: "string", enum: ["catalog", "installed"] } } }, summary: (a) => `Открыть интеграции: ${String(a.page ?? "catalog")}` },
+  { name: "open_connectors", group: "navigate", risk: "nav", description: "Открыть окно «Коннекторы» (каталог, установленные или заявки на проверке).", parameters: { type: "object", properties: { page: { type: "string", enum: ["catalog", "installed", "review"] } } }, summary: (a) => `Открыть коннекторы: ${String(a.page ?? "catalog")}` },
   { name: "set_setting", group: "settings", risk: "setting", description: "Изменить настройку приложения: theme (system|dark|light), uiScale (0.8–1.6), compactRows, animations, language (system|ru|en), sidebarCounts (true|false).",
     parameters: { type: "object", properties: { key: { type: "string", enum: [...SETTING_KEYS] }, value: { description: "Новое значение" } }, required: ["key", "value"] }, summary: (a) => `Настройка «${String(a.key)}» → ${JSON.stringify(a.value)}` },
   { name: "set_favorite", group: "data", risk: "soft", description: "Добавить лиды в избранное или убрать оттуда.", parameters: { type: "object", properties: { ids: ids("id лидов"), on: { type: "boolean" } }, required: ["ids", "on"] }, summary: (a) => `${a.on ? "В избранное" : "Из избранного"}: лидов ${list(a.ids)}` },
@@ -57,8 +57,6 @@ export const AI_TOOLS: AiTool[] = [
     summary: (a) => (a.unassign === true ? `Снять ответственного (${String(a.entity)} ${String(a.id)})` : `Назначить ответственным «${String(a.member ?? "")}» (${String(a.entity)} ${String(a.id)})`) },
   { name: "run_search", group: "data", risk: "write", description: "Запустить поиск новых клиентов по включённым источникам.", parameters: { type: "object", properties: {} }, summary: () => "Запустить поиск клиентов" },
   { name: "delete_leads", group: "data", risk: "danger", description: "Удалить лиды без возможности восстановления.", parameters: { type: "object", properties: { ids: ids("id лидов") }, required: ["ids"] }, summary: (a) => `УДАЛИТЬ лидов: ${list(a.ids)}` },
-  { name: "send_message", group: "messages", risk: "external", description: "Отправить сообщение через подключённую интеграцию: slack, telegram, discord, teams.",
-    parameters: { type: "object", properties: { service: { type: "string", enum: [...MESSENGERS] }, text: str("Текст сообщения") }, required: ["service", "text"] }, summary: (a) => `Отправить в ${String(a.service)}: «${String(a.text ?? "").slice(0, 120)}»` },
 ];
 
 export const toolByName = (name: string): AiTool | undefined => AI_TOOLS.find((t) => t.name === name);

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { SyncStatus, UpdateInfo } from "../api/types";
-import { setState } from "../state/store";
+import { getState, setState } from "../state/store";
 import { App } from "./App";
 import { subsectionsOf } from "./settings/subsections";
 import { syncView, updateVisible } from "./Sidebar";
@@ -67,7 +67,7 @@ describe("подразделы настроек", () => {
   it("у страниц с несколькими группами есть подразделы, остальные не раскрываются", () => {
     expect(subsectionsOf("appearance", false).map((s) => s.id)).toEqual(["look", "sidebar"]);
     expect(subsectionsOf("account", false).map((s) => s.id)).toEqual(["profile", "security"]);
-    expect(subsectionsOf("account", true).map((s) => s.id)).toEqual(["profile", "security", "cloud"]);
+    expect(subsectionsOf("account", true).map((s) => s.id)).toEqual(["profile", "security"]);
     expect(subsectionsOf("exclusions", true)).toEqual([]);
     expect(subsectionsOf("notifications", true)).toEqual([]);
   });
@@ -142,5 +142,22 @@ describe("сворачиваемые группы и меню учётной з�
     fireEvent.click(screen.getByRole("button", { name: "Изменить профиль" }));
     const dialog = await screen.findByRole("dialog", { name: "Настройки" });
     expect(within(dialog).getAllByText("Профиль").length).toBeGreaterThan(0);
+  });
+});
+
+describe("версия программы в настройках", () => {
+  it("внизу левого списка по центру: vX.Y.Z, любое число частей; «Данные» из аккаунта убраны", async () => {
+    render(<App />);
+    await screen.findByLabelText("Навигация");
+    fireEvent.click(screen.getByLabelText("Учётная запись"));
+    fireEvent.click(await screen.findByText("Настройки", { selector: ".menu-item" }));
+    const dialog = await screen.findByRole("dialog", { name: "Настройки" });
+    const nav = within(dialog).getByRole("navigation", { name: "Разделы настроек" });
+    const ver = within(nav).getByLabelText("Версия программы");
+    expect(ver.textContent).toMatch(/^v\d+(\.\d+)*$/);
+    expect(nav.lastElementChild).toBe(ver);
+    setState({ boot: { ...getState().boot!, version: "1.2.3.4.5" } });
+    await waitFor(() => expect(within(nav).getByLabelText("Версия программы")).toHaveTextContent("v1.2.3.4.5"));
+    expect(within(dialog).queryByRole("button", { name: "Данные" })).toBeNull();
   });
 });

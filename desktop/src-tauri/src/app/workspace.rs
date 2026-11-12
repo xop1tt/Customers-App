@@ -1293,8 +1293,20 @@ impl Core {
     pub async fn ws_market(self: &Arc<Self>, action: &str, args: Map<String, Value>) -> CmdResult<Value> {
         // Действия, которым нужен активный облачный Workspace (подставляется сам).
         const WITH_WORKSPACE: [&str; 4] = ["market_installed", "market_install", "market_uninstall", "market_set_enabled"];
-        const OTHERS: [&str; 7] =
-            ["market_catalog", "market_my_apps", "market_submit", "market_is_moderator", "market_review_queue", "market_review", "market_suspend"];
+        const OTHERS: [&str; 11] = [
+            "market_catalog",
+            "market_my_apps",
+            "market_submit",
+            "market_is_moderator",
+            "market_review_queue",
+            "market_review",
+            "market_suspend",
+            // Проверка компаний-разработчиков (ADR-083): функции сервера ещё не созданы, пока приложение показывает понятное сообщение.
+            "market_company",
+            "market_company_save",
+            "market_company_queue",
+            "market_company_review",
+        ];
         let with_ws = WITH_WORKSPACE.contains(&action);
         if !with_ws && !OTHERS.contains(&action) {
             return Err(CmdError::msg("Неизвестное действие маркетплейса."));
@@ -1325,6 +1337,9 @@ impl Core {
         }
         match sync::rpc(&cloud, action, Value::Object(body)).await {
             Ok(v) => Ok(v),
+            Err(CloudError::Server(m)) if m.contains("market_company") && (m.contains("schema cache") || m.contains("Could not find")) => {
+                Err(CmdError::new("companyMissing", "Проверка компаний появится после обновления сервера: пока коннекторы можно только устанавливать."))
+            }
             Err(CloudError::Server(m)) if m.contains("market_") && (m.contains("schema cache") || m.contains("Could not find")) => Err(CmdError::new(
                 "marketMissing",
                 "Маркетплейс появится после обновления сервера: владельцу проекта Supabase нужно применить миграцию 20261111100000_marketplace.sql.",

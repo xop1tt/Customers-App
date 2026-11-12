@@ -8,7 +8,7 @@ import type { SectionId } from "../lib/leads";
 import { AI_TOOLS, type AiRisk, type AiTool, TABLES, needsConfirm, parseArgs, responsibleField, systemPrompt, toolByName, toolSpecs, validateArgs } from "../lib/aiTools";
 import { type AiAttachment, type ContentPart, slimContent, userContent } from "../lib/aiFiles";
 import { can, memberName } from "../lib/crm";
-import { type AiConfig, hubApp, isMessenger } from "../lib/hub";
+import type { AiConfig } from "../lib/hub";
 import { errText, getState, openSettings, patchDevice, setSection, setState, toast } from "./store";
 import { openMarket } from "./market";
 import { getHub } from "./hub";
@@ -138,7 +138,7 @@ async function runTool(tool: AiTool, a: Record<string, unknown>): Promise<string
     }
     case "open_section": setSection(String(a.section) as SectionId); return `Открыт раздел «${String(a.section)}».`;
     case "open_settings": if (a.section === "ai") openSettings("ai" as SettingsSection); else openSettings(String(a.section) as SettingsSection); return `Открыты настройки «${String(a.section)}».`;
-    case "open_integrations": openMarket(a.page === "installed" ? "installed" : "catalog"); return "Окно «Интеграции» открыто.";
+    case "open_connectors": openMarket(a.page === "installed" ? "installed" : a.page === "review" ? "review" : "catalog"); return "Окно «Коннекторы» открыто.";
     case "set_setting": await patchDevice({ [String(a.key)]: a.value } as Partial<DevicePrefs>); return `Настройка «${String(a.key)}» изменена.`;
     case "set_favorite": { const ids = asIds(); await api.setFavorite(ids, a.on === true); return `Готово: лидов ${ids.length}.`; }
     case "archive_leads": { const ids = asIds(); await api.setArchived(ids, a.on === true); return `Готово: лидов ${ids.length}.`; }
@@ -193,11 +193,6 @@ async function runTool(tool: AiTool, a: Record<string, unknown>): Promise<string
     }
     case "run_search": await api.runSearch(); return "Поиск запущен.";
     case "delete_leads": { const ids = asIds(); await api.deleteLeads(ids); return `Удалено лидов: ${ids.length}.`; }
-    case "send_message": {
-      const svc = String(a.service);
-      if (!isMessenger(svc)) return "Неизвестная интеграция.";
-      return api.hubSend(svc, String(a.text));
-    }
     default: return "Неизвестный инструмент.";
   }
 }
@@ -210,11 +205,6 @@ async function handleCall(call: AiToolCall, cfg: AiConfig, my: number): Promise<
   if (!args) return "Аргументы должны быть JSON-объектом.";
   const bad = validateArgs(tool, args);
   if (bad) return bad;
-  if (tool.name === "send_message") {
-    const svc = String(args.service);
-    const on = isMessenger(svc) && getHub().integrations[svc]?.enabled;
-    if (!on) return `Интеграция «${hubApp(svc)?.name ?? svc}» не подключена.`;
-  }
   const confirm = needsConfirm(cfg.mode, tool.risk);
   const id = push({ kind: "action", tool: tool.name, risk: tool.risk, summary: tool.summary(args), status: confirm ? "pending" : "running", confirm });
   if (confirm) {

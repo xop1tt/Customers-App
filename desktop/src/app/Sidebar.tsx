@@ -275,7 +275,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openProfile(null); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Профиль</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("appearance"); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Настройки</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство{incoming > 0 && <span className="red-badge menu-badge" aria-label={`Приглашений: ${incoming}`}>{incoming}</span>}</button></li>
-            <li><button className="menu-item" onClick={() => { setAccountRect(null); openMarket(); }}><span className="menu-icon"><Icon name="store" size={14} /></span>Интеграции</button></li>
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); openMarket(); }}><span className="menu-icon"><Icon name="store" size={14} /></span>Коннекторы</button></li>
             <li className="menu-sep" />
             <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>
           </ul>

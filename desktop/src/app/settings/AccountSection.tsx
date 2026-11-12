@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
-import { fullRu } from "../../lib/format";
 import { avatarFromFile } from "../../lib/avatar";
 import { Avatar, Button, Field, Group, Notice, PasswordInput, SettingRow, Sub, Switch, Tag, TextInput } from "../../ui/kit";
 import { Dialog, confirmDialog } from "../../ui/overlay";
@@ -120,7 +119,6 @@ function LocalAccount() {
 
 function CloudAccount() {
   const session = useStore((s) => s.session);
-  const sync = useStore((s) => s.sync);
   const user = session?.cloudUser;
   const [dialog, setDialog] = useState<"email" | null>(null);
   if (!user) return null;
@@ -130,10 +128,6 @@ function CloudAccount() {
         <SettingRow title={<span className="row">{user.email}{user.confirmed ? <Tag tone="green">подтверждена</Tag> : <Tag tone="orange">не подтверждена</Tag>}</span>} hint={user.newEmail ? `Ожидает подтверждения новый адрес: ${user.newEmail}` : "Адрес для входа и восстановления пароля."}>
           <Button onClick={() => setDialog("email")}>{user.newEmail ? "Подтвердить новый адрес" : "Изменить"}</Button>
         </SettingRow>
-      </Group>
-      <Group title="Синхронизация" sub="cloud">
-        <SettingRow title={sync?.kind === "syncing" ? "Синхронизация…" : sync?.kind === "offline" ? "Нет связи с сервером" : sync?.kind === "failed" ? "Последняя синхронизация не удалась" : "Данные синхронизированы"}
-          hint={`${sync?.lastSync ? `Последний раз: ${fullRu(sync.lastSync)}. ` : ""}${sync?.message ?? ""}${sync?.pending ? ` Ждут отправки: ${sync.pending}.` : ""}${sync?.lastSync ? ` В последний раз отправлено: ${sync.lastPushed ?? 0}, получено: ${sync.lastPulled ?? 0}.` : ""}`} />
       </Group>
       <Group title="Пароль" sub="security"><div style={{ paddingTop: 14 }}><PasswordForm labels={["Текущий пароль", "Новый пароль", "Повторите новый пароль"]} onSubmit={(o, n, c) => api.changeCloudPassword(o, n, c)} /></div></Group>
       {dialog === "email" && <EmailDialog onClose={() => setDialog(null)} />}

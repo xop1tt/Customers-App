@@ -57,7 +57,7 @@ export interface AppState {
   /** Входящие приглашения в рабочие пространства (красный пузырёк у учётной записи). */
   incoming: WsIncoming[];
   /** Открытое окно маркетплейса (раздел) или null. */
-  market: "catalog" | "installed" | "developer" | "moderation" | null;
+  market: "catalog" | "installed" | "review" | "developer" | null;
   /** Установленные интеграции активного Workspace: кнопки в карточках CRM. */
   marketInstalled: MarketInstalled[];
   /** Диалог коллекции: новая (`id: null`) или изменение существующей. */

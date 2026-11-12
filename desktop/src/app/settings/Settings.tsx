@@ -53,6 +53,7 @@ export function Settings() {
   const sub = useStore((s) => s.settingsSub);
   const update = useStore((s) => s.update);
   const cloud = useStore((s) => !!s.session?.isCloud);
+  const appVersion = useStore((s) => s.boot?.version ?? s.update?.current ?? "");
   const admin = useStore((s) => canAdminister(s.ws?.active ? s.ws.permissions : undefined));
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -106,6 +107,7 @@ export function Settings() {
               </div>
             </div>
           )}
+          {appVersion && <div className="settings-version" aria-label="Версия программы">v{appVersion.replace(/^v/i, "")}</div>}
         </nav>
         <div className="settings-main">
           <header className="settings-head">

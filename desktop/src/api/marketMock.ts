@@ -2,7 +2,8 @@
 // которые видны в интерфейсе: каталог только из одобренных версий, установка — право workspace.manage,
 // установленная версия не меняется сама, подача ждёт модерации, модератор одобряет или отклоняет с причиной.
 
-import type { MarketApp, MarketCategory, MarketInstalled, MarketManifest, MarketReview, MarketVersion } from "./types";
+import type { MarketApp, MarketCategory, MarketCompany, MarketCompanyReview, MarketInstalled, MarketManifest, MarketReview, MarketVersion } from "./types";
+import { checkCompany, checkConnector, firstFailure } from "../lib/connectors";
 
 export interface MarketCtx { cloud: boolean; me: string; wsId: string | null; perms: string[]; moderator: boolean }
 
@@ -13,6 +14,7 @@ interface Install { ws: string; app: string; version: string; enabled: boolean; 
 let apps: App[] = [];
 let versions: Ver[] = [];
 let installs: Install[] = [];
+let companies: Record<string, MarketCompany> = {};
 let n = 0;
 const nid = () => `00000000-0000-4000-9000-${String(++n).padStart(12, "0")}`;
 const iso = (daysAgo = 0) => new Date(Date.now() - daysAgo * 86_400_000).toISOString();
@@ -31,7 +33,8 @@ function seedApp(a: Partial<App> & Pick<App, "slug" | "name" | "icon" | "categor
 }
 
 export function resetMarketMock() {
-  apps = []; versions = []; installs = []; n = 0;
+  apps = []; versions = []; installs = []; companies = {}; n = 0;
+  companies["dev-partner"] = { legal_name: "ООО «Партнёр»", country: "Россия", reg_number: "7700000000", website: "https://example.com", contact_name: "Иван Партнёров", contact_email: "dev@example.com", privacy_url: "https://example.com/privacy", status: "verified", note: null, submitted_at: iso(30) };
   seedApp({ slug: "zvonilka", name: "Звонилка", icon: "📞", category: "telephony", tagline: "Звонки клиентам из карточки и запись разговоров",
     description: "Кнопка «Позвонить» в карточках компаний и контактов. История звонков приходит в CRM.\n\nНужен аккаунт Звонилки." },
     { schema: 1, scopes: ["crm.read"], webhooks: { url: "https://hooks.example.com/zvonilka", events: ["record.created", "record.updated"] },
@@ -61,35 +64,13 @@ function json(a: App, ws: string | null): MarketApp {
   };
 }
 
-const URL_OK = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d{2,5})?(\/[^\s<>"]*)?$/;
-
-/** Те же проверки манифеста, что на сервере (сокращённо). */
-export function checkManifest(m: MarketManifest): string | null {
-  if (!m || typeof m !== "object") return "Манифест — объект JSON.";
-  if ((m.schema ?? 1) !== 1) return "Поддерживается только schema: 1.";
-  if ((m.scopes ?? []).some((s) => s !== "crm.read")) return "Неизвестное право: доступно только crm.read.";
-  if (m.webhooks) {
-    if (!URL_OK.test(m.webhooks.url ?? "") || /^https:\/\/(localhost|[\d.]+)([:/]|$)/.test(m.webhooks.url)) return "webhooks.url — публичный адрес https.";
-    const known = ["record.created", "record.updated", "record.deleted", "deal.stage_changed"];
-    if (!m.webhooks.events?.length || m.webhooks.events.some((e) => !known.includes(e))) return `webhooks.events — из списка: ${known.join(", ")}.`;
-  }
-  if ((m.actions ?? []).length > 10) return "Не больше 10 действий.";
-  for (const a of m.actions ?? []) {
-    if (!/^[a-z0-9_-]{1,40}$/.test(a.id ?? "") || !a.label?.trim() || a.label.length > 40 || !["company", "contact", "crm_lead", "deal"].includes(a.entity) || !URL_OK.test(a.url ?? "")) {
-      return "У действия нужны id, label (1–40), entity (company, contact, crm_lead, deal) и адрес https.";
-    }
-    if (a.url.includes("{title}") && !(m.scopes ?? []).includes("crm.read")) return "{title} в адресе требует права crm.read.";
-    if (/[{}]/.test(a.url.replace(/\{(id|type|workspace_id|title)\}/g, ""))) return "В адресе можно только {id}, {type}, {workspace_id} и {title}.";
-  }
-  if (m.window && !URL_OK.test(m.window.url ?? "")) return "window.url — публичный адрес https.";
-  return null;
-}
+const EMPTY_COMPANY: MarketCompany = { legal_name: "", country: "", reg_number: "", website: "", contact_name: "", contact_email: "", privacy_url: "", status: "none", note: null, submitted_at: null };
 
 export function marketCall(action: string, a: Record<string, unknown>, ctx: MarketCtx): unknown {
   if (!ctx.cloud) fail("Маркетплейс доступен в облачной учётной записи.", "cloudOnly");
-  const needWs = () => ctx.wsId ?? fail("Интеграции устанавливаются в облачное рабочее пространство: выберите общее рабочее пространство.", "localWorkspace");
-  const manage = () => { if (!ctx.perms.includes("workspace.manage")) fail("Устанавливать интеграции может владелец или администратор рабочего пространства."); };
-  const listed = (id: unknown) => apps.find((x) => x.id === id && x.status === "listed" && x.live) ?? fail("Интеграция не найдена.");
+  const needWs = () => ctx.wsId ?? fail("Коннекторы устанавливаются в облачное рабочее пространство: выберите общее рабочее пространство.", "localWorkspace");
+  const manage = () => { if (!ctx.perms.includes("workspace.manage")) fail("Устанавливать коннекторы может владелец или администратор рабочего пространства."); };
+  const listed = (id: unknown) => apps.find((x) => x.id === id && x.status === "listed" && x.live) ?? fail("Коннектор не найден.");
   const mod = () => { if (!ctx.moderator) fail("Нет прав модератора маркетплейса."); };
   switch (action) {
     case "market_catalog": {
@@ -120,7 +101,7 @@ export function marketCall(action: string, a: Record<string, unknown>, ctx: Mark
     }
     case "market_set_enabled": {
       const ws = needWs(); manage();
-      const cur = installs.find((i) => i.ws === ws && i.app === a.app) ?? fail("Интеграция не установлена.");
+      const cur = installs.find((i) => i.ws === ws && i.app === a.app) ?? fail("Коннектор не установлен.");
       cur.enabled = Boolean(a.enabled);
       return null;
     }
@@ -132,32 +113,59 @@ export function marketCall(action: string, a: Record<string, unknown>, ctx: Mark
     case "market_submit": {
       const p = (a.app ?? {}) as { id?: string; slug?: string; name?: string; developer_name?: string; tagline?: string; description?: string;
         category?: string; icon?: string; website?: string; support_email?: string; version?: string; manifest: MarketManifest };
-      const err = checkManifest(p.manifest);
-      if (err) fail(err);
-      if (!/^\d{1,4}\.\d{1,4}\.\d{1,6}$/.test(p.version ?? "")) fail("Версия — в виде 1.0.0.");
+      if (companies[ctx.me]?.status !== "verified") fail("Отправлять коннекторы могут только проверенные компании: сначала пройдите проверку компании.", "companyNotVerified");
       const found = p.id ? apps.find((x) => x.id === p.id) : undefined;
-      if (p.id && (!found || found.developer_id !== ctx.me)) fail("Интеграция не найдена.");
-      if (found?.status === "suspended") fail("Интеграция снята модератором.");
-      const version = p.version!;
+      if (p.id && (!found || found.developer_id !== ctx.me)) fail("Коннектор не найден.");
+      if (found?.status === "suspended") fail("Коннектор снят модератором.");
+      const version = p.version ?? "";
+      // Автоматическая проверка качества идёт до любых изменений: отказ ничего не создаёт.
+      const err = firstFailure(checkConnector({ slug: found?.slug ?? p.slug ?? "", name: p.name || found?.name || "", tagline: p.tagline ?? found?.tagline ?? "",
+        description: p.description ?? found?.description ?? "", icon: p.icon || found?.icon || "🧩", website: p.website ?? found?.website ?? "",
+        support_email: p.support_email ?? found?.support_email ?? "", version }, p.manifest));
+      if (err) fail(err);
       let app: App;
       if (!found) {
-        if (!/^[a-z0-9][a-z0-9-]{2,39}$/.test(p.slug ?? "")) fail("Адрес интеграции: латиница, цифры и дефис, от 3 символов.");
-        if (apps.some((x) => x.slug === p.slug)) fail("Такой адрес интеграции уже занят.");
-        if (!p.name?.trim() || !p.developer_name?.trim()) fail("Укажите название и разработчика.");
+        if (apps.some((x) => x.slug === p.slug)) fail("Такой адрес коннектора уже занят.");
+        if (!p.developer_name?.trim()) fail("Укажите название компании-разработчика.");
         app = { id: nid(), slug: p.slug!, developer_id: ctx.me, developer_name: p.developer_name!, name: p.name!, tagline: p.tagline ?? "", description: p.description ?? "",
           category: (p.category as MarketCategory) ?? "other", icon: p.icon || "🧩", website: p.website || null, support_email: p.support_email || null,
           status: "draft", status_note: null, updated_at: iso(), live: null };
         apps.push(app);
       } else {
         app = found;
+        if (versions.some((v) => v.app_id === app.id && v.version === version)) fail("Такая версия уже подавалась: увеличьте номер.");
         Object.assign(app, { name: p.name || app.name, developer_name: p.developer_name || app.developer_name, tagline: p.tagline ?? app.tagline,
           description: p.description ?? app.description, category: p.category || app.category, icon: p.icon || app.icon,
           website: p.website || null, support_email: p.support_email || null, updated_at: iso() });
       }
-      if (versions.some((v) => v.app_id === app.id && v.version === version)) fail("Такая версия уже подавалась: увеличьте номер.");
       versions.forEach((v) => { if (v.app_id === app.id && v.status === "pending") v.status = "superseded"; });
       versions.push({ id: nid(), app_id: app.id, version, manifest: p.manifest, status: "pending", review_note: null, created_at: iso() });
       return json(app, null);
+    }
+    case "market_company":
+      return companies[ctx.me] ?? { ...EMPTY_COMPANY };
+    case "market_company_save": {
+      const c = (a.company ?? {}) as Partial<MarketCompany>;
+      if (companies[ctx.me]?.status === "verified") fail("Компания уже проверена. Чтобы изменить данные, напишите в поддержку.");
+      const body = { legal_name: c.legal_name ?? "", country: c.country ?? "", reg_number: c.reg_number ?? "", website: c.website ?? "", contact_name: c.contact_name ?? "",
+        contact_email: c.contact_email ?? "", privacy_url: c.privacy_url ?? "" };
+      const err = firstFailure(checkCompany(body));
+      if (err) fail(err);
+      companies[ctx.me] = { ...body, status: "submitted", note: null, submitted_at: iso() };
+      return companies[ctx.me];
+    }
+    case "market_company_queue": {
+      mod();
+      return Object.entries(companies).filter(([, c]) => c.status === "submitted").map(([user_id, company]): MarketCompanyReview => ({ user_id, company }));
+    }
+    case "market_company_review": {
+      mod();
+      const c = companies[String(a.user)] ?? fail("Заявка уже рассмотрена.");
+      if (c.status !== "submitted") fail("Заявка уже рассмотрена.");
+      if (!a.approve && !String(a.note ?? "").trim()) fail("Напишите, почему компания не прошла проверку.");
+      c.status = a.approve ? "verified" : "rejected";
+      c.note = String(a.note ?? "").trim() || null;
+      return null;
     }
     case "market_is_moderator":
       return ctx.moderator;
@@ -185,7 +193,7 @@ export function marketCall(action: string, a: Record<string, unknown>, ctx: Mark
     }
     case "market_suspend": {
       mod();
-      const app = apps.find((x) => x.id === a.app) ?? fail("Интеграция не найдена.");
+      const app = apps.find((x) => x.id === a.app) ?? fail("Коннектор не найден.");
       app.status = a.suspend ? "suspended" : app.live ? "listed" : "draft";
       app.status_note = String(a.note ?? "").trim() || null;
       return null;
