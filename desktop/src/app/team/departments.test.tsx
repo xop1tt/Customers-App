@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.hoisted(() => { window.history.replaceState({}, "", "/?team"); });
 
 import { resetChatMock } from "../../api/chatMock";
-import { resetWsMock } from "../../api/wsMock";
+import { resetWsMock, setWsMockRole } from "../../api/wsMock";
 import { departmentError, departmentsOf, renamePlan, sameDepartment, teamOf } from "../../lib/departments";
 import type { TeamMember } from "../../api/types";
 import { getState, openCollection, openRecord, setState } from "../../state/store";
@@ -47,6 +47,7 @@ describe("lib/departments", () => {
 describe("вкладка «Отделы»", () => {
   it("показывает отделы и переименовывает их у участников", async () => {
     render(<App />);
+    setWsMockRole("owner");
     await waitFor(() => expect(getState().chat?.available).toBe(true));
     fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Команда/ }));
     const n = await screen.findByLabelText("Навигация");
