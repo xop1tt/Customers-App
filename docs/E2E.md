@@ -29,7 +29,7 @@ Workflow `.github/workflows/e2e.yml` собирает настоящее при�
 | Поиск клиентов | `search-settings`, `search-run`, `search-repeat`, `leads-ui`, `leads-exclude`, `lead-to-crm`, `live-search` | источники, фильтр слов, ETag/304 и память источника, избранное, архив, заметки, исключения, перевод лида в CRM |
 | Настройки | `settings-sections`, `settings-theme`, `settings-language` | все разделы, светлая тема, английский и возврат на русский |
 | Интеграции | `integrations-webhook`, `integrations-bitrix`, `integrations-webdav`, `integrations-mail-calls`, `integrations-ui` | вебхук, Битрикс24, WebDAV (проверка по полученным запросам), пресеты почты, хранение пароля |
-| Ai | `ai-model`, `ai-ui` | список моделей, ответ, отказ по ключу, неверный адрес, сохранение настроек, вкладка и настройки |
+| Ai | `ai-model`, `ai-ui` | список моделей, ответ, отказ по ключу, неверный адрес, сохранение настроек, выдвижной чат и настройки |
 | Копии | `backup`, `portable` | резервная копия и восстановление, переносимая копия, неверный ключ отклоняется |
 | Обновления | `updates-uptodate`, `updates-available`, `updates-checksum`, `updates-error`, `live-updates` | актуальная версия, найденная версия 99.0.0, чужая контрольная сумма, ошибка сервера, настоящий GitHub (ночью) |
 

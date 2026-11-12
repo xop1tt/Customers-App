@@ -1,6 +1,6 @@
 // Ai: подключение локальной модели (тестовый сервер с OpenAI-совместимым API): список моделей, ответ, отказ по ключу, настройки.
 {
-  const { scenario, waitFor, $, $$, click, check, eq, core, coreFails, healthy, norm, shot, skipIf, hasCore } = E2E;
+  const { scenario, waitFor, sleep, $, $$, click, check, eq, core, coreFails, healthy, norm, shot, skipIf, hasCore } = E2E;
 
   scenario("ai-model", "Ai: список моделей, ответ модели, отказ по неверному ключу, сохранение настроек", async () => {
     skipIf(!hasCore, "нет ядра Tauri");
@@ -20,12 +20,17 @@
     eq((await core("hub_load")).ai.model, "e2e-model-a", "модель в сохранённых настройках");
   });
 
-  scenario("ai-ui", "Ai (интерфейс): вкладка без подключённой модели предлагает настроить, раздел настроек Ai открывается", async () => {
+  scenario("ai-ui", "Ai (интерфейс): выдвижной чат без подключённой модели предлагает настроить, остаётся при смене вкладки, настройки Ai открываются", async () => {
     skipIf(!hasCore, "нет ядра Tauri");
     click(await waitFor(() => $$(".rail-btn").find((b) => (b.getAttribute("aria-label") || "").startsWith("Ai")), "модуль Ai"));
-    await waitFor(() => /Подключите локальную модель|Разговор с помощником/.test(norm($("main.center")?.innerText)), "страница Ai");
-    healthy("на странице Ai");
-    await shot("ai-page");
+    const drawer = await waitFor(() => $("#ai-drawer"), "выдвижной чат Ai");
+    await waitFor(() => /Подключите локальную модель|Разговор с помощником/.test(norm(drawer.innerText)), "содержимое чата Ai");
+    healthy("в чате Ai");
+    await shot("ai-chat");
+    // Чат остаётся открытым при смене вкладки.
+    click($$(".rail-btn").find((b) => (b.getAttribute("aria-label") || "").startsWith("Сообщения")));
+    await sleep(300);
+    check($("#ai-drawer"), "чат Ai закрылся при смене вкладки");
     const btn = $$("button").find((b) => norm(b.textContent) === "Открыть настройки Ai");
     if (btn) {
       click(btn);

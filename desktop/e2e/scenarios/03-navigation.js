@@ -6,10 +6,11 @@
   const itemLabel = (el) => norm(($(".ellipsis", el) || el).textContent);
   const sideItems = () => $$(".sidebar .nav-item").filter((el) => !/Настроить панель/.test(el.textContent));
 
-  scenario("rail", "Рейка модулей: CRM, поиск, сообщения, команда, настройки", async () => {
+  scenario("rail", "Рейка модулей: CRM, поиск, сообщения, команда, Ai (настроек в рейке нет)", async () => {
     await waitFor(() => $(".rail"), "рейка модулей");
     const labels = railLabels();
     for (const want of golden("navigation").rail) check(labels.some((l) => l.startsWith(want)), `в рейке нет «${want}»: ${labels}`);
+    check(!labels.includes("Настройки"), `«Настройки» должны быть не в рейке, а в меню учётной записи: ${labels}`);
   });
 
   scenario("navigation", "Навигация: открываются все разделы всех модулей", async () => {
