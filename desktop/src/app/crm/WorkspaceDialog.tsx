@@ -14,6 +14,9 @@ import { HandoverDialog, type HandoverTarget } from "./Handover";
 import { AuditDialog } from "./AuditLog";
 import { DangerZone } from "./Danger";
 import { MyRights } from "./MyRights";
+import { isHr } from "../../lib/positions";
+import { useActor } from "../team/actor";
+import { RequestDialog } from "../team/Requests";
 import { usePresence } from "./Presence";
 import { CustomFieldsEditor } from "./CustomFields";
 
@@ -111,7 +114,7 @@ function WorkspaceDialogBody() {
       {editor === "roles" && <RolesEditor onClose={() => setEditor(null)} />}
       {ws.isCloud && current && <MyRights />}
       {ws.isCloud && current && <Members />}
-      {ws.isCloud && current && perms.includes("invitations.manage") && <Invite />}
+      {ws.isCloud && current && perms.includes("invitations.manage") && <InviteOrRequest />}
       {ws.isCloud && current && perms.includes("audit.view") && (
         <Group title="Журнал рабочего пространства">
           <SettingRow title="Кто и что менял" hint="Серверный журнал: удаления, смена ответственного, участники и роли. Последнее действие над каждой записью — в разделе «Журнал».">
@@ -141,7 +144,8 @@ function Members() {
   const { data: rolesData } = useWsQuery(() => api.wsRoles().catch(() => null), []);
   const roleOptions = rolesData?.roles.length ? rolesData.roles.filter((r) => r.key !== "owner").map((r) => ({ value: r.key, label: r.name })) : ROLES;
   const rankOf = (key: string) => rolesData?.roles.find((r) => r.key === key)?.rank ?? ({ admin: 80, manager: 60, employee: 40, viewer: 20 } as Record<string, number>)[key] ?? 0;
-  const manage = ws.permissions.includes("members.manage");
+  const actor = useActor();
+  const manage = ws.permissions.includes("members.manage") && !isHr(actor);
   const online = new Set(usePresence().map((p) => p.user_id));
   const myRank = ws.workspaces.find((w) => w.id === ws.active)?.rank ?? 0;
   const canHand = ws.permissions.includes("records.edit");
@@ -171,6 +175,21 @@ function Members() {
         })}
       </ul>
       {hand && <HandoverDialog from={hand.target} leaving={hand.leaving} onClose={() => setHand(null)} onRemove={async () => { await api.wsRemoveMember(hand.target.userId); }} />}
+    </Group>
+  );
+}
+
+/** Отдел кадров приглашает только запросом: выполняет владелец или заместитель (ADR-079). */
+function InviteOrRequest() {
+  const actor = useActor();
+  const team = useStore((s) => s.team);
+  const [asking, setAsking] = useState(false);
+  if (!isHr(actor)) return <Invite />;
+  const me = team.find((m) => m.user_id === actor?.user_id);
+  return (
+    <Group title="Оформление сотрудника" note="Создать учётную запись может владелец рабочего пространства или его заместитель. Отправьте запрос: в нём почта, имя профиля и должность нового сотрудника.">
+      <div><Button variant="primary" icon="mail" disabled={!me} onClick={() => setAsking(true)}>Запросить оформление</Button></div>
+      {asking && me && <RequestDialog kind="hire" author={me} team={team} onClose={() => setAsking(false)} />}
     </Group>
   );
 }

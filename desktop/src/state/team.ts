@@ -123,3 +123,15 @@ export function conversationTitle(c: Pick<ChatConversation, "kind" | "title" | "
   const other = c.participants.find((p) => p.user_id !== me);
   return other ? memberName(team, other.user_id) : "Личные сообщения";
 }
+
+/** Запрос руководству (ADR-079): личное сообщение каждому адресату с упоминанием, чтобы пришло уведомление. */
+export async function sendRequest(recipients: TeamMember[], body: string): Promise<boolean> {
+  if (!recipients.length) { toast("Некому отправить: в рабочем пространстве нет владельца или заместителя, который может одобрить.", "error"); return false; }
+  for (const m of recipients) {
+    const c = await attempt(() => api.wsChat<ChatConversation>("chat_open_direct", { user: m.user_id }));
+    if (!c) return false;
+    if (!(await attempt(() => api.wsChat("chat_send", { conversation: c.id, body, mentions: [m.user_id] })))) return false;
+  }
+  toast(recipients.length > 1 ? "Запрос отправлен руководству" : `Запрос отправлен: ${recipients[0]!.display_name}`, "success");
+  return true;
+}
