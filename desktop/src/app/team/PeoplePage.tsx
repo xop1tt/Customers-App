@@ -7,6 +7,7 @@ import { buildTree, presenceText, type TreeNode } from "../../lib/team";
 import { Avatar, EmptyState, IconButton, Notice, Segmented, Spinner, Tag, TextInput } from "../../ui/kit";
 import { openProfile, useStore } from "../../state/store";
 import { messageMember, refreshTeam } from "../../state/team";
+import { Departments } from "./Departments";
 
 export function PersonAvatar({ m, size = 32 }: { m: Pick<TeamMember, "display_name" | "avatar" | "online">; size?: number }) {
   return (
@@ -21,7 +22,7 @@ export function PeoplePage() {
   const team = useStore((s) => s.team);
   const ws = useStore((s) => s.ws);
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"list" | "tree">("list");
+  const [view, setView] = useState<"list" | "tree" | "deps">("list");
   const [loaded, setLoaded] = useState(false);
   useEffect(() => { void refreshTeam().then(() => setLoaded(true)); }, [ws?.active]);
   const cloud = ws?.workspaces.find((w) => w.id === ws.active)?.remote ?? false;
@@ -42,12 +43,14 @@ export function PeoplePage() {
         {team.some((m) => m.offline) && <Notice tone="warn">Нет связи с облаком: показан сохранённый список без карточек и статуса.</Notice>}
         <div className="people-bar">
           <TextInput value={query} onChange={setQuery} icon="search" placeholder="Имя, должность, отдел или почта" aria-label="Поиск сотрудников" wrapClass="grow" onClear={query ? () => setQuery("") : undefined} />
-          <Segmented small value={view} onChange={setView} options={[{ value: "list", label: "Список" }, { value: "tree", label: "Структура" }]} />
+          <Segmented small value={view} onChange={setView} options={[{ value: "list", label: "Список" }, { value: "tree", label: "Структура" }, { value: "deps", label: "Отделы" }]} />
         </div>
         <div className="faint people-sum">
           Сотрудников: {team.length}{cloud ? ` · в сети: ${online}` : ""}{departments.length ? ` · отделы: ${departments.join(", ")}` : ""}
         </div>
-        {shown.length === 0 ? (
+        {view === "deps" && !q ? (
+          <Departments team={team} />
+        ) : shown.length === 0 ? (
           <EmptyState icon="users" title="Никого не нашлось">Измените запрос поиска.</EmptyState>
         ) : view === "list" || q ? (
           <ul className="people-list" aria-label="Сотрудники">
@@ -72,7 +75,7 @@ function TreeRows({ node, depth }: { node: TreeNode; depth: number }) {
   );
 }
 
-function PersonRow({ m, depth, reports }: { m: TeamMember; depth: number; reports?: number }) {
+export function PersonRow({ m, depth, reports }: { m: TeamMember; depth: number; reports?: number }) {
   const me = useStore((s) => s.ws?.me);
   const cloud = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.remote ?? false);
   const sub = [m.title, m.department].filter(Boolean).join(" · ");

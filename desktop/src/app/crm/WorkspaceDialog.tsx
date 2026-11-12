@@ -13,6 +13,7 @@ import { PipelineEditor, RolesEditor } from "./Editors";
 import { HandoverDialog, type HandoverTarget } from "./Handover";
 import { AuditDialog } from "./AuditLog";
 import { DangerZone } from "./Danger";
+import { MyRights } from "./MyRights";
 import { usePresence } from "./Presence";
 import { CustomFieldsEditor } from "./CustomFields";
 
@@ -108,6 +109,7 @@ function WorkspaceDialogBody() {
       {editor === "pipelines" && <PipelineEditor onClose={() => setEditor(null)} />}
       {editor === "fields" && <CustomFieldsEditor onClose={() => setEditor(null)} />}
       {editor === "roles" && <RolesEditor onClose={() => setEditor(null)} />}
+      {ws.isCloud && current && <MyRights />}
       {ws.isCloud && current && <Members />}
       {ws.isCloud && current && perms.includes("invitations.manage") && <Invite />}
       {ws.isCloud && current && perms.includes("audit.view") && (

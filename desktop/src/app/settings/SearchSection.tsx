@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { loadPrefs, savePrefs, type NotifyPrefs } from "../../lib/notifyPrefs";
 import { intervalTitle } from "../../lib/format";
 import { Button, Group, Notice, Select, SettingRow, Switch } from "../../ui/kit";
 import { openSettings, patchAccount, useStore } from "../../state/store";
@@ -40,6 +42,31 @@ export function NotificationsSection() {
         <SettingRow title="О синхронизации"><Switch checked={a.notifySync} onChange={(v) => void patchAccount({ notifySync: v })} /></SettingRow>
         <SettingRow title="О сообщениях и упоминаниях" hint="Личные сообщения, @упоминания в обсуждениях, заметках и комментариях, добавление в обсуждение."><Switch checked={a.notifyMessages} onChange={(v) => void patchAccount({ notifyMessages: v })} /></SettingRow>
       </Group>
+      <InAppNotifications />
     </>
+  );
+}
+
+/** Подсказки внутри приложения (настройка хранится на этом устройстве). */
+function InAppNotifications() {
+  const [p, setP] = useState<NotifyPrefs>(loadPrefs);
+  const set = (patch: Partial<NotifyPrefs>) => { const next = { ...p, ...patch }; setP(next); savePrefs(next); };
+  return (
+    <Group title="Подсказки в приложении" note="Относятся только к подсказкам, которые появляются в углу окна, и хранятся на этом компьютере. Уведомления в разделе «Уведомления» и счётчики остаются.">
+      <SettingRow title="О новых сообщениях"><Switch checked={p.messages} onChange={(v) => set({ messages: v })} aria-label="Подсказки о сообщениях" /></SettingRow>
+      <SettingRow title="О добавлении в обсуждение"><Switch checked={p.groups} onChange={(v) => set({ groups: v })} aria-label="Подсказки об обсуждениях" /></SettingRow>
+      <SettingRow title="Тихие часы" hint="В это время подсказки не показываются.">
+        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+          <Switch checked={p.quiet} onChange={(v) => set({ quiet: v })} aria-label="Тихие часы" />
+          {p.quiet && (
+            <>
+              <input type="time" className="input" value={p.from} onChange={(e) => set({ from: e.target.value || p.from })} aria-label="Тихие часы с" />
+              <span className="faint">до</span>
+              <input type="time" className="input" value={p.to} onChange={(e) => set({ to: e.target.value || p.to })} aria-label="Тихие часы до" />
+            </>
+          )}
+        </div>
+      </SettingRow>
+    </Group>
   );
 }

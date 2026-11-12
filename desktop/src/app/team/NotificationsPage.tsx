@@ -5,7 +5,7 @@ import type { AppNotification } from "../../api/types";
 import { shortRelative } from "../../lib/format";
 import { notificationText } from "../../lib/team";
 import { Avatar, Button, EmptyState, Notice } from "../../ui/kit";
-import { attempt, useStore } from "../../state/store";
+import { attempt, openSettings, useStore } from "../../state/store";
 import { openChat, openCrmCard, pollChat } from "../../state/team";
 
 /** Перейти к источнику: обсуждение или карточка CRM. */
@@ -32,6 +32,7 @@ export function NotificationsPage() {
           <>
             <div className="row" style={{ gap: 8 }}>
               <span className="grow faint">{unread ? `Непрочитанных: ${unread}` : "Всё прочитано"} · хранятся 90 дней</span>
+              <Button small variant="ghost" icon="settings" onClick={() => openSettings("notifications")}>Настроить</Button>
               <Button small icon="check" disabled={!unread} onClick={() => void attempt(() => api.wsChat("notifications_mark_read", { ids: null })).then(() => pollChat())}>Прочитать все</Button>
             </div>
             {list.length === 0 ? (
