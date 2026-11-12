@@ -93,7 +93,7 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
     let home = home_dir(app);
     let local = if cfg!(windows) { app.path().local_data_dir().ok() } else { None };
     let paths = AppPaths::for_system(&home, local.as_deref(), app.path().document_dir().ok());
-    #[cfg(feature = "e2e")]
+    #[cfg(e2e)]
     let paths = crate::e2e::paths().unwrap_or(paths);
     // До создания любых файлов: идентификатор сборки совпадает с тем, под которым хранятся данные.
     identity::check_identifier(&app.config().identifier)?;
@@ -103,7 +103,7 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
     reports::install_panic_hook(paths.logs.clone(), version.to_string());
     let secrets = secrets::platform_store(&paths.root).map_err(|e| e.to_string())?;
     let transport: Arc<dyn crate::search::http::HttpTransport> = Arc::new(ReqwestTransport::new());
-    #[cfg(feature = "e2e")]
+    #[cfg(e2e)]
     let transport = crate::e2e::wrap_transport(transport);
     let device_id = device_id(secrets.as_ref());
     let cloud = CloudConfig::embedded()
@@ -344,7 +344,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(core.clone());
 
     setup_tray(&handle, core.clone())?;
-    #[cfg(feature = "e2e")]
+    #[cfg(e2e)]
     crate::e2e::install(&handle);
     #[cfg(target_os = "macos")]
     follow_system_theme(&handle);
@@ -412,7 +412,7 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .setup(setup)
         .invoke_handler(crate::handler());
-    #[cfg(feature = "e2e")]
+    #[cfg(e2e)]
     let builder = builder.on_page_load(crate::e2e::on_page_load);
     let app = builder.build(tauri::generate_context!()).expect("не удалось создать окно приложения");
     app.run(|app, event| {

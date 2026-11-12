@@ -15,10 +15,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "customers"
 path = "src/main.rs"
 
-[features]
-# Приёмочные проверки реального приложения (desktop/e2e, workflow e2e.yml). В релизную сборку не входит:
-# её собирает release.yml без признаков, это проверяет release-check.
-e2e = []
+[lints.rust]
+# Приёмочные проверки реального приложения (desktop/e2e, workflow e2e.yml) включаются флагом компиляции `--cfg e2e`
+# (RUSTFLAGS), а не признаком Cargo: разделы признаков в Cargo.toml запрещены (ADR-034). В релизную сборку флаг не попадает.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(e2e)"] }
 
 [build-dependencies]
 tauri-build = { version = "2.7", features = [] }

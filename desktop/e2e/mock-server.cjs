@@ -59,6 +59,19 @@ function start({ live = false } = {}) {
         res.writeHead(200, { "content-type": "application/rss+xml; charset=utf-8", etag });
         return res.end(RSS.replaceAll("__DATE__", date));
       }
+      // Локальная модель (OpenAI-совместимый API): сценарий передаёт приложению адрес http://127.0.0.1:<порт>/ai/v1.
+      if (path.startsWith("/ai/v1")) {
+        received.ai = (received.ai || []).concat(`${req.method} ${path}`);
+        if (req.headers.authorization !== "Bearer e2e-model-key") return json(401, { error: { message: "неверный ключ E2E" } });
+        if (path === "/ai/v1/models") return json(200, { data: [{ id: "e2e-model-b" }, { id: "e2e-model-a" }] });
+        if (path === "/ai/v1/chat/completions" && req.method === "POST") {
+          let b = {};
+          try { b = JSON.parse(body.toString("utf8")); } catch { /* не JSON */ }
+          const last = (b.messages || []).filter((m) => m.role === "user").pop();
+          return json(200, { choices: [{ message: { role: "assistant", content: `Ответ E2E на: ${last ? last.content : ""}` } }], stream: b.stream === false });
+        }
+        return json(404, { error: { message: "нет такого пути" } });
+      }
       if (path.startsWith("/hooks/")) {
         let parsed = null;
         try { parsed = JSON.parse(body.toString("utf8")); } catch { /* не JSON */ }

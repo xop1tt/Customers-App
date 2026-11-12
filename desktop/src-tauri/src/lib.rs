@@ -7,7 +7,7 @@ pub mod crm;
 pub mod csvfmt;
 pub mod db;
 pub mod drives;
-#[cfg(feature = "e2e")]
+#[cfg(e2e)]
 pub mod e2e;
 pub mod error;
 pub mod export;

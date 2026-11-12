@@ -12,6 +12,7 @@
 | `codeql.yml` | каждый PR, push в `main`, раз в неделю | Статический анализ: actions, python, javascript-typescript, rust. |
 | `dependency-review.yml` | каждый PR | Блокирует PR с новой зависимостью с известной уязвимостью (high и выше). Проверка называется `review`. |
 | `dependabot-automerge.yml` | PR от Dependabot | Включает автослияние по политике ниже. Сам ничего не сливает. |
+| `e2e.yml` | PR с изменениями в `desktop/**`, push в `main`, ночью 03:23 UTC, вручную (галочка `live`) | Приёмочные сценарии на настоящем приложении (Tauri, признак `e2e`) на macOS и Windows, сверка с эталонами; в ночном прогоне ещё настоящая сеть. Итог: **E2E gate** (необязательная, пока не стабилизируется). docs/E2E.md. |
 | `release.yml` | вручную или по тегу `v*` (кроме `v*-*`) | Единственный workflow, который публикует Stable-релиз; задача `publish` ждёт подтверждения в окружении `production`. PR и Dependabot его не запускают. |
 | `wiki.yml` | push в `main` по путям `wiki/**` | Публикация wiki. |
 | `maintenance.yml` | каждый день 03:41 UTC, вручную | Очистка облачной базы через Edge Function `maintenance` (docs/MAINTENANCE.md). Нужны переменная `SUPABASE_URL` и секрет `CRON_SECRET`; без них пропускается. |
