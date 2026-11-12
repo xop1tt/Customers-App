@@ -24,7 +24,7 @@
     eq([phase(info), info.available], ["upToDate", null], "состояние после проверки (та же версия)");
     eq(info.current, v, "текущая версия");
     check(info.lastCheck, "время последней проверки не записано");
-  });
+  }, { mockOnly: true });
 
   scenario("updates-available", "Обновления: найдена версия 99.0.0 — показана в настройках с описанием", async () => {
     skipIf(!hasCore, "нет ядра Tauri");
@@ -38,7 +38,7 @@
     await shot("updates-available");
     healthy("на странице обновлений");
     await close();
-  });
+  }, { mockOnly: true });
 
   scenario("updates-checksum", "Обновления: установщик с несовпавшей контрольной суммой отклоняется и не сохраняется", async () => {
     skipIf(!hasCore, "нет ядра Tauri");
@@ -49,7 +49,7 @@
     check(/контрольн|сумм/i.test(err), `ошибка загрузки должна называть контрольную сумму: ${err}`);
     const after = await core("update_info");
     check(after.stagedVersion === null || after.stagedVersion === undefined, `проваленная загрузка осталась сохранённой: ${after.stagedVersion}`);
-  });
+  }, { mockOnly: true });
 
   scenario("updates-error", "Обновления: ошибка сервера — понятное сообщение, приложение работает", async () => {
     skipIf(!hasCore, "нет ядра Tauri");
@@ -59,5 +59,5 @@
     healthy("после ошибки проверки обновлений");
     await mock("uptodate:" + (await core("boot_info")).version);
     eq(phase(await core("check_updates", { manual: true })), "upToDate", "после восстановления сервера проверка проходит");
-  });
+  }, { mockOnly: true });
 }

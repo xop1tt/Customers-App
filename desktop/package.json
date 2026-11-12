@@ -14,6 +14,8 @@
     "database:test": "cargo test --manifest-path src-tauri/Cargo.toml --locked --lib -- db:: store::",
     "release:check": "node scripts/release-check.cjs",
     "release:build": "tauri build",
+    "e2e:build": "tauri build --features e2e --no-bundle",
+    "e2e": "node e2e/run.cjs",
     "check": "npm run typecheck && npm test && npm run test:core && npm run release:check"
   },
   "dependencies": {

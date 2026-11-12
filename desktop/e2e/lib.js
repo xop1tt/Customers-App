@@ -110,6 +110,7 @@ const E2E = (() => {
     for (const s of scenarios) {
       if (s.opts.phase && s.opts.phase !== (C.phase || "main")) continue;
       if (!s.opts.phase && (C.phase || "main") !== "main") continue;
+      if (s.opts.mockOnly && C.live) { results.push({ id: s.id, title: s.title, status: "skipped", ms: 0, note: "в ночном прогоне сеть настоящая, подмена сервера не работает" }); continue; }
       if (s.opts.live && !C.live) { results.push({ id: s.id, title: s.title, status: "skipped", ms: 0, note: "только ночной прогон с настоящей сетью" }); continue; }
       const t0 = Date.now();
       const errorsBefore = pageErrors.length;

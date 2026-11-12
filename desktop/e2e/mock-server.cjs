@@ -37,7 +37,7 @@ function release(tag) {
   };
 }
 
-function start({ version = "1.0.0" } = {}) {
+function start({ live = false } = {}) {
   const received = { rssRequests: [], webhook: [], dav: [], b24: [], github: [], other: [] };
   const state = { mode: "none" }; // none | uptodate:<версия> | available | error — переключается сценарием через событие e2e-mock
 
@@ -98,7 +98,8 @@ function start({ version = "1.0.0" } = {}) {
     server.listen(0, "127.0.0.1", () => {
       const port = server.address().port;
       const base = `http://127.0.0.1:${port}`;
-      const rewrite = Object.entries(HOSTS).map(([k, host]) => `${host}=${base}/${k}`).join(";");
+      // В ночном прогоне GitHub и скачивание обновлений идут в настоящую сеть, остальное по-прежнему на тестовый сервер.
+      const rewrite = Object.entries(HOSTS).filter(([k]) => !(live && (k === "github" || k === "dl"))).map(([k, host]) => `${host}=${base}/${k}`).join(";");
       resolve({ port, base, rewrite, received, state, hosts: HOSTS, control: `${base}/__control`, close: () => new Promise((r) => server.close(r)) });
     });
   });

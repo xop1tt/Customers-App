@@ -23,7 +23,7 @@ function checkXlsx(file) {
 }
 
 /** Что пришло на тестовый сервер: сверка с golden/received.json. */
-function checkReceived(server, goldenDir) {
+function checkReceived(server, goldenDir, live) {
   const problems = [];
   const file = path.join(goldenDir, "received.json");
   if (!fs.existsSync(file)) return problems;
@@ -46,13 +46,13 @@ function checkReceived(server, goldenDir) {
     eq("WebDAV: заголовок авторизации передан", r.dav.every((x) => x.authorization === "есть"), true);
   }
   if (want.b24) eq("Битрикс24: проверка вебхука", r.b24.length >= want.b24.min, true);
-  if (want.github) eq("GitHub: запрос списка релизов", r.github.length >= want.github.min, true);
+  if (want.github && !live) eq("GitHub: запрос списка релизов", r.github.length >= want.github.min, true);
   eq("запросов на неизвестные адреса тестового сервера", r.other.map((x) => `${x.method} ${x.path}`), []);
   return problems;
 }
 
 /** Возвращает список расхождений; пустой список — всё совпало. */
-function afterMain({ dir, server, goldenDir, update }) {
+function afterMain({ dir, server, goldenDir, update, live }) {
   const problems = [];
   for (const [name, goldenName] of FILES) {
     const file = path.join(dir, "out", name);
@@ -65,7 +65,7 @@ function afterMain({ dir, server, goldenDir, update }) {
     if (got !== want) problems.push(`${name} отличается от эталона ${goldenName}:\n--- ожидали\n${want}\n--- получили\n${got}`);
   }
   problems.push(...checkXlsx(path.join(dir, "out", "companies.xlsx")));
-  problems.push(...checkReceived(server, goldenDir));
+  problems.push(...checkReceived(server, goldenDir, live));
   return problems;
 }
 

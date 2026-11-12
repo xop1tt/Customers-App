@@ -112,7 +112,7 @@ function show(data) {
   fs.mkdirSync(path.join(dir, "out"), { recursive: true }); // сюда сценарии пишут файлы выгрузки и копий
   // Язык интерфейса задан заранее: сценарии ищут русские подписи (английский проверяется отдельным сценарием).
   fs.writeFileSync(path.join(dir, "data", "device.json"), JSON.stringify({ language: "ru" }));
-  const server = await mock.start();
+  const server = await mock.start({ live });
   out(`Приёмочные проверки приложения · ${platform} · ${new Date().toISOString()}`);
   out(`Папка данных: ${dir}; тестовый сервер: ${server.base}`);
   let failed = false;
@@ -124,7 +124,7 @@ function show(data) {
     if (data.failed > 0) failed = true;
     if (exitCode !== 0 && exitCode !== 1) { out(`✗ ${phase}: неожиданный код выхода ${exitCode}`); broken = true; }
     if (phase === "main") {
-      const problems = verify.afterMain({ dir, server, goldenDir: path.join(root, "golden"), update: flag("update-golden") });
+      const problems = verify.afterMain({ dir, server, goldenDir: path.join(root, "golden"), update: flag("update-golden"), live });
       out(problems.length ? `✗ сверка файлов и запросов с эталоном: ${problems.length} расхождений` : "✓ файлы и запросы совпали с эталоном");
       for (const p of problems) out(`     - ${p}`);
       if (problems.length) failed = true;
