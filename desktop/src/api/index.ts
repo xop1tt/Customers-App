@@ -7,7 +7,7 @@ import type {
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
   CrmRecord, WsCard, WsCollection, WsConflict, WsConverted, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll,
-  ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
+  AiChatReply, ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -165,6 +165,12 @@ export const api = {
   /** Действие чата: имя функции сервера (chat_list, chat_send…) и её аргументы без префикса `p_`. */
   wsChat: <T = unknown>(action: string, args: Record<string, unknown> = {}) => call<T>("ws_chat", { action, args }),
   wsChatPoll: () => call<ChatPoll>("ws_chat_poll"),
+  // интеграции и локальная модель
+  hubLoad: () => call<unknown>("hub_load"),
+  hubSave: (value: unknown) => call("hub_save", { value }),
+  hubSend: (service: string, text: string, config?: unknown) => call<string>("hub_send", { service, text, config: config ?? null }),
+  aiModels: (baseUrl: string, apiKey?: string) => call<string[]>("ai_models", { baseUrl, apiKey: apiKey ?? null }),
+  aiChat: (baseUrl: string, apiKey: string | undefined, body: unknown) => call<AiChatReply>("ai_chat", { baseUrl, apiKey: apiKey ?? null, body }),
   wsMarket: <T = unknown>(action: string, args: Record<string, unknown> = {}) => call<T>("ws_market", { action, args }),
 
   // обновления

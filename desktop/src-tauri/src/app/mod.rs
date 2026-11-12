@@ -2,6 +2,7 @@
 //! Интерфейс (Tauri) только вызывает его методы и слушает события, поэтому всё проверяется обычными тестами.
 
 pub mod data;
+pub mod hub;
 pub mod integrations;
 pub mod portable;
 pub mod prefs_sync;

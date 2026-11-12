@@ -563,3 +563,26 @@ pub async fn ws_chat_poll(core: C<'_>) -> CmdResult<Value> {
 pub async fn ws_market(core: C<'_>, action: String, args: Option<serde_json::Map<String, Value>>) -> CmdResult<Value> {
     core.inner().ws_market(&action, args.unwrap_or_default()).await
 }
+
+// ------------------------------------------------------------------ «Интеграции» и «Ai»
+
+#[tauri::command]
+pub fn hub_load(core: C<'_>) -> CmdResult<Value> {
+    core.inner().hub_load()
+}
+#[tauri::command]
+pub fn hub_save(core: C<'_>, value: Value) -> CmdResult<()> {
+    core.inner().hub_save(value)
+}
+#[tauri::command]
+pub async fn hub_send(core: C<'_>, service: String, text: String, config: Option<Value>) -> CmdResult<String> {
+    core.inner().hub_send(&service, &text, config).await
+}
+#[tauri::command]
+pub async fn ai_models(core: C<'_>, base_url: String, api_key: Option<String>) -> CmdResult<Vec<String>> {
+    core.inner().ai_models(&base_url, api_key.as_deref().unwrap_or("")).await
+}
+#[tauri::command]
+pub async fn ai_chat(core: C<'_>, base_url: String, api_key: Option<String>, body: Value) -> CmdResult<Value> {
+    core.inner().ai_chat(&base_url, api_key.as_deref().unwrap_or(""), body).await
+}

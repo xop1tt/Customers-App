@@ -18,8 +18,8 @@ async function openMarketFromMenu() {
   render(<App />);
   await screen.findByLabelText("Навигация");
   fireEvent.click(screen.getByLabelText("Учётная запись"));
-  fireEvent.click(await screen.findByText("Маркетплейс", { selector: ".menu-item" }));
-  return screen.findByRole("dialog", { name: "Маркетплейс" });
+  fireEvent.click(await screen.findByText("Интеграции", { selector: ".menu-item" }));
+  return screen.findByRole("dialog", { name: "Интеграции" });
 }
 
 async function confirm(label: string) {
@@ -77,7 +77,7 @@ describe("маркетплейс", () => {
 
     // Выключенная интеграция пропадает из карточек.
     setState({ market: "installed" });
-    const d2 = await screen.findByRole("dialog", { name: "Маркетплейс" });
+    const d2 = await screen.findByRole("dialog", { name: "Интеграции" });
     fireEvent.click(await within(d2).findByText("Звонилка"));
     fireEvent.click(await within(d2).findByRole("switch", { name: "Включена" }));
     await waitFor(() => expect(getState().marketInstalled).toHaveLength(0));
