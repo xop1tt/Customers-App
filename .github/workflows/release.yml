@@ -35,7 +35,7 @@ jobs:
   # Сборки идут без прав на запись: токен не достаётся ни сборочным скриптам, ни установщику Inno Setup, ни чужим пакетам.
   macos:
     name: Build macOS app
-    runs-on: macos-15
+    runs-on: macos-15-intel # Intel-раннеры: у arm64-раннеров очередь (нехватка мощностей); универсальный dmg собирается и тут
     timeout-minutes: 45
     defaults:
       run:
