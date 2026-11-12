@@ -12,7 +12,7 @@ export const MODULES: { id: ModuleId; title: string; short: string; icon: string
   { id: "ai", title: "Ai", short: "Ai", icon: "bot", home: "ai" },
 ];
 
-const CRM: SectionId[] = ["today", "calendar", "deals", "reports", "collection", "trash"];
+const CRM: SectionId[] = ["today", "calendar", "deals", "reports", "collection", "trash", "journal"];
 const TEAM: SectionId[] = ["people", "notifications", "profile"];
 
 /** Модуль раздела: по нему рейка подсвечивает кнопку, а панель разделов показывает свои группы. */
@@ -25,4 +25,4 @@ export function moduleOf(section: SectionId): ModuleId {
 }
 
 /** Разделы, которые можно открыть при запуске (последний открытый). Коллекция и профиль требуют выбора — не восстанавливаются. */
-export const RESTORABLE: SectionId[] = ["home", "all", "new", "favorites", "archive", "excluded", "runs", "today", "calendar", "deals", "reports", "trash", "chat", "people", "notifications", "ai"];
+export const RESTORABLE: SectionId[] = ["home", "all", "new", "favorites", "archive", "excluded", "runs", "today", "calendar", "deals", "reports", "trash", "journal", "chat", "people", "notifications", "ai"];
