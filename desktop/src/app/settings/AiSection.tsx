@@ -49,7 +49,7 @@ export function AiSection() {
   return (
     <>
       <Group title="Модель" sub="model" note="Приложение не поставляется с моделью и не отправляет разговор в интернет: оно обращается к серверу модели, который вы запускаете сами.">
-        <SettingRow title="Помощник Ai" hint="Вкладка «Ai» в левой колонке работает, когда помощник включён и выбрана модель.">
+        <SettingRow title="Помощник Ai" hint="Чат Ai (кнопка «Ai» внизу левой рейки) работает, когда помощник включён и выбрана модель.">
           <Switch checked={ai.enabled} onChange={(v) => void saveAi({ enabled: v })} label="Включить помощника" />
         </SettingRow>
         <SettingRow title="Провайдер" hint={provider.hint}>
@@ -90,6 +90,12 @@ export function AiSection() {
             <Checkbox checked={ai.allow.includes(g.id)} onChange={(v) => toggleGroup(g.id, v)} label={`Разрешить: ${g.title}`} />
           </SettingRow>
         ))}
+        <SettingRow title="Модель понимает изображения" hint="Включите, если выбрана мультимодальная модель (например, с «vision»): тогда в чат можно прикладывать картинки. Текстовые файлы (txt, csv, json и др.) работают с любой моделью.">
+          <Switch checked={ai.vision} onChange={(v) => void saveAi({ vision: v })} label="Модель понимает изображения" />
+        </SettingRow>
+        <SettingRow title="Модель понимает звук" hint="Для моделей с приёмом аудио: можно прикладывать файлы wav и mp3.">
+          <Switch checked={ai.audio} onChange={(v) => void saveAi({ audio: v })} label="Модель понимает звук" />
+        </SettingRow>
         <SettingRow title="Шагов за один ответ" hint="Сколько действий модель может выполнить подряд, прежде чем остановится.">
           <Select width={120} value={String(ai.maxSteps)} label="Предел шагов" options={["2", "4", "6", "8", "12"].map((v) => ({ value: v, label: v }))} onChange={(v) => void saveAi({ maxSteps: Number(v) })} />
         </SettingRow>

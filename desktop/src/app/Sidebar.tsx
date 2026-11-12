@@ -230,20 +230,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </div>
         )}
 
-        {mod === "ai" && !customize && (
-          <div className="nav-group">
-            <div className="nav-title">Ai</div>
-            <button type="button" className="nav-item active" aria-current="page" onClick={() => setSection("ai")}>
-              <Icon name="bot" size={16} />
-              <span className="ellipsis grow">Помощник</span>
-            </button>
-            <button type="button" className="nav-item" onClick={() => openSettings("ai")}>
-              <Icon name="settings" size={16} />
-              <span className="ellipsis grow">Настройки Ai</span>
-            </button>
-          </div>
-        )}
-
         {showSearch && (
           <div className="nav-group">
             <GroupTitle id="work" title="Работа" />

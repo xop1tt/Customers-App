@@ -38,10 +38,14 @@ describe("рейка модулей", () => {
     expect(mod(/^Сообщения/)).toHaveAttribute("aria-current", "page");
   });
 
-  it("настройки открываются из рейки", async () => {
+  it("в рейке нет «Настроек»: внизу кнопка «Ai», а настройки открываются из меню аккаунта", async () => {
     render(<App />);
     await screen.findByLabelText("Навигация");
-    fireEvent.click(within(rail()).getByRole("button", { name: "Настройки" }));
+    expect(within(rail()).queryByRole("button", { name: "Настройки" })).toBeNull();
+    const buttons = within(rail()).getAllByRole("button");
+    expect(buttons.at(-1)).toHaveAccessibleName("Ai");
+    fireEvent.click(await screen.findByLabelText("Учётная запись"));
+    fireEvent.click(await screen.findByText("Настройки", { selector: ".menu-item" }));
     expect(await screen.findByRole("dialog", { name: "Настройки" })).toBeInTheDocument();
   });
 });
