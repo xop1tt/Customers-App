@@ -164,6 +164,12 @@ export interface AiConfig {
   maxSteps: number;
   /** Какие группы действий разрешены модели. */
   allow: AiGroup[];
+  /** Модель понимает изображения (можно прикладывать картинки к сообщению). */
+  vision: boolean;
+  /** Модель понимает звук (wav, mp3). */
+  audio: boolean;
+  /** Уведомлять, когда модель закончила или ждёт ответа (подтверждения действия), если чат Ai сейчас не на виду. */
+  notify: boolean;
 }
 
 export type AiGroup = "read" | "navigate" | "settings" | "data" | "messages";
@@ -171,7 +177,7 @@ export const AI_GROUPS: { id: AiGroup; title: string; hint: string }[] = [
   { id: "read", title: "Читать данные", hint: "Лиды, записи CRM, сводка, состояние настроек" },
   { id: "navigate", title: "Открывать разделы и настройки", hint: "Переходить между экранами и окнами" },
   { id: "settings", title: "Менять настройки приложения", hint: "Тема, масштаб, компактный вид и подобное" },
-  { id: "data", title: "Менять данные", hint: "Избранное, архив, заметки, задачи, запуск поиска, удаление лидов" },
+  { id: "data", title: "Менять данные", hint: "Избранное, архив, заметки, задачи и события, ответственные, запуск поиска, удаление лидов" },
   { id: "messages", title: "Отправлять сообщения в интеграции", hint: "Slack, Telegram, Discord, Teams" },
 ];
 
@@ -185,7 +191,7 @@ export const AI_PROVIDERS: { id: AiProvider; title: string; url: string; hint: s
 
 export const defaultAi = (): AiConfig => ({
   enabled: false, provider: "lmstudio", baseUrl: AI_PROVIDERS[0]!.url, model: "", apiKey: "", mode: "writes", system: "", temperature: 0.2, maxSteps: 6,
-  allow: ["read", "navigate", "settings", "data", "messages"],
+  allow: ["read", "navigate", "settings", "data", "messages"], vision: false, audio: false, notify: true,
 });
 
 export interface HubConfig { integrations: Record<string, HubIntegration>; ai: AiConfig }
@@ -214,6 +220,9 @@ export function normalizeHub(raw: unknown): HubConfig {
     temperature: typeof a.temperature === "number" ? Math.min(2, Math.max(0, a.temperature)) : d.temperature,
     maxSteps: typeof a.maxSteps === "number" ? Math.min(12, Math.max(1, Math.round(a.maxSteps))) : d.maxSteps,
     allow: Array.isArray(a.allow) ? a.allow.filter((g): g is AiGroup => AI_GROUPS.some((x) => x.id === g)) : d.allow,
+    vision: a.vision === true,
+    audio: a.audio === true,
+    notify: a.notify !== false,
   };
   return { integrations, ai };
 }

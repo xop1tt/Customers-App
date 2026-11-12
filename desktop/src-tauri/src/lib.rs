@@ -71,6 +71,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::hub_send,
         commands::ai_models,
         commands::ai_chat,
+        commands::ai_notify,
         commands::ws_upload_local,
         commands::ws_save_role,
         commands::ws_delete_role,

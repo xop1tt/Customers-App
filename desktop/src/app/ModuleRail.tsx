@@ -1,11 +1,11 @@
-// Рейка модулей слева (пакет C2, вариант B макетов C1): CRM, поиск клиентов, сообщения, команда, внизу — настройки.
+// Рейка модулей слева (пакет C2, вариант B макетов C1): CRM, поиск клиентов, сообщения, команда, внизу — кнопка «Ai» (выдвижной чат; настройки — в меню аккаунта).
 
 import { matchesSection } from "../lib/leads";
 import { useNewSince } from "../state/hooks";
 import { integer } from "../lib/format";
 import { MODULES, moduleOf, type ModuleId } from "../lib/modules";
 import { Icon } from "../ui/icons";
-import { openModule, openSettings, useStore } from "../state/store";
+import { openModule, toggleAi, useStore } from "../state/store";
 import { unreadNotifications, unreadTotal } from "../state/team";
 import appIcon from "../assets/app-icon.png";
 import appIconLight from "../assets/app-icon-light.png";
@@ -17,6 +17,7 @@ export function ModuleRail() {
   const leads = useStore((s) => s.snap.leads);
   const since = useNewSince();
   const chat = useStore((s) => s.chat);
+  const aiOpen = useStore((s) => s.aiOpen);
   const hasWs = useStore((s) => !!s.ws?.active);
   const current = moduleOf(section);
   const badge: Record<ModuleId, number> = {
@@ -24,7 +25,6 @@ export function ModuleRail() {
     search: leads.filter((l) => !l.seen && matchesSection(l, "new", since) && l.data.relevance !== "rejected").length,
     messages: unreadTotal(chat),
     team: unreadNotifications(chat),
-    ai: 0,
   };
 
   return (
@@ -46,8 +46,10 @@ export function ModuleRail() {
         );
       })}
       <span className="grow" />
-      <button type="button" className="rail-btn small" aria-label="Настройки" data-tip="Настройки" onClick={() => openSettings("appearance")}>
-        <Icon name="settings" size={18} />
+      <button type="button" className={`rail-btn ai-toggle${aiOpen ? " active" : ""}`} id="ai-toggle" aria-label="Ai" aria-expanded={aiOpen} aria-controls="ai-drawer"
+        data-tip="Ai" onClick={() => toggleAi()}>
+        <Icon name="bot" size={18} />
+        <span className="rail-label">Ai</span>
       </button>
     </nav>
   );

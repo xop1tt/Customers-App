@@ -131,6 +131,14 @@ export function setWsMockRole(role: string) {
   if (me) me.role = role;
 }
 
+/** Добавить сотрудника в активный Workspace (тесты): чтобы было кого назначать. */
+export function addWsMockMember(name: string, role = "employee"): string {
+  const ws = ensure();
+  const id = `00000000-0000-4000-8000-0000000009${String(ws.members.length).padStart(2, "0")}`;
+  ws.members.push(member(id, name, role));
+  return id;
+}
+
 function state(): WsState {
   const ws = ensure();
   return {

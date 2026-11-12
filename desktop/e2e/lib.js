@@ -69,6 +69,21 @@ const E2E = (() => {
     click(el, what || text);
     return el;
   };
+  /** Открыть настройки так, как это делает человек: меню учётной записи (кнопки «Настройки» в рейке больше нет). */
+  const openSettingsUi = async () => {
+    if ($(".settings")) return $(".settings");
+    const btn = $(".account-btn");
+    if (!btn) {
+      // Панель разделов скрыта (узкое окно): то же самое делает сочетание ⌘/Ctrl+, .
+      const mac = /Mac/i.test(navigator.platform);
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: ",", ctrlKey: !mac, metaKey: mac, bubbles: true }));
+      return waitFor(() => $(".settings"), "окно настроек");
+    }
+    click(btn, "учётная запись");
+    const item = await waitFor(() => withText(".menu-item", /^(Настройки|Settings)$/)[0], "пункт «Настройки» в меню учётной записи");
+    click(item, "Настройки");
+    return waitFor(() => $(".settings"), "окно настроек");
+  };
   /** Ввод в поле, управляемое React: через родной setter и событие input. */
   const type = (input, value) => {
     if (!input) throw new Error("нет поля ввода");
@@ -146,5 +161,5 @@ const E2E = (() => {
     return report;
   };
 
-  return { C, hasCore, sleep, short, core, coreFails, emit, log, mock, shot, $, $$, norm, shown, withText, dom, waitFor, click, clickText, type, key, check, eq, same, golden, healthy, dismissToasts, utf8b64, scenario, skipIf, run, pageErrors };
+  return { C, hasCore, sleep, short, core, coreFails, emit, log, mock, shot, $, $$, norm, shown, withText, dom, waitFor, click, clickText, openSettingsUi, type, key, check, eq, same, golden, healthy, dismissToasts, utf8b64, scenario, skipIf, run, pageErrors };
 })();

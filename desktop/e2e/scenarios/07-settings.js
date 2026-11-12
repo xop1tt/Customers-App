@@ -3,8 +3,7 @@
   const { scenario, waitFor, $, $$, withText, click, clickText, type, check, eq, core, sleep, norm, shot, golden, skipIf, hasCore, healthy } = E2E;
 
   const openSettings = async () => {
-    if (!$(".settings")) click($$(".rail-btn").find((b) => /^(Настройки|Settings)$/.test(b.getAttribute("aria-label") || "")), "кнопка «Настройки»");
-    return waitFor(() => $(".settings"), "окно настроек");
+    return E2E.openSettingsUi();
   };
   const closeSettings = async () => {
     if ($(".settings")) click($(".settings-head .icon-btn"), "закрыть настройки");
@@ -59,18 +58,17 @@
     eq((await core("device_prefs")).language, "en", "язык в настройках устройства");
     // Интерфейс собирается заново: рейка и разделы становятся английскими.
     const en = golden("settings").english;
-    await waitFor(() => $$(".rail-btn").some((b) => (b.getAttribute("aria-label") || "") === en.settings), "рейка стала английской");
+    await waitFor(() => $$(".rail-btn").some((b) => (b.getAttribute("aria-label") || "").startsWith(en.rail[0])), "рейка стала английской");
     const labels = $$(".rail-btn").map((b) => b.getAttribute("aria-label"));
     for (const w of en.rail) check(labels.some((l) => l.startsWith(w)), `в английской рейке нет «${w}»: ${labels}`);
     await sleep(300);
     // Все разделы настроек по-английски: нет ни одной русской подписи в навигации.
-    if (!$(".settings")) click($$(".rail-btn").find((b) => b.getAttribute("aria-label") === en.settings));
-    await waitFor(() => $(".settings"), "окно настроек (English)");
+    await E2E.openSettingsUi();
     const nav = $$(".settings-nav .nav-item").map((i) => norm(i.textContent));
     check(nav.every((l) => !/[А-Яа-я]/.test(l)), `в английских настройках остались русские подписи: ${JSON.stringify(nav)}`);
     await shot("settings-english");
     await choose("Interface language", "Русский");
-    await waitFor(() => $$(".rail-btn").some((b) => (b.getAttribute("aria-label") || "") === "Настройки"), "рейка снова русская");
+    await waitFor(() => $$(".rail-btn").some((b) => (b.getAttribute("aria-label") || "").startsWith("Поиск клиентов")), "рейка снова русская");
     eq((await core("device_prefs")).language, "ru", "язык после возврата");
     await closeSettings();
   });

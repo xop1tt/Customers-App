@@ -231,10 +231,12 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const hubDemo = {
   blob: {} as unknown,
   sent: [] as { service: string; text: string }[],
+  /** Уведомления от помощника, отправленные ядру. */
+  notified: [] as { title: string; body: string }[],
   models: ["demo-model-7b", "llama3.1"],
   /** Ответ модели на запрос; по умолчанию — короткий текст. */
   reply: ((_body: { messages: { role: string; content?: string | null }[] }): AiChatReply => ({ choices: [{ message: { role: "assistant", content: "Это демо-ответ локальной модели." } }] })) as (body: { messages: { role: string; content?: string | null }[] }) => AiChatReply,
-  reset() { this.blob = {}; this.sent = []; this.models = ["demo-model-7b", "llama3.1"]; this.reply = () => ({ choices: [{ message: { role: "assistant", content: "Это демо-ответ локальной модели." } }] }); },
+  reset() { this.blob = {}; this.sent = []; this.notified = []; this.models = ["demo-model-7b", "llama3.1"]; this.reply = () => ({ choices: [{ message: { role: "assistant", content: "Это демо-ответ локальной модели." } }] }); },
 };
 
 export async function call(cmd: string, args: Record<string, unknown>): Promise<unknown> {
@@ -252,6 +254,7 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
     if (String(args.baseUrl).includes("offline")) throw { code: "", message: "Сервер модели недоступен: connection refused. Запущен ли он и включён ли локальный сервер?" };
     return [...hubDemo.models];
   }
+  if (cmd === "ai_notify") { hubDemo.notified.push({ title: String(args.title), body: String(args.body) }); return null; }
   if (cmd === "ai_chat") return hubDemo.reply(args.body as { messages: { role: string; content?: string | null }[] });
   if (cmd === "ws_market") {
     const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;

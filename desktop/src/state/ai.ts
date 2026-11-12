@@ -5,9 +5,11 @@ import { useSyncExternalStore } from "react";
 import { api } from "../api";
 import type { AiToolCall } from "../api/types";
 import type { SectionId } from "../lib/leads";
-import { AI_TOOLS, type AiRisk, type AiTool, needsConfirm, parseArgs, systemPrompt, toolByName, toolSpecs, validateArgs } from "../lib/aiTools";
+import { AI_TOOLS, type AiRisk, type AiTool, TABLES, needsConfirm, parseArgs, responsibleField, systemPrompt, toolByName, toolSpecs, validateArgs } from "../lib/aiTools";
+import { type AiAttachment, type ContentPart, slimContent, userContent } from "../lib/aiFiles";
+import { can, memberName } from "../lib/crm";
 import { type AiConfig, hubApp, isMessenger } from "../lib/hub";
-import { errText, getState, openSettings, patchDevice, setSection, toast } from "./store";
+import { errText, getState, openSettings, patchDevice, setSection, setState, toast } from "./store";
 import { openMarket } from "./market";
 import { getHub } from "./hub";
 import type { SettingsSection } from "./store";
@@ -15,10 +17,11 @@ import type { DevicePrefs } from "../api/types";
 
 export type ActionStatus = "pending" | "running" | "done" | "rejected" | "error";
 export type ViewItem =
-  | { id: number; kind: "user" | "assistant" | "error"; text: string }
+  | { id: number; kind: "assistant" | "error"; text: string }
+  | { id: number; kind: "user"; text: string; files?: string[] }
   | { id: number; kind: "action"; tool: string; risk: AiRisk; summary: string; status: ActionStatus; result?: string; confirm: boolean };
 
-interface Msg { role: "system" | "user" | "assistant" | "tool"; content?: string | null; tool_calls?: AiToolCall[]; tool_call_id?: string }
+interface Msg { role: "system" | "user" | "assistant" | "tool"; content?: string | ContentPart[] | null; tool_calls?: AiToolCall[]; tool_call_id?: string }
 
 let view: ViewItem[] = [];
 let history: Msg[] = [];
@@ -70,12 +73,28 @@ export function stopChat() {
   emit();
 }
 
+/** Сообщить, что модель закончила или ждёт ответа — если пользователь сейчас не смотрит в чат Ai. */
+function attention(title: string, body: string) {
+  if (!getHub().ai.notify || typeof document === "undefined") return;
+  const focused = document.hasFocus();
+  if (focused && getState().aiOpen) return;
+  if (focused) toast(`${title}: ${body}`);
+  else void api.aiNotify(title, body).catch(() => {});
+}
+
+const brief = (t: string, n = 140) => { const x = t.replace(/\s+/g, " ").trim(); return x.length > n ? `${x.slice(0, n)}…` : x; };
+
+/** Индекс последнего сообщения пользователя с вложением: только в нём изображения и звук отправляются повторно. */
+const lastHeavy = () => history.map((m, i) => (m.role === "user" && Array.isArray(m.content) && m.content.some((p) => p.type !== "text") ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+
 const cap = (text: string, max = 6000) => (text.length > max ? `${text.slice(0, max)}… (обрезано)` : text);
 
 function context(): string {
   const st = getState();
   const leads = st.snap.leads;
-  return `Сегодня ${new Date().toISOString().slice(0, 10)}. Сейчас открыт раздел «${st.section}». Лидов в базе: ${leads.length}.`;
+  const people = st.ws?.active ? st.ws.members.slice(0, 40).map((m) => `${m.displayName} (${m.userId}, ${m.roleName})`).join("; ") : "";
+  const me = st.ws?.members.find((m) => m.userId === st.ws?.me)?.displayName;
+  return `Сегодня ${new Date().toISOString().slice(0, 10)}. Сейчас открыт раздел «${st.section}». Лидов в базе: ${leads.length}.${people ? ` Сотрудники: ${people}.${me ? ` Пользователь — ${me}.` : ""}` : ""}`;
 }
 
 // ------------------------------------------------------------------ инструменты
@@ -102,9 +121,16 @@ async function runTool(tool: AiTool, a: Record<string, unknown>): Promise<string
     case "search_crm": {
       if (!st.ws?.active) return "Рабочее пространство CRM не открыто.";
       const entity = String(a.entity);
-      const table = ({ company: "companies", contact: "contacts", crm_lead: "crm_leads", deal: "deals", task: "tasks" } as Record<string, string>)[entity] ?? entity;
-      const r = await api.wsList(table, { search: String(a.query ?? "") || null, limit: lim(a.limit) });
-      return JSON.stringify(r.items.map((x) => ({ id: x.id, title: x.name ?? x.full_name ?? x.title ?? "", status: x.status ?? undefined, amount: x.amount ?? undefined, due_at: x.due_at ?? undefined })));
+      const table = TABLES[entity] ?? entity;
+      const members = st.ws.members;
+      const when = entity === "task" ? "due_at" : entity === "activity" ? "occurred_at" : null;
+      const filters = when ? [...(a.from ? [{ field: when, op: "gte", value: String(a.from) }] : []), ...(a.to ? [{ field: when, op: "lt", value: String(a.to) }] : [])] : [];
+      const r = await api.wsList(table, { search: String(a.query ?? "") || null, limit: lim(a.limit), ...(filters.length ? { filters } : {}), ...(when ? { sort: [{ field: when, dir: "asc" as const }] } : {}) });
+      return JSON.stringify(r.items.map((x) => ({
+        id: x.id, title: x.name ?? x.full_name ?? x.title ?? x.summary ?? "", status: x.status ?? undefined, amount: x.amount ?? undefined,
+        due_at: x.due_at ?? undefined, at: x.occurred_at ?? undefined, type: entity === "activity" ? x.type : undefined,
+        responsible: x[responsibleField(entity)] ? memberName(members, x[responsibleField(entity)]) : undefined,
+      })));
     }
     case "get_settings": {
       const d = st.device;
@@ -126,6 +152,44 @@ async function runTool(tool: AiTool, a: Record<string, unknown>): Promise<string
       if (!st.ws?.active) return "Рабочее пространство CRM не открыто: задачу создать негде.";
       const r = await api.wsSave("tasks", null, { title: String(a.title), ...(a.description ? { description: String(a.description) } : {}), ...(a.due_at ? { due_at: String(a.due_at) } : {}) });
       return `Задача создана (id ${r.id}).`;
+    }
+    case "update_event": {
+      if (!st.ws?.active) return "Рабочее пространство CRM не открыто.";
+      const table = TABLES[String(a.entity)]!;
+      const rec = (await api.wsCard(table, String(a.id)).catch(() => null))?.record;
+      if (!rec) return "Запись с таким id не найдена.";
+      if (!can(st.ws.permissions, "edit", rec, st.ws.me)) return "Отказано: у пользователя нет прав менять эту запись.";
+      const task = a.entity === "task";
+      const f: Record<string, unknown> = {};
+      if (a.title !== undefined) f[task ? "title" : "summary"] = String(a.title);
+      if (a.at !== undefined) f[task ? "due_at" : "occurred_at"] = new Date(String(a.at)).toISOString();
+      if (a.description !== undefined) f.description = String(a.description);
+      if (a.status !== undefined) f.status = a.status;
+      if (a.priority !== undefined) f.priority = a.priority;
+      if (a.type !== undefined) f.type = a.type;
+      if (!task && rec.type === "system") return "Системные записи истории менять нельзя.";
+      await api.wsSave(table, rec.id, f);
+      setState((s) => ({ wsVersion: s.wsVersion + 1 }));
+      return `${task ? "Задача" : "Событие"} изменено.`;
+    }
+    case "set_responsible": {
+      if (!st.ws?.active) return "Рабочее пространство CRM не открыто.";
+      const table = TABLES[String(a.entity)]!;
+      const rec = (await api.wsCard(table, String(a.id)).catch(() => null))?.record;
+      if (!rec) return "Запись с таким id не найдена.";
+      // Назначать и снимать ответственных может только тот, кто вправе менять чужие записи (records.edit); «только свои» недостаточно.
+      if (!st.ws.permissions.includes("records.edit") || !can(st.ws.permissions, "edit", rec, st.ws.me)) return "Отказано: назначать и снимать ответственных могут только сотрудники с правом менять записи.";
+      let who: string | null = null;
+      if (a.unassign !== true) {
+        const q = String(a.member).trim().toLowerCase();
+        const hits = st.ws.members.filter((m) => m.userId === a.member || m.displayName.toLowerCase() === q);
+        const found = hits.length ? hits : st.ws.members.filter((m) => m.displayName.toLowerCase().includes(q));
+        if (found.length !== 1) return found.length ? `Под «${String(a.member)}» подходит несколько сотрудников: ${found.map((m) => m.displayName).join(", ")}. Уточните.` : "Такого сотрудника нет в рабочем пространстве (список — в контексте).";
+        who = found[0]!.userId;
+      }
+      await api.wsSave(table, rec.id, { [responsibleField(String(a.entity))]: who });
+      setState((s) => ({ wsVersion: s.wsVersion + 1 }));
+      return who ? `Ответственный назначен: ${memberName(st.ws.members, who)}.` : "Ответственный снят.";
     }
     case "run_search": await api.runSearch(); return "Поиск запущен.";
     case "delete_leads": { const ids = asIds(); await api.deleteLeads(ids); return `Удалено лидов: ${ids.length}.`; }
@@ -154,6 +218,7 @@ async function handleCall(call: AiToolCall, cfg: AiConfig, my: number): Promise<
   const confirm = needsConfirm(cfg.mode, tool.risk);
   const id = push({ kind: "action", tool: tool.name, risk: tool.risk, summary: tool.summary(args), status: confirm ? "pending" : "running", confirm });
   if (confirm) {
+    attention("Ai ждёт ответа", brief(tool.summary(args)));
     const ok = await new Promise<boolean>((resolve) => waiting.set(id, resolve));
     if (my !== epoch) return "Отменено.";
     if (!ok) { patch(id, { status: "rejected" }); return "Пользователь отклонил это действие."; }
@@ -170,22 +235,24 @@ async function handleCall(call: AiToolCall, cfg: AiConfig, my: number): Promise<
   }
 }
 
-export async function askAi(text: string): Promise<void> {
+export async function askAi(text: string, files: AiAttachment[] = []): Promise<void> {
   const cfg = getHub().ai;
   const t = text.trim();
   if (!t || busy) return;
   if (!cfg.enabled || !cfg.baseUrl || !cfg.model) { toast("Подключите модель в «Настройки → Ai».", "error"); return; }
   const my = ++epoch;
   busy = true;
-  push({ kind: "user", text: t });
-  history.push({ role: "user", content: t });
+  push({ kind: "user", text: t, ...(files.length ? { files: files.map((f) => f.name) } : {}) });
+  history.push({ role: "user", content: userContent(t, files) });
   if (history.length > 40) history = history.slice(-40);
+  let outcome = "";
+  let failed = false;
   try {
     for (let step = 0; step <= cfg.maxSteps; step++) {
       const tools = step < cfg.maxSteps ? toolSpecs(cfg.allow) : [];
       const reply = await api.aiChat(cfg.baseUrl, cfg.apiKey || undefined, {
         model: cfg.model, temperature: cfg.temperature,
-        messages: [{ role: "system", content: systemPrompt(cfg, context()) }, ...history],
+        messages: [{ role: "system", content: systemPrompt(cfg, context()) }, ...history.map((m, i) => (m.role === "user" ? { ...m, content: slimContent(m.content, i === lastHeavy()) } : m))],
         ...(tools.length ? { tools, tool_choice: "auto" } : {}),
       });
       if (my !== epoch) return;
@@ -193,7 +260,7 @@ export async function askAi(text: string): Promise<void> {
       if (!msg) throw { message: "Модель вернула пустой ответ." };
       const calls = (msg.tool_calls ?? []).filter((c) => c?.function?.name);
       history.push({ role: "assistant", content: msg.content ?? "", ...(calls.length ? { tool_calls: calls.map((c, i) => ({ ...c, id: c.id ?? `call_${step}_${i}`, type: "function" })) } : {}) });
-      if (msg.content?.trim()) push({ kind: "assistant", text: msg.content.trim() });
+      if (msg.content?.trim()) { push({ kind: "assistant", text: msg.content.trim() }); outcome = msg.content.trim(); }
       if (!calls.length) break;
       for (const [i, c] of calls.entries()) {
         const out = await handleCall(c, cfg, my);
@@ -203,9 +270,13 @@ export async function askAi(text: string): Promise<void> {
       if (step === cfg.maxSteps) push({ kind: "error", text: "Достигнут предел шагов. Напишите «продолжай», если нужно." });
     }
   } catch (e) {
-    if (my === epoch) push({ kind: "error", text: errText(e) });
+    if (my === epoch) { push({ kind: "error", text: errText(e) }); failed = true; outcome = errText(e); }
   } finally {
-    if (my === epoch) { busy = false; emit(); }
+    if (my === epoch) {
+      busy = false;
+      emit();
+      attention(failed ? "Ai не смог ответить" : "Ai закончил", brief(outcome || "Готово."));
+    }
   }
 }
 

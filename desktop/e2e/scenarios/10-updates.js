@@ -6,8 +6,7 @@
   // Состояние приходит как { phase: "available" } (у ошибки ещё и message).
   const phase = (info) => (info.phase && typeof info.phase === "object" ? info.phase.phase : info.phase);
   const openUpdates = async () => {
-    if (!$(".settings")) click($$(".rail-btn").find((b) => /^(Настройки|Settings)$/.test(b.getAttribute("aria-label") || "")));
-    await waitFor(() => $(".settings"), "настройки");
+    await E2E.openSettingsUi();
     click($$(".settings-nav .nav-item").find((i) => norm(i.textContent).startsWith("Обновления")));
     await waitFor(() => norm($(".settings-head h2")?.textContent).startsWith("Обновления"), "раздел «Обновления»");
     await sleep(400);

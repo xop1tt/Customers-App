@@ -71,8 +71,7 @@
   });
 
   scenario("integrations-ui", "Интеграции (интерфейс): «Копии и перенос» и «Почта и звонки» показывают панели без ошибок", async () => {
-    click($$(".rail-btn").find((b) => /^(Настройки|Settings)$/.test(b.getAttribute("aria-label") || "")));
-    await waitFor(() => $(".settings"), "настройки");
+    await E2E.openSettingsUi();
     for (const w of ["Копии и перенос", "Почта и звонки"]) {
       click($$(".settings-nav .nav-item").find((i) => norm(i.textContent).startsWith(w)));
       await waitFor(() => norm($(".settings-head h2")?.textContent).startsWith(w), `раздел «${w}»`);

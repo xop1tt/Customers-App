@@ -45,6 +45,8 @@ export interface AppState {
   reportOpen: boolean;
   customizeNav: boolean;
   navPeek: boolean;
+  /** Чат Ai открыт: он прикреплён к кнопке «Ai» в рейке и остаётся при переходах между разделами. */
+  aiOpen: boolean;
   /** Customers 2.0: активный Workspace, его коллекции и открытая карточка. */
   ws: WsState | null;
   collections: WsCollection[];
@@ -83,7 +85,7 @@ const EMPTY_SNAP: Snapshot = { leads: [], sources: [], pipelineErrors: [], exclu
 const initial: AppState = {
   phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
-  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, quickOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false,
+  section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, quickOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, aiOpen: false,
   ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0, profileId: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [],
 };
 
@@ -308,6 +310,7 @@ export function openScore(minScore: number) {
   setState({ section: "all", selection: [], anchor: null, navPeek: false, filter: { ...emptyFilter(), minScore } });
 }
 export const setFilter = (f: Partial<LeadFilter>) => setState((s) => ({ filter: { ...s.filter, ...f } }));
+export const toggleAi = (open?: boolean) => setState((s) => ({ aiOpen: open ?? !s.aiOpen }));
 export const openSettings = (settings: SettingsSection | null, settingsSub: string | null = null) => setState({ settings, settingsSub });
 
 export function select(ids: string[], anchor?: string | null) {

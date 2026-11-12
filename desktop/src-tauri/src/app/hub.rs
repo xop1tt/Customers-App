@@ -219,6 +219,14 @@ impl Core {
         Ok(names)
     }
 
+    /// Системное уведомление от помощника Ai («закончил», «ждёт ответа»). Показывается, только когда окно не на виду (решает оболочка).
+    pub fn ai_notify(&self, title: &str, body: &str) -> CmdResult<()> {
+        self.require()?;
+        let cut = |t: &str, n: usize| -> String { t.chars().take(n).collect() };
+        self.env.emit("notify", json!({"kind": "ai", "title": cut(title, 80), "body": cut(body, 200)}));
+        Ok(())
+    }
+
     /// Один запрос `POST /chat/completions` без потока. Тело (модель, сообщения, инструменты) собирает интерфейс.
     pub async fn ai_chat(&self, base_url: &str, api_key: &str, body: Value) -> CmdResult<Value> {
         self.require()?;
@@ -348,5 +356,7 @@ mod tests {
         let e = core.ai_models("http://localhost:1234/v1", "x").await.unwrap_err();
         assert!(e.message.contains("401") && e.message.contains("bad key"));
         assert!(core.ai_chat("not a url", "", json!({})).await.is_err());
+        core.ai_notify("Ai закончил", &"я".repeat(500)).unwrap();
+        assert_eq!(f.events.count("notify"), 1);
     }
 }

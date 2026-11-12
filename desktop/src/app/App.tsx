@@ -22,7 +22,7 @@ import { Settings } from "./settings/Settings";
 import { Marketplace } from "./market/Marketplace";
 import { useMarketInstalled } from "../state/market";
 import { useHubSync } from "../state/hub";
-import { AiPage } from "./pages/AiPage";
+import { AiDrawer } from "./AiDrawer";
 import { ReportDialog } from "./settings/SystemSections";
 import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
@@ -289,7 +289,6 @@ function Shell() {
           {section === "people" && <PeoplePage />}
           {section === "chat" && <ChatPage />}
           {section === "notifications" && <NotificationsPage />}
-          {section === "ai" && <AiPage />}
         </div>
       </main>
       {showInsp && floatInsp && (
@@ -309,6 +308,7 @@ function Shell() {
       {exportOpen && <ExportDialog />}
       {whatsNew && <WhatsNewDialog />}
       {reportOpen && <ReportDialog onClose={() => setState({ reportOpen: false })} />}
+      <AiDrawer />
       <WorkspaceDialog />
       <CollectionDialog key={collectionKey} />
       <CrashPrompt />

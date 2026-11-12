@@ -1,4 +1,4 @@
-// «Интеграции» (встроенный каталог) и вкладка «Ai» в демо-режиме: установка, настройка, проверка, разговор с моделью и подтверждения.
+// «Интеграции» (встроенный каталог) и чат «Ai» в демо-режиме: установка, настройка, проверка, разговор с моделью и подтверждения.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { hubDemo } from "../api/mock";
@@ -8,7 +8,7 @@ import { getState, setState } from "../state/store";
 import { App } from "./App";
 
 afterEach(cleanup);
-beforeEach(async () => { hubDemo.reset(); clearChat(); await loadHub(); });
+beforeEach(async () => { hubDemo.reset(); clearChat(); setState({ aiOpen: false }); await loadHub(); });
 
 const SLACK = "https://hooks.slack.com/services/T0/B0/xyz";
 
@@ -85,8 +85,8 @@ describe("интеграции", () => {
   });
 });
 
-describe("вкладка Ai", () => {
-  it("кнопка «Ai» есть в левой колонке; без модели предлагает подключить её в настройках", async () => {
+describe("чат Ai", () => {
+  it("кнопка «Ai» есть в левой рейке; без модели предлагает подключить её в настройках", async () => {
     await ready();
     const rail = screen.getByRole("navigation", { name: "Модули" });
     fireEvent.click(within(rail).getByRole("button", { name: "Ai" }));

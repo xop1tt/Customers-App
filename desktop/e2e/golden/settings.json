@@ -1,4 +1,4 @@
 {
   "sections": ["Аккаунт", "Оформление", "Уведомления", "Система", "Обновления", "Автопоиск", "Источники", "Исключения из поиска", "Почта и звонки", "Копии и перенос", "Диагностика и сбои"],
-  "english": { "settings": "Settings", "rail": ["CRM", "Client search", "Messages", "Team"] }
+  "english": { "rail": ["CRM", "Client search", "Messages", "Team", "Ai"] }
 }
