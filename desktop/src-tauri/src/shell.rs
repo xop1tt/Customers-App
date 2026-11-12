@@ -332,6 +332,29 @@ fn refuse_if_wrong_identity(app: &AppHandle) -> bool {
     true
 }
 
+/// Windows: включает в WebView2 системное автозаполнение (адреса, пароли) и предложение сохранить пароль при входе.
+/// Пароли хранит сам WebView2 в профиле приложения под защитой Windows (DPAPI); приложение их не видит и не логирует.
+/// Ошибка здесь не мешает работе: вход просто остаётся ручным.
+#[cfg(windows)]
+mod webview_autofill {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings4;
+    use windows_core::Interface;
+
+    pub fn enable(window: &tauri::WebviewWindow) {
+        let _ = window.with_webview(|webview| {
+            // SAFETY: вызов COM-методов WebView2 на главном потоке окна внутри обратного вызова Tauri.
+            unsafe {
+                let Ok(core) = webview.controller().CoreWebView2() else { return };
+                let Ok(settings) = core.Settings() else { return };
+                if let Ok(settings) = settings.cast::<ICoreWebView2Settings4>() {
+                    let _ = settings.SetIsPasswordAutosaveEnabled(true);
+                    let _ = settings.SetIsGeneralAutofillEnabled(true);
+                }
+            }
+        });
+    }
+}
+
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
     if refuse_if_wrong_identity(&handle) {
@@ -348,6 +371,10 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     crate::e2e::install(&handle);
     #[cfg(target_os = "macos")]
     follow_system_theme(&handle);
+    #[cfg(windows)]
+    if let Some(w) = handle.get_webview_window(MAIN) {
+        webview_autofill::enable(&w);
+    }
 
     // Ссылки возврата: приложение уже открыто (macOS) или запущено второй копией (Windows, через single-instance).
     {
