@@ -46,7 +46,7 @@ const SECTIONS = [
   { id: "ws-danger", label: "Владелец" },
 ] as const;
 
-/** Панель справа: управление всем рабочим пространством. Разделы показываются по роли и должности. */
+/** Окно на весь экран: управление всем рабочим пространством. Разделы показываются по роли и должности. */
 function WorkspacePanel() {
   const ws = useStore((s) => s.ws);
   const ref = useRef<HTMLElement>(null);
@@ -83,7 +83,6 @@ function WorkspacePanel() {
 
   return (
     <>
-      <div className="ws-panel-scrim" onPointerDown={close} />
       <aside ref={ref} tabIndex={-1} className="ws-panel" role="dialog" aria-label="Рабочее пространство">
         <header className="ws-panel-head">
           <Avatar name={current?.name ?? "?"} size={30} />
