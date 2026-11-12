@@ -12,7 +12,7 @@ export const MODULES: { id: ModuleId; title: string; short: string; icon: string
   { id: "ai", title: "Ai", short: "Ai", icon: "bot", home: "ai" },
 ];
 
-const CRM: SectionId[] = ["today", "calendar", "deals", "reports", "collection", "trash"];
+const CRM: SectionId[] = ["today", "calendar", "deals", "reports", "collection", "trash", "journal"];
 const TEAM: SectionId[] = ["people", "notifications", "profile"];
 
 /** Модуль раздела: по нему рейка подсвечивает кнопку, а панель разделов показывает свои группы. */

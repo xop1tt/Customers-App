@@ -26,6 +26,7 @@ export const SECTIONS: Record<SectionId, { title: string; icon: string; emoji: s
   reports: { title: "Отчёты", icon: "report", emoji: "📈" },
   trash: { title: "Корзина", icon: "trash", emoji: "🗑️" },
   ai: { title: "Ai", icon: "bot", emoji: "🤖" },
+  journal: { title: "Журнал", icon: "clock", emoji: "🕑" },
 };
 
 export const isLeadList = (s: SectionId) => ["all", "new", "favorites", "archive", "excluded"].includes(s);
