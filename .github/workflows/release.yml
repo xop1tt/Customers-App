@@ -2,12 +2,10 @@ name: Release
 
 # Один релиз для обеих систем. Создаётся пушем тега вида v1.0.0 или вручную (Actions → Release → Run workflow):
 # параллельно собираются приложение для macOS (универсальный dmg: Apple Silicon и Intel) и установщик для Windows,
-# оба из одного кода desktop/ (Tauri 2: Rust + React), затем одна задача создаёт
-# GitHub Release с заметками из .github/release-notes/<тег>.md и прикладывает все файлы.
-# При ручном запуске тег ставится на выбранный коммит ветки; обе сборки берут этот же коммит.
-# Если одна из сборок упала, релиз не создаётся.
-# Сначала задача guard: релиз собирается только из коммита ветки main и только при готовых заметках
-# .github/release-notes/<тег>.md (пакет G8, ADR-060). Иначе сборки не запускаются.
+# оба из одного кода desktop/ (Tauri 2: Rust + React), затем одна задача создаёт GitHub Release и прикладывает файлы.
+# Здесь только сборка и установщики: тесты, release-check, проверка установщика и обязательные заметки убраны ради
+# скорости (ADR-068); их выполняет CI на каждом PR (desktop.yml). Заметки берутся из .github/release-notes/<тег>.md,
+# а если файла нет — GitHub собирает их сам. Если одна из сборок упала, релиз не создаётся.
 on:
   push:
     # Только теги из чисел: v1.2.0, v1.2.0.1. Теги с суффиксом (v1.3.0-beta.1) не собираются: Beta нет (ADR-034).
@@ -29,48 +27,16 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  # Быстрее сборка: без LTO и с 16 единицами компиляции (файл немного больше, работает так же). Только для этого workflow.
+  CARGO_PROFILE_RELEASE_LTO: "off"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
 
 jobs:
-  guard:
-    name: Release from main with notes
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: The tag looks like vX.Y.Z
-        run: |
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG. Нужен вид vX.Y.Z или vX.Y.Z.W, например v1.2.0" >&2; exit 1; fi
-
-      # Ручной запуск — только с ветки main; тег — только на коммите, который уже есть в main.
-      - name: The commit is on main
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
-            echo "Релиз запускается только с ветки main (выбрана $GITHUB_REF_NAME): Run workflow → Use workflow from → main." >&2; exit 1
-          fi
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "Коммит $GITHUB_SHA не входит в main: сначала слейте исправление в main, потом выпускайте релиз." >&2; exit 1
-          fi
-
-      - name: Release notes exist
-        run: |
-          notes=".github/release-notes/${TAG}.md"
-          if [ ! -s "$notes" ] || ! grep -q '[^[:space:]]' "$notes"; then
-            echo "Нет заметок релиза $notes: добавьте файл в main (что нового для пользователей) и запустите релиз снова." >&2; exit 1
-          fi
-          echo "Заметки: $notes"
-
   # Сборки идут без прав на запись: токен не достаётся ни сборочным скриптам, ни установщику Inno Setup, ни чужим пакетам.
   macos:
     name: Build macOS app
-    needs: guard
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: desktop
@@ -96,18 +62,19 @@ jobs:
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: node scripts/set-version.cjs "${TAG#v}"
-      # Готовность релиза: версии и тег совпадают, идентификаторы прежние, нет отладочных возможностей.
-      - name: Release check
-        env:
-          TAG: ${{ inputs.tag || github.ref_name }}
-        run: node scripts/release-check.cjs --tag "$TAG"
       - run: npm ci --no-audit --no-fund
 
-      - name: Tests (interface)
-        run: npm test
-
-      - name: Tests (core)
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            desktop/src-tauri/target
+          key: cargo-release-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-release-${{ runner.os }}-
 
       # Постоянная подпись своим сертификатом (секреты MACOS_SIGN_P12 и MACOS_SIGN_PASSWORD,
       # создаются скриптом scripts/make-macos-signing-certificate.sh). Без секретов — ad-hoc подпись.
@@ -173,9 +140,8 @@ jobs:
 
   windows:
     name: Build Windows installer
-    needs: guard
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: desktop
@@ -203,11 +169,17 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
 
-      - name: Tests (interface)
-        run: npm test
-
-      - name: Tests (core)
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            desktop/src-tauri/target
+          key: cargo-release-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-release-${{ runner.os }}-
 
       - name: Build app
         run: npx tauri build --no-bundle
@@ -224,16 +196,15 @@ jobs:
           "{0:N1} МБ" -f ((Get-Item dist-installer/Customers.exe).Length / 1MB)
 
       - name: Install Inno Setup
-        run: choco install innosetup --no-progress -y
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
 
       - name: Build installer
         run: |
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           & $iscc /Qp "/DAppVersion=$env:VERSION" /DSourceDir="$PWD\dist-installer" /DOutputDir="$PWD\artifacts" installer/Customers.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC завершился с кодом $LASTEXITCODE" }
-
-      - name: Installer check
-        run: ./installer/check.ps1 -Artifacts artifacts
 
       - name: Checksum
         run: |
@@ -250,15 +221,6 @@ jobs:
             desktop/artifacts/Customers-v*-Windows-x64-Setup.exe
             desktop/artifacts/Customers-v*-Windows-x64-Setup.exe.sha256
           if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload installer log
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-windows-checks
-          path: desktop/artifacts/install.log
-          if-no-files-found: ignore
           retention-days: 14
 
   # Единственное место с правом записи: берёт готовые файлы обеих сборок и кладёт их в релиз. Код проекта здесь не выполняется.
@@ -281,7 +243,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
           sparse-checkout: .github/release-notes
+
+      # Дёшево и безопасно: релиз можно выпустить только из коммита, который уже в main.
+      - name: The commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Коммит $GITHUB_SHA не входит в main: сначала слейте исправление в main, потом выпускайте релиз." >&2; exit 1
+          fi
 
       - name: Download the files built in this run
         run: |
@@ -304,6 +274,6 @@ jobs:
             gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" >/dev/null
           fi
           notes=".github/release-notes/${TAG}.md"
-          # Заметки обязательны (задача guard проверила их до сборки).
-          if [ ! -s "$notes" ]; then echo "Нет заметок релиза $notes" >&2; exit 1; fi
-          gh release create "$TAG" "${files[@]}" --title "Customers ${TAG#v}" --verify-tag --notes-file "$notes" --repo "$GITHUB_REPOSITORY"
+          # Свои заметки, если файл есть; иначе GitHub соберёт список изменений сам.
+          if [ -s "$notes" ]; then body=(--notes-file "$notes"); else body=(--generate-notes); fi
+          gh release create "$TAG" "${files[@]}" --title "Customers ${TAG#v}" --verify-tag "${body[@]}" --repo "$GITHUB_REPOSITORY"
