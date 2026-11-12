@@ -4,13 +4,12 @@ import type { SettingsSection } from "../../state/store";
 export interface SubSection { id: string; title: string }
 
 /** Подразделы каждой страницы настроек. У страницы с одним подразделом список не раскрывается. */
-export function subsectionsOf(section: SettingsSection, cloud: boolean): SubSection[] {
+export function subsectionsOf(section: SettingsSection, _cloud: boolean): SubSection[] {
   switch (section) {
     case "account":
       return [
         { id: "profile", title: "Профиль" },
         { id: "security", title: "Вход и безопасность" },
-        ...(cloud ? [{ id: "cloud", title: "Данные" }] : []),
       ];
     case "data": return [{ id: "db", title: "База данных" }, { id: "backups", title: "Резервные копии" }, { id: "portable", title: "Перенос на другой компьютер" }, { id: "drives", title: "Облачные диски" }];
     case "appearance": return [{ id: "look", title: "Внешний вид" }, { id: "sidebar", title: "Боковая панель" }];

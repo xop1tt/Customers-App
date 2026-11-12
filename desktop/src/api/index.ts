@@ -178,7 +178,6 @@ export const api = {
   // интеграции и локальная модель
   hubLoad: () => call<unknown>("hub_load"),
   hubSave: (value: unknown) => call("hub_save", { value }),
-  hubSend: (service: string, text: string, config?: unknown) => call<string>("hub_send", { service, text, config: config ?? null }),
   aiModels: (baseUrl: string, apiKey?: string) => call<string[]>("ai_models", { baseUrl, apiKey: apiKey ?? null }),
   aiNotify: (title: string, body: string) => call<void>("ai_notify", { title, body }),
   aiChat: (baseUrl: string, apiKey: string | undefined, body: unknown) => call<AiChatReply>("ai_chat", { baseUrl, apiKey: apiKey ?? null, body }),

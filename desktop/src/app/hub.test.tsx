@@ -1,9 +1,9 @@
-// «Интеграции» (встроенный каталог) и чат «Ai» в демо-режиме: установка, настройка, проверка, разговор с моделью и подтверждения.
+// «Коннекторы» без встроенных сервисов и чат «Ai» в демо-режиме: настройка, проверка, разговор с моделью и подтверждения.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { hubDemo } from "../api/mock";
 import { askAi, clearChat } from "../state/ai";
-import { loadHub, notifyEvent, saveAi } from "../state/hub";
+import { loadHub, saveAi } from "../state/hub";
 import { getState, setState } from "../state/store";
 import { App } from "./App";
 
@@ -12,76 +12,28 @@ beforeEach(async () => { hubDemo.reset(); clearChat(); setState({ aiOpen: false 
 
 const SLACK = "https://hooks.slack.com/services/T0/B0/xyz";
 
-async function confirm(label: string) {
-  await waitFor(() => expect(document.querySelectorAll(".dialog").length).toBeGreaterThan(0));
-  const dlgs = document.querySelectorAll<HTMLElement>(".dialog");
-  fireEvent.click(within(dlgs[dlgs.length - 1]!).getByRole("button", { name: label }));
-}
-
 async function ready() {
   render(<App />);
   await screen.findByLabelText("Навигация");
 }
 
-describe("интеграции", () => {
-  it("каталог работает без облака: карточки с описанием и кнопкой «Установить»", async () => {
+describe("коннекторы: встроенных нет", () => {
+  it("каталог без облака пуст и предлагает войти; Slack, Telegram и прочие из приложения убраны", async () => {
     await ready();
     act(() => setState({ market: "catalog" }));
-    const dlg = await screen.findByRole("dialog", { name: "Интеграции" });
-    const grid = await within(dlg).findByRole("list", { name: "Встроенные интеграции" });
-    for (const name of ["Slack", "Telegram", "Discord", "Microsoft Teams", "Notion", "Битрикс24"]) expect(within(grid).getByText(name)).toBeInTheDocument();
-    expect(within(grid).getByText("Сообщения о новых лидах и сделках в канал Slack")).toBeInTheDocument();
-    expect(within(dlg).getByText(/ставятся в облачное рабочее пространство/)).toBeInTheDocument();
-    fireEvent.change(within(dlg).getByLabelText("Поиск интеграций"), { target: { value: "notion" } });
-    await waitFor(() => expect(within(dlg).queryByText("Slack")).toBeNull());
-    expect(within(dlg).getByText("Notion")).toBeInTheDocument();
+    const dlg = await screen.findByRole("dialog", { name: "Коннекторы" });
+    expect(within(dlg).getByText("Коннекторы доступны в облачной учётной записи")).toBeInTheDocument();
+    for (const name of ["Slack", "Telegram", "Discord", "Microsoft Teams", "Notion", "Битрикс24"]) expect(within(dlg).queryByText(name)).toBeNull();
+    expect(within(dlg).queryByRole("list", { name: "Встроенные интеграции" })).toBeNull();
+    expect(within(dlg).getByRole("button", { name: "На проверке" })).toBeInTheDocument();
   });
 
-  it("Slack: установка, адрес, проверка, события и сообщение о завершённом поиске", async () => {
-    await ready();
-    act(() => setState({ market: "catalog" }));
-    const dlg = await screen.findByRole("dialog", { name: "Интеграции" });
-    fireEvent.click(await within(dlg).findByRole("button", { name: "Установить Slack" }));
-    await confirm("Установить");
-    // Открылась страница интеграции с описанием, версией и датой.
-    expect(await within(dlg).findByRole("heading", { name: "Slack" })).toBeInTheDocument();
-    expect(within(dlg).getByText(/версия 1\.0\.0/)).toBeInTheDocument();
-    expect(within(dlg).getByText(/Обновлена/)).toBeInTheDocument();
-    expect(within(dlg).getByText("Что добавляет")).toBeInTheDocument();
-    expect(within(dlg).getByText("Нужна настройка")).toBeInTheDocument();
-    const test = within(dlg).getByRole("button", { name: "Проверить" });
-    expect(test).toBeDisabled();
-    fireEvent.change(within(dlg).getByLabelText("Адрес вебхука"), { target: { value: SLACK } });
-    fireEvent.click(within(dlg).getByRole("button", { name: "Проверить" }));
-    await waitFor(() => expect(hubDemo.sent).toHaveLength(1));
-    expect(hubDemo.sent[0]).toMatchObject({ service: "slack" });
-    fireEvent.click(within(dlg).getByRole("button", { name: "Сохранить" }));
-    await waitFor(() => expect(within(dlg).getByText("Установлена")).toBeInTheDocument());
-    expect(JSON.stringify(hubDemo.blob)).toContain(SLACK);
-
-    await notifyEvent("search.finished", "Customers: найдено 3 новых лида");
-    expect(hubDemo.sent.at(-1)).toEqual({ service: "slack", text: "Customers: найдено 3 новых лида" });
-
-    // Событие выключено — сообщение не уходит; выключенная интеграция молчит.
-    fireEvent.click(within(dlg).getByRole("checkbox", { name: /Поиск клиентов завершён/ }));
-    await waitFor(() => expect(JSON.stringify(hubDemo.blob)).not.toContain("search.finished"));
-    const before = hubDemo.sent.length;
-    await notifyEvent("search.finished", "ещё");
-    expect(hubDemo.sent).toHaveLength(before);
-  });
-
-  it("удаление интеграции стирает данные доступа", async () => {
-    await ready();
-    act(() => setState({ market: "catalog" }));
-    const dlg = await screen.findByRole("dialog", { name: "Интеграции" });
-    fireEvent.click(await within(dlg).findByRole("button", { name: "Установить Discord" }));
-    await confirm("Установить");
-    fireEvent.change(await within(dlg).findByLabelText("Адрес вебхука"), { target: { value: "https://discord.com/api/webhooks/1/a" } });
-    fireEvent.click(within(dlg).getByRole("button", { name: "Сохранить" }));
-    await waitFor(() => expect(JSON.stringify(hubDemo.blob)).toContain("discord.com"));
-    fireEvent.click(within(dlg).getByRole("button", { name: "Удалить" }));
-    await confirm("Удалить");
-    await waitFor(() => expect(JSON.stringify(hubDemo.blob)).not.toContain("discord.com"));
+  it("старые настройки мессенджеров стираются при первом сохранении настроек Ai", async () => {
+    hubDemo.blob = { integrations: { slack: { enabled: true, webhook: SLACK, events: [] } } };
+    await loadHub();
+    await saveAi({ mode: "safe" });
+    expect(JSON.stringify(hubDemo.blob)).not.toContain("hooks.slack.com");
+    expect(hubDemo.blob).toMatchObject({ ai: { mode: "safe" } });
   });
 });
 
@@ -186,12 +138,17 @@ describe("чат Ai", () => {
     expect(screen.queryByRole("button", { name: "Выполнить" })).toBeNull();
   });
 
-  it("сообщение в Slack без подключённой интеграции не отправляется", async () => {
+  it("инструмента отправки сообщений в мессенджеры у помощника больше нет", async () => {
     await openChat("safe");
-    script([{ name: "send_message", args: { service: "slack", text: "привет" } }], "Slack не подключён.");
+    const seen: string[] = [];
+    hubDemo.reply = (body) => {
+      const last = body.messages.at(-1)!;
+      if (last.role === "tool") { seen.push(String(last.content)); return { choices: [{ message: { role: "assistant", content: "Не получилось." } }] }; }
+      return { choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "x", function: { name: "send_message", arguments: JSON.stringify({ service: "slack", text: "привет" }) } }] } }] };
+    };
     await send("Напиши в Slack привет");
-    expect(await screen.findByText("Slack не подключён.")).toBeInTheDocument();
+    expect(await screen.findByText("Не получилось.")).toBeInTheDocument();
+    expect(seen[0]).toContain("недоступен");
     expect(screen.queryByRole("button", { name: "Выполнить" })).toBeNull();
-    expect(hubDemo.sent).toHaveLength(0);
   });
 });

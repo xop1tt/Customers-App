@@ -746,6 +746,14 @@ export interface MarketApp {
   versions?: MarketVersion[];
   status_note?: string | null;
 }
+/** Компания-разработчик: подать коннектор может только проверенная (ADR-083). */
+export interface MarketCompany {
+  legal_name: string; country: string; reg_number: string; website: string; contact_name: string; contact_email: string; privacy_url: string;
+  status: "none" | "submitted" | "verified" | "rejected";
+  note: string | null;
+  submitted_at: string | null;
+}
+export interface MarketCompanyReview { user_id: string; company: MarketCompany }
 export interface MarketReview { version_id: string; version: string; manifest: MarketManifest; created_at: string; live_manifest: MarketManifest | null; developer_email: string | null; app: MarketApp }
 export interface MarketInstalled { app_id: string; name: string; icon: string; actions: MarketAction[]; scopes: string[] }
 export interface MarketSubmission {
