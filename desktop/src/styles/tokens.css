@@ -1,0 +1,149 @@
+/* Flat Dark: непрозрачные плоские поверхности, строгие уровни серого, один акцентный цвет. */
+:root {
+  color-scheme: dark;
+
+  --bg: #1b1c20;
+  --bg-side: #15161a;
+  --bg-rail: #111215;
+  --bg-raised: #212227;
+  --bg-input: #17181c;
+  --bg-hover: #25262c;
+  --bg-active: #2c2e35;
+  --bg-select: #232c3f;
+  --bg-overlay: #202126;
+  --scrim: rgba(8, 8, 10, 0.62);
+
+  --line: #2b2c33;
+  --line-strong: #3a3c45;
+  /* Граница элементов управления (поле, список, флажок): не менее 3 : 1 к фону, WCAG 1.4.11. */
+  --line-control: #70727d;
+  --line-control-hover: #8a8c97;
+
+  --text: #ececef;
+  --text-2: #a3a4ad;
+  --text-3: #94959f;
+  --text-on-accent: #ffffff;
+
+  --accent: #4c8dff;
+  --accent-hover: #6aa0ff;
+  --accent-soft: #1f2d49;
+
+  --red: #ef7a72;
+  --red-soft: #3a2224;
+  --orange: #dc9a45;
+  --orange-soft: #3a2f1f;
+  --green: #52b476;
+  --green-soft: #1f3228;
+  --purple: #a283e0;
+  --purple-soft: #2f2640;
+
+  --line-hover: #4a4c57;
+  --line-btn-hover: #484a55;
+  --line-danger: #5a2f31;
+  --line-warn: #54421f;
+  --line-ok: #2c5340;
+  --switch-off: #3a3c45;
+  --switch-off-hover: #474954;
+  --knob: #ffffff;
+  --scroll: #34353d;
+  --scroll-hover: #4a4c57;
+  --selection: #2f4d86;
+  --track: #2d2e35;
+  --fill-muted: #6a6c78;
+  --fill-org: #6e7180;
+  --score-low: #2a2b32;
+  --tooltip-bg: #0e0f12;
+  --tooltip-text: #ececef;
+  --accent-base: #1b1c20;
+
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 10px;
+
+  --font: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+  --fs-xxl: 26px;
+
+  --row-h: 44px;
+  --ctl-h: 30px;
+  --topbar-h: 48px;
+  --shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.45);
+
+  --t: 140ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Облегчённый режим и отключённые анимации: движение полностью убирается. */
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0s !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+}
+
+/* Светлая тема: те же уровни, но от белого к серому. Включается атрибутом data-theme на <html>. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f5f6f8;
+  --bg-side: #ebedf1;
+  --bg-rail: #e4e5e9;
+  --bg-raised: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: #e4e6ec;
+  --bg-active: #d9dce5;
+  --bg-select: #dce7fb;
+  --bg-overlay: #ffffff;
+  --scrim: rgba(24, 26, 34, 0.38);
+
+  --line: #dcdfe6;
+  --line-strong: #c4c8d3;
+  --line-control: #6f7380;
+  --line-control-hover: #5c5f6c;
+
+  --text: #1b1c20;
+  --text-2: #4f525c;
+  --text-3: #5c5f6c;
+
+  --accent: #1a56c4;
+  --accent-hover: #1646a3;
+  --accent-soft: #dbe7ff;
+
+  --red: #a9261f;
+  --red-soft: #fbe3e1;
+  --orange: #7f4c00;
+  --orange-soft: #fbefd9;
+  --green: #1c6b3c;
+  --green-soft: #dff2e6;
+  --purple: #6240b0;
+  --purple-soft: #ebe5f7;
+
+  --line-hover: #aab0bd;
+  --line-btn-hover: #aeb3c0;
+  --line-danger: #efb9b6;
+  --line-warn: #ecce9a;
+  --line-ok: #a9d9bb;
+  --switch-off: #c4c8d3;
+  --switch-off-hover: #b5bac7;
+  --scroll: #c4c8d3;
+  --scroll-hover: #a9aebb;
+  --selection: #b7d0ff;
+  --track: #dcdfe6;
+  --fill-muted: #9a9eab;
+  --fill-org: #9a9eab;
+  --score-low: #e4e6ec;
+  --tooltip-bg: #2a2c33;
+  --tooltip-text: #f2f2f5;
+  --accent-base: #f5f6f8;
+
+  --shadow-pop: 0 6px 20px rgba(24, 26, 34, 0.18);
+}

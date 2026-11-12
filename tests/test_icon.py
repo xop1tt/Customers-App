@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-MACOS = Path(__file__).resolve().parent.parent / "macos"
-ICON = MACOS / "Resources" / "AppIcon-1024.png"
+ICONS = Path(__file__).resolve().parent.parent / "desktop" / "src-tauri" / "icons"
+ICON = ICONS / "source.png"
 TILE_FROM, TILE_TO = 100, 924  # плитка macOS внутри холста 1024
 
 
@@ -72,9 +72,46 @@ def test_tile_is_dark(letter):
 
 
 def test_there_is_no_light_variant_or_dark_override():
-    assert not list((MACOS / "Resources").glob("*Dark*")), "светлого и тёмного вариантов нет, значок один"
-    build = (MACOS / "scripts" / "build-app.sh").read_text(encoding="utf-8")
-    assert "AppIcon-1024.png" in build and "Dark" not in build
-    for path in (MACOS / "Sources").rglob("*.swift"):
+    root = ICONS.parents[2]
+    assert not list(ICONS.glob("*Dark*")), "светлого и тёмного вариантов нет, значок один"
+    # Значок в пакете один, тёмный. Подмена на светлый в Dock допустима только в macOS-коде оболочки и только пока
+    # приложение запущено (по просьбе пользователя значок следует теме системы); закрытое приложение показывает пакетный.
+    for path in (ICONS.parent / "src").rglob("*.rs"):
         text = path.read_text(encoding="utf-8")
-        assert not re.search(r"applicationIconImage\s*=", text), f"{path.name}: значок в Dock не подменяется"
+        if path.name == "shell.rs":
+            assert re.search(r'#\[cfg\(target_os = "macos"\)\]\s*pub fn set_dock_icon', text), "подмена значка Dock только на macOS"
+            continue
+        assert not re.search(r"set_(dock_)?icon\s*\(", text), f"{path.name}: значок приложения не подменяется"
+    conf = (ICONS.parent / "tauri.conf.json").read_text(encoding="utf-8")
+    assert "icons/icon.icns" in conf and "icons/icon.ico" in conf
+    assert (root / "desktop" / "src-tauri" / "icons" / "icon.png").exists()
+
+
+def _icns_entries(data: bytes) -> dict[str, int]:
+    import struct
+
+    assert data[:4] == b"icns" and struct.unpack(">I", data[4:8])[0] == len(data)
+    out, pos = {}, 8
+    while pos < len(data):
+        kind, size = data[pos : pos + 4].decode(), struct.unpack(">I", data[pos + 4 : pos + 8])[0]
+        payload = data[pos + 8 : pos + size]
+        assert payload[:8] == b"\x89PNG\r\n\x1a\n", f"{kind}: запись PNG"
+        out[kind] = Image.open(__import__("io").BytesIO(payload)).width
+        pos += size
+    return out
+
+
+def test_windows_ico_has_the_sizes_microsoft_recommends():
+    ico = Image.open(ICONS / "icon.ico")
+    assert {s[0] for s in ico.ico.sizes()} >= {16, 20, 24, 32, 40, 48, 64, 256}
+
+
+def test_macos_icns_has_every_size_and_retina_version():
+    sizes = sorted(set(_icns_entries((ICONS / "icon.icns").read_bytes()).values()))
+    assert sizes == [16, 32, 64, 128, 256, 512, 1024]
+
+
+def test_windows_icon_fills_the_canvas_more_than_the_macos_one():
+    mac = Image.open(ICONS / "source.png").convert("RGBA").getchannel("A").getbbox()
+    win = Image.open(ICONS / "icon.png").convert("RGBA").getchannel("A").getbbox()
+    assert (mac[2] - mac[0]) / 1024 < (win[2] - win[0]) / 512, "у macOS поля шире, чем у Windows"

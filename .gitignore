@@ -1,5 +1,5 @@
 # Данные и состояние — НИКОГДА не коммитить в публичный репозиторий
-state/
+/state/
 backup/
 *.db
 *.db.enc
@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# Отчёт покрытия pytest
+.coverage

@@ -1,18 +1,35 @@
 name: Dependabot auto-merge
 
-# Включает автослияние ТОЛЬКО для PR от Dependabot с обновлением patch/minor.
-# Само слияние произойдёт после зелёных обязательных проверок (branch protection на main).
-# Код PR здесь не выполняется и не скачивается: используются только метаданные.
+# Включает автослияние ТОЛЬКО для разрешённых PR от Dependabot. Само слияние GitHub делает уже после того, как
+# пройдут все обязательные проверки ветки main (branch protection / ruleset): этот workflow ничего не сливает сам.
+#
+# Политика (проверяется по метаданным каждой обновляемой зависимости, код PR не скачивается и не запускается):
+#   * patch-обновления любых зависимостей, кроме Tauri, Rust-инструментария, базы данных и криптографии;
+#   * minor только для GitHub Actions и dev-зависимостей (кроме typescript, vite, plugin-react);
+#   * всё остальное (major, неизвестный тип, Tauri, SQLCipher/криптография, production minor) остаётся для ручного подтверждения.
+# Если после нового коммита PR перестал подходить под политику, ранее включённое автослияние снимается.
+#
+# Безопасность: pull_request_target нужен, чтобы токен мог включить автослияние; код из PR при этом не выполняется
+# (нет checkout, данные PR используются только как значения окружения, а не подставляются в команды).
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
   contents: read
 
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   automerge:
-    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'xop1tt/CLIENTS'
+    name: Enable auto-merge
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.repository_owner == 'xop1tt' &&
+      github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -23,9 +40,66 @@ jobs:
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Enable auto-merge (patch/minor only)
-        if: steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor'
+
+      - id: policy
+        name: Evaluate update policy
+        env:
+          METADATA: ${{ steps.meta.outputs.updated-dependencies-json }}
+          ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+        run: |
+          set -euo pipefail
+          # Эти компоненты обновляются только вручную, при любом типе обновления.
+          hard_deny='^(tauri($|-)|@tauri-apps/|wry$|tao$|rustc$|rust-toolchain$|rusqlite$|libsqlite3-sys$|sha2$|hmac$|pbkdf2$|rand($|_core$)|ring$|rustls|webpki|openssl|aes($|-)|argon2|chacha20)'
+          # Инструменты сборки интерфейса: minor тоже вручную.
+          minor_deny='^(typescript$|vite$|@vitejs/)'
+          verdict=$(printf '%s' "${METADATA:-[]}" | jq -r --arg eco "${ECOSYSTEM:-}" --arg hard "$hard_deny" --arg minor "$minor_deny" '
+            def eco: (.packageEcosystem // $eco);
+            def dev: (.dependencyType == "direct:development");
+            def ok:
+              (.dependencyName | test($hard) | not) and
+              ( .updateType == "version-update:semver-patch"
+                or ( .updateType == "version-update:semver-minor"
+                     and ( eco == "github_actions"
+                           or ( dev and (.dependencyName | test($minor) | not) ) ) ) );
+            if length == 0 then "deny:нет данных об обновляемых зависимостях"
+            elif all(.[]; ok) then "allow"
+            else "deny:" + ([.[] | select(ok | not) | "\(.dependencyName) (\(.updateType))"] | join(", ")) end')
+          echo "Решение: $verdict"
+          case "$verdict" in
+            allow) echo "allowed=true" >> "${GITHUB_OUTPUT:-/dev/null}" ;;
+            *) echo "allowed=false" >> "${GITHUB_OUTPUT:-/dev/null}" ;;
+          esac
+
+      # Защита от слияния «в обход»: автослияние включается, только если ветка main реально требует проверки.
+      # Если защита не настроена, GitHub слил бы PR сразу, не дожидаясь CI.
+      - id: protection
+        name: Check that main requires status checks
+        if: steps.policy.outputs.allowed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          classic=$(gh api "repos/$REPO/branches/$BASE" --jq '[.protection.required_status_checks.contexts // [], (.protection.required_status_checks.checks // [] | map(.context))] | add | length' 2>/dev/null || echo 0)
+          rules=$(gh api "repos/$REPO/rules/branches/$BASE" --jq '[.[] | select(.type == "required_status_checks")] | length' 2>/dev/null || echo 0)
+          if [ "$classic" -gt 0 ] || [ "$rules" -gt 0 ]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::В ветке $BASE нет обязательных проверок: автослияние не включено. Настройте защиту ветки (docs/ci.md)."
+          fi
+
+      - name: Enable auto-merge
+        if: steps.policy.outputs.allowed == 'true' && steps.protection.outputs.required == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: gh pr merge --auto --squash "$PR_URL"
+
+      - name: Disable auto-merge if the PR no longer fits the policy
+        if: steps.policy.outputs.allowed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --disable-auto "$PR_URL" || true

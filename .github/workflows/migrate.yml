@@ -1,0 +1,85 @@
+name: Migrate
+
+# Применение миграций supabase/migrations к рабочему проекту Supabase одной командой (пакет A2, ADR-044).
+# Только ручной запуск из main: Actions → Migrate → Run workflow.
+#   status   — показать, какие миграции применены и какие ждут (только чтение);
+#   push     — сначала стенд (все миграции с нуля и повторно + тесты миграций), затем после подтверждения
+#              в окружении database — supabase db push (применяет только ждущие и записывает историю);
+#   register — один раз: записать в историю все миграции, которые уже применены вручную (до A2).
+#              Работает, только если история пуста; схему не меняет.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "status | push | register"
+        required: true
+        default: status
+        type: choice
+        options: [status, push, register]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate
+  cancel-in-progress: false
+
+env:
+  SUPABASE_CLI: supabase@2.122.1
+
+jobs:
+  # Проверка на одноразовом стенде теми же скриптами, что и cloud.yml (без облачных проектов и секретов).
+  stand:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DENO: ${{ github.workspace }}/.deno/node_modules/.bin/deno
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: supabase/tests/requirements.txt
+      - run: pip install -r supabase/tests/requirements.txt
+      - name: Deno
+        run: npm install --prefix .deno --no-save --no-audit --no-fund deno@2.5.6
+      - name: Start local stack (all migrations from scratch)
+        run: supabase/tests/stack/up.sh
+      - name: Migration tests (re-apply, RLS, search_path, no drops)
+        run: python -m pytest supabase/tests/test_migrations.py -q -p no:cacheprovider
+
+  apply:
+    needs: stand
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Запись в рабочий проект: окружение database с обязательным подтверждением Maksim (docs/MIGRATIONS.md).
+    environment: database
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Settings
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [[ -z "$DB_URL" ]]; then echo "::error::Секрет SUPABASE_DB_URL не задан (docs/BACKUP.md)."; exit 1; fi
+      - name: Run
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ACTION: ${{ inputs.action }}
+        run: supabase/scripts/migrate.sh "$ACTION"

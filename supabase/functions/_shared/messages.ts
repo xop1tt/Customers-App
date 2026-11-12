@@ -19,7 +19,7 @@ export function limitMessage(v: Verdict): string {
     case "device_hourly": case "device_daily": return "С этого устройства запрошено слишком много писем." + wait;
     case "ip_hourly": case "ip_daily": return "Из вашей сети запрошено слишком много писем." + wait;
     case "global_daily": return "Сегодня приложение уже отправило максимум писем. Отправка снова станет доступна после обновления суточного лимита." + wait;
-    case "no_ticket": return "Письмо можно запросить только из приложения Lead Generator.";
+    case "no_ticket": return "Письмо можно запросить только из приложения Customers.";
     case "action_disabled": return "Эта операция с письмом отключена.";
     case "in_progress": return "Письмо уже отправляется, подождите несколько секунд.";
     default: return "Не удалось отправить письмо. Попробуйте позже.";

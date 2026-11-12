@@ -47,7 +47,7 @@
 ## Шаг 3. Подготовить почту Gmail
 
 1. В аккаунте Google включите двухэтапную аутентификацию: [myaccount.google.com/security](https://myaccount.google.com/security).
-2. Откройте [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), имя — `Lead Generator`,
+2. Откройте [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), имя — `Customers`,
    нажмите **Create**. Появится пароль из 16 букв — это **пароль приложения**. Сохраните его в менеджере паролей.
 
 Gmail бесплатно отправляет около 500 писем в сутки; приложение само ограничивает отправку 50 письмами.
@@ -64,7 +64,34 @@ Gmail бесплатно отправляет около 500 писем в су�
 | `SMTP_MODE` | `tls` |
 | `SMTP_USER` | ваш адрес Gmail |
 | `SMTP_PASS` | пароль приложения из шага 3 (без пробелов) |
-| `SMTP_FROM` | `Lead Generator <ваш адрес Gmail>` |
+| `SMTP_FROM` | `Customers <ваш адрес Gmail>` |
+
+Срок действия кода в тексте письма берётся из секрета `OTP_EXPIRY_SECONDS` (по умолчанию `900`, 15 минут). Если меняете
+**Email OTP Expiration** в шаге 6, поменяйте и его.
+
+**Автоочистка.** Регистрации, которые не подтвердили код за 24 часа, удаляются из базы сами (миграция
+`20261110140000_purge_unconfirmed.sql`). Срок меняется в SQL Editor: `update private.email_limits set unconfirmed_ttl = interval '6 hours';`
+(от 1 часа до 30 суток).
+
+**Неактивные аккаунты.** Аккаунт без входа более 2 лет удаляется только после письма «Ваш аккаунт скоро будет удалён»
+со ссылкой «Сохранить аккаунт» (миграция `20261110150000_inactive_accounts.sql`). Письмо уходит за 30 дней до срока;
+если за это время человек не вошёл и не нажал ссылку, аккаунт удаляется. Если письмо не отправилось (почта недоступна),
+аккаунт не удаляется. Участники общих Workspace не удаляются никогда. Проверку раз в неделю запускает GitHub Actions
+(`.github/workflows/inactive-accounts.yml`), для этого нужен секрет `CRON_SECRET` (любая случайная строка от 16 символов)
+в двух местах: в Supabase (**Edge Functions → Secrets**) и в GitHub (**Settings → Secrets and variables → Actions →
+Secrets**), а также переменная GitHub **Variables** `SUPABASE_URL` (адрес проекта, `https://REF.supabase.co`). Без них
+workflow ничего не делает. Запустить вручную: **Actions → Inactive accounts → Run workflow**. Сроки меняются в SQL Editor:
+`update private.email_limits set inactive_after = interval '3 years', inactive_warn_before = interval '45 days';`
+(неактивность от 90 суток до 10 лет, предупреждение за 7–180 суток).
+
+**Ежедневная очистка.** Workflow `.github/workflows/maintenance.yml` раз в сутки удаляет из базы устаревшие служебные
+записи (docs/MAINTENANCE.md). Ему нужны те же `CRON_SECRET` и `SUPABASE_URL`, что и проверке неактивных аккаунтов.
+
+**Webhooks маркетплейса (ADR-046).** События интеграциям отправляет функция `market-relay`. Секрет для неё база
+создаёт сама; после загрузки функции (шаг 5) выполните в SQL Editor `select secret from private.market_relay;`,
+добавьте значение в **Edge Functions → Secrets** под именем `MARKET_RELAY_SECRET` и запишите адрес функции:
+`update private.market_relay set url = 'https://REF.supabase.co/functions/v1/market-relay' where id = 1;`.
+Пока адрес не записан, события интеграциям не отправляются.
 
 `SEND_EMAIL_HOOK_SECRET` добавите на шаге 6. `SUPABASE_URL` и `SUPABASE_SERVICE_ROLE_KEY` Supabase
 передаёт функциям сам — их добавлять не нужно.
@@ -82,10 +109,14 @@ npx supabase login
 npx supabase functions deploy send-email --project-ref REF --no-verify-jwt
 npx supabase functions deploy email-gate --project-ref REF --no-verify-jwt
 npx supabase functions deploy delete-account --project-ref REF --no-verify-jwt
+npx supabase functions deploy inactive-accounts --project-ref REF --no-verify-jwt
+npx supabase functions deploy keep-account --project-ref REF --no-verify-jwt
+npx supabase functions deploy maintenance --project-ref REF --no-verify-jwt
+npx supabase functions deploy market-relay --project-ref REF --no-verify-jwt
 ```
 
 `login` откроет браузер — подтвердите вход. После каждой команды должно быть `Deployed Functions … send-email`
-(и т. д.). В панели Supabase в **Edge Functions** появятся три функции.
+(и т. д.). В панели Supabase в **Edge Functions** появятся пять функций.
 
 ## Шаг 6. Настроить вход по почте
 
@@ -94,7 +125,7 @@ npx supabase functions deploy delete-account --project-ref REF --no-verify-jwt
 - **Enable Email provider** — включено;
 - **Confirm email** — включено;
 - **Secure email change** — включено;
-- **Email OTP Expiration** — `3600`; **Email OTP Length** — `6`;
+- **Email OTP Expiration** — `900` (15 минут; код и ссылка из письма после этого перестают работать); **Email OTP Length** — `6`;
 - **Minimum password length** — `8`; **Password Requirements** — «Lowercase, uppercase letters and digits»;
 - **Save**.
 
@@ -160,10 +191,23 @@ select public.email_quota_status();                          -- сколько �
 
 Новая сборка приложения для этого не нужна.
 
-## Шаг 11. Резервная копия облака (раз в месяц)
+**Сейчас наши ограничения отключены** (миграция `20261110160000_relax_email_limits.sql`): нет пауз между письмами и лимитов
+на адрес, устройство и IP; остаётся только общий потолок 400 писем в сутки (у Gmail предел около 500). Включить защиту
+обратно:
 
-На бесплатном тарифе автоматических копий нет, но у каждого пользователя полная копия на его Mac
-(и резервные копии в «Документы → Lead Generator Backups»). Дополнительно:
+```sql
+update private.email_limits set signup_resend_cooldown = interval '15 minutes', recovery_cooldown = interval '30 minutes',
+  email_change_cooldown = interval '30 minutes', per_email_daily_max = 5, device_hourly_max = 3, device_daily_max = 5,
+  ip_hourly_max = 10, ip_daily_max = 30, global_daily_max = 50 where id = 1;
+```
+
+Собственные ограничения Supabase Auth (письма в час, попытки ввода кода) настраиваются в панели **Authentication → Rate Limits**
+и этой миграцией не затрагиваются.
+
+## Шаг 11. Резервная копия облака
+
+На бесплатном тарифе автоматических копий нет. Ежедневный зашифрованный снимок с проверкой восстановления
+делает workflow **Cloud backup** — настройка и восстановление в [BACKUP.md](BACKUP.md). Вручную дополнительно:
 
 - **просто:** **Table Editor** → таблица `leads` (затем `exclusions`, `user_settings`) → **Export → CSV**;
 - **полностью:** нужен бесплатный Docker Desktop. **Project Settings → Database → Connection string**

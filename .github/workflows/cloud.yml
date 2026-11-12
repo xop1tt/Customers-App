@@ -8,23 +8,11 @@ on:
     branches: [main]
     paths:
       - "supabase/**"
-      - "macos/Sources/LeadCloud/**"
-      - "macos/Sources/LeadGenCore/**"
-      - "macos/Sources/CSQLite/**"
-      - "macos/Tests/LeadCloudTests/**"
-      - "macos/Tests/LeadStoreEncryptionTests/**"
-      - "macos/scripts/linux-cloud-tests.sh"
+      - "desktop/src-tauri/src/cloud/**"
+      - "desktop/src-tauri/tests/stack.rs"
+      - "desktop/src-tauri/Cargo.*"
       - ".github/workflows/cloud.yml"
-  pull_request:
-    paths:
-      - "supabase/**"
-      - "macos/Sources/LeadCloud/**"
-      - "macos/Sources/LeadGenCore/**"
-      - "macos/Sources/CSQLite/**"
-      - "macos/Tests/LeadCloudTests/**"
-      - "macos/Tests/LeadStoreEncryptionTests/**"
-      - "macos/scripts/linux-cloud-tests.sh"
-      - ".github/workflows/cloud.yml"
+  pull_request:   # без фильтра путей: нужные файлы определяет задача changes
   workflow_dispatch:
 
 permissions:
@@ -35,10 +23,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  cloud:
+  # Проверка пути не на уровне workflow, а здесь: пропущенные по условию задачи считаются пройденными,
+  # поэтому обязательная проверка «Cloud gate» не зависает, когда PR не затрагивает эти файлы (например, обновление pip).
+  changes:
+    name: Changed files
     runs-on: ubuntu-24.04
-    # В PR — не дольше 10 минут; на main запас больше.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 10 || 25 }}
+    timeout-minutes: 3
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only "$BASE" HEAD | grep -Eq '^(supabase/|desktop/src-tauri/src/cloud/|desktop/src-tauri/tests/stack\.rs$|desktop/src-tauri/Cargo\.|\.github/workflows/cloud\.yml$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  cloud:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
+    runs-on: ubuntu-24.04
+    # Холодная сборка Rust-клиента занимает несколько минут; с кэшем Cargo всё укладывается в 10.
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
@@ -68,8 +83,8 @@ jobs:
       - name: Functions (unit tests, type check)
         working-directory: supabase/functions
         run: |
-          "$DENO" test --allow-env _shared/shared_test.ts
-          "$DENO" check send-email/index.ts email-gate/index.ts delete-account/index.ts
+          "$DENO" test --allow-env _shared/shared_test.ts market-relay/relay_test.ts
+          "$DENO" check send-email/index.ts email-gate/index.ts delete-account/index.ts maintenance/index.ts market-relay/index.ts
 
       - name: Start local stack
         run: supabase/tests/stack/up.sh
@@ -77,15 +92,50 @@ jobs:
       - name: Server tests (auth, email limits, RLS, sync)
         run: python -m pytest supabase/tests -q -p no:cacheprovider
 
-      - name: Swift cloud module on Linux (unit + end-to-end on the stack)
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            desktop/src-tauri/target
+          key: cargo-cloud-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-cloud-
+
+      - name: Rust cloud client (unit + end-to-end on the stack)
+        working-directory: desktop
         run: |
-          source supabase/tests/stack/env.sh
-          docker run --rm --network host -v "$PWD/macos":/src -v "$STACK_MAIL_DIR":"$STACK_MAIL_DIR" -w /src \
-            -e LG_STACK_URL="$SUPABASE_URL" -e LG_STACK_ANON="$SUPABASE_ANON_KEY" -e LG_STACK_MAIL="$STACK_MAIL_DIR" \
-            swift:6.1-noble bash -c "apt-get update -qq && apt-get install -y -qq libsqlcipher-dev >/dev/null && ./scripts/linux-cloud-tests.sh"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+          # Макросу Tauri нужна папка с интерфейсом; для тестов облака содержимое не важно.
+          mkdir -p dist && : > dist/index.html
+          source ../supabase/tests/stack/env.sh
+          LG_STACK_URL="$SUPABASE_URL" LG_STACK_ANON="$SUPABASE_ANON_KEY" LG_STACK_MAIL="$STACK_MAIL_DIR" \
+            cargo test --manifest-path src-tauri/Cargo.toml --test stack -- --nocapture
+          cargo test --manifest-path src-tauri/Cargo.toml --lib cloud::
 
       - name: Stack logs on failure
         if: failure()
         run: |
           docker logs lg-gotrue 2>&1 | tail -50 || true
           tail -50 supabase/tests/stack/.run/*.log || true
+
+  # Единственная проверка, которую делают обязательной в настройках ветки: успех или «пропущено» у всех задач выше.
+  gate:
+    name: Cloud gate
+    if: always()
+    needs: [changes, cloud]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All jobs passed or were skipped by the path filter
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::Задача завершилась со статусом: $r"; exit 1 ;;
+            esac
+          done

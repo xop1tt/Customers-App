@@ -4,7 +4,7 @@ project_id = "lead-generator"
 
 # Функции сами проверяют, кто их вызывает: send-email — подпись хука Auth (Standard Webhooks),
 # email-gate — публичная, только выдаёт разрешение по лимитам, delete-account — токен
-# пользователя через /auth/v1/user и недавний вход по паролю.
+# пользователя через /auth/v1/user и недавний вход по паролю, inactive-accounts и maintenance — секрет CRON_SECRET, market-relay — секрет MARKET_RELAY_SECRET, keep-account — ключ из письма.
 [functions.send-email]
 verify_jwt = false
 
@@ -12,4 +12,16 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.delete-account]
+verify_jwt = false
+
+[functions.inactive-accounts]
+verify_jwt = false
+
+[functions.maintenance]
+verify_jwt = false
+
+[functions.market-relay]
+verify_jwt = false
+
+[functions.keep-account]
 verify_jwt = false

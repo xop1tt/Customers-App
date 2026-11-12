@@ -10,6 +10,7 @@ import { rpc, supabaseUrl } from "../_shared/db.ts";
 import { limitMessage, type Verdict } from "../_shared/messages.ts";
 import { type HookPayload, planMails, safeRedirect } from "../_shared/plan.ts";
 import { type Mail, sendMail, smtpConfigFromEnv } from "../_shared/smtp.ts";
+import { BANNER_CID, BANNER_PNG_BASE64 } from "../_shared/banner.ts";
 import { render, verifyLink } from "../_shared/templates.ts";
 import { parseSecrets, verifyWebhook, WebhookError } from "../_shared/webhook.ts";
 
@@ -56,13 +57,13 @@ export async function handler(req: Request): Promise<Response> {
   const base = Deno.env.get("LEADGEN_PUBLIC_URL") || supabaseUrl();
   const redirect = safeRedirect(payload.email_data.redirect_to, payload.email_data.site_url,
     Deno.env.get("APP_REDIRECT_PREFIX") || "leadgenerator://");
-  const minutes = Math.round(Number(Deno.env.get("OTP_EXPIRY_SECONDS") || 3600) / 60);
+  const minutes = Math.round(Number(Deno.env.get("OTP_EXPIRY_SECONDS") || 900) / 60);
   const mails: Mail[] = plan.mails.map((m) => {
     const r = render({
       kind: m.kind, code: m.code, email: m.to, newEmail: payload.user.new_email, minutesValid: minutes,
       link: verifyLink(base, m.tokenHash, m.verifyType, redirect),
     });
-    return { to: m.to, ...r };
+    return { to: m.to, ...r, inline: [{ cid: BANNER_CID, type: "image/png", base64: BANNER_PNG_BASE64 }] };
   });
 
   // Заполняется по мере приёма писем сервером: при ошибке на втором письме (смена адреса)

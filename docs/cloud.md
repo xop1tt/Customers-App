@@ -9,8 +9,8 @@
 ## 1. Что из чего состоит
 
 ```
-macOS-приложение ──HTTPS──► Supabase (проект Lead Generator)
-  LeadCloud (Swift, Foundation)     ├─ Auth (GoTrue): почта + пароль, токены
+Приложение (macOS и Windows) ──HTTPS──► Supabase (проект Lead Generator)
+  desktop/src-tauri/src/cloud (Rust) ├─ Auth (GoTrue): почта + пароль, токены
   ├─ CloudAuth: вход, токены        │    └─ Send Email Hook ──► функция send-email ──SMTPS──► почта
   ├─ SyncEngine: выгрузка/загрузка  ├─ функция email-gate: лимиты писем, разовый «билет»
   └─ журнал sync_dirty в SQLite     ├─ функция delete-account: удаление учётной записи
@@ -24,12 +24,12 @@ macOS-приложение ──HTTPS──► Supabase (проект Lead Gene
 | `supabase/functions/email-gate` | Edge Function | проверяет лимиты до запроса письма, выдаёт билет |
 | `supabase/functions/send-email` | Edge Function (хук Auth) | требует билет, резервирует квоту, отправляет письмо |
 | `supabase/functions/delete-account` | Edge Function | удаляет учётную запись после повторного ввода пароля |
-| `macos/Sources/LeadCloud` | приложение | клиент Auth и синхронизации (без AppKit/SwiftUI) |
-| `macos/Sources/LeadGenCore/LeadStore+Sync.swift` | приложение | журнал изменений, применение данных с сервера |
-| `macos/Sources/LeadGenerator/CloudSync.swift`, `Session.swift` | приложение | Связка ключей, фоновая синхронизация, вход |
+| `desktop/src-tauri/src/cloud` | приложение | клиент Auth (`auth.rs`) и синхронизации (`sync.rs`), проверка данных (`validation.rs`) |
+| `desktop/src-tauri/src/db.rs` | приложение | журнал изменений, применение данных с сервера |
+| `desktop/src-tauri/src/app/session.rs`, `app/sync.rs` | приложение | хранилище секретов, фоновая синхронизация, вход |
 
 В приложении хранятся только **адрес проекта и публичный ключ** (anon / publishable). Они попадают в
-`Info.plist` при сборке из переменных `SUPABASE_URL` и `SUPABASE_ANON_KEY`. Приложение отказывается
+приложение при сборке из переменных окружения `SUPABASE_URL` и `SUPABASE_ANON_KEY`. Приложение отказывается
 работать с секретным ключом (`sb_secret_…` или JWT с ролью не `anon`). Ключ `service_role` есть только
 у функций на сервере (Supabase передаёт его им сам).
 
@@ -43,7 +43,7 @@ macOS-приложение ──HTTPS──► Supabase (проект Lead Gene
 - Вход по паролю писем не тратит. Повторные неверные пароли Auth ограничивает по IP (на стенде:
   30 попыток за 5 минут, дальше `429`). Сообщение об ошибке одинаковое для неверного пароля и
   несуществующего адреса.
-- Сессия: access-токен (1 час) и одноразовый refresh-токен в Связке ключей macOS. Токен обновляется
+- Сессия: access-токен (1 час) и одноразовый refresh-токен в хранилище секретов (Связка ключей macOS, DPAPI на Windows). Токен обновляется
   заранее; параллельные запросы ждут одно обновление. Повторное использование старого refresh-токена
   отзывает всю цепочку (защита от кражи). Без сети приложение открывается с локальными данными.
 - Восстановление пароля: код из письма → новый пароль. После смены пароля другие сессии завершаются.
@@ -128,7 +128,7 @@ select public.email_quota_status();   -- сколько отправлено с�
 | Исключения (домены, телефоны, слова…) | `public.exclusions` |
 | Настройки поиска, интервал автопоиска, подпись | `public.user_settings` (`search.settings`, `search.auto`, `draft.signature`) |
 
-Остаются на Mac: оформление, ключ VK (Связка ключей), пути к базе и копиям, память источников
+Остаются на устройстве: оформление, ключ VK (хранилище секретов), пути к базе и копиям, память источников
 (что уже прочитано), журнал поиска, история действий.
 
 ### Схема
@@ -188,9 +188,9 @@ select public.email_quota_status();   -- сколько отправлено с�
 supabase/tests/stack/up.sh                 # Postgres-база leadgen_test, Auth, PostgREST, функции, SMTP-заглушка
 python -m pytest supabase/tests            # 52 теста: вход, лимиты, RLS, синхронизация
 (cd supabase/functions && deno test --allow-env _shared/shared_test.ts)
-macos/scripts/linux-cloud-tests.sh         # Swift: LeadCloud + ядро, в т.ч. сквозные тесты двух «устройств»
+(cd desktop/src-tauri && LG_STACK_URL=… LG_STACK_ANON=… LG_STACK_MAIL=… cargo test --test stack)   # Rust: сквозные тесты двух «устройств»
 supabase/tests/stack/down.sh
 ```
 
 В CI это делает workflow `.github/workflows/cloud.yml`. Сборка и запуск приложения проверяются в
-`macos-app.yml` на macOS.
+`desktop.yml` на macOS и Windows.

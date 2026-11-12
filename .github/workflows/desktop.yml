@@ -1,0 +1,245 @@
+name: Desktop
+
+# Одно приложение для macOS и Windows (Tauri 2: Rust + React + TypeScript), папка desktop/.
+# Быстрые проверки идут в каждом PR: интерфейс (типы, тесты, сборка) и Rust-ядро на трёх системах.
+# Затем собирается рабочая версия для macOS (универсальная, Apple Silicon и Intel) и Windows x64:
+# так видно, что приложение собирается так же, как в релизе. Секреты в этом файле не используются.
+on:
+  push:
+    branches: [main]
+    paths: ["desktop/**", "supabase/migrations/**", ".github/workflows/desktop.yml"]
+  pull_request:   # без фильтра путей: нужные файлы определяет задача changes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Новый коммит в ту же ветку отменяет устаревшую сборку.
+concurrency:
+  group: desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # Проверка пути не на уровне workflow, а здесь: пропущенные по условию задачи считаются пройденными,
+  # поэтому обязательная проверка «Desktop gate» не зависает, когда PR не затрагивает эти файлы (например, обновление pip).
+  changes:
+    name: Changed files
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only "$BASE" HEAD | grep -Eq '^(desktop/|supabase/migrations/|\.github/workflows/desktop\.yml$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  frontend:
+    name: Interface (types, tests, build)
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Types
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+      # Версии согласованы, идентификаторы прежние, отладочных возможностей нет, ключей сервера в клиенте нет.
+      - name: Release readiness (release-check)
+        run: npm run release:check
+      - name: Production build
+        run: npm run build
+
+  rust:
+    name: Core and app layer tests (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-latest]
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: System libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+
+      # Макрос tauri::generate_context! требует готовый интерфейс: собираем его тем же способом, что и в релизе.
+      - name: Interface build
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            desktop/src-tauri/target
+          key: cargo-test-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-test-${{ runner.os }}-
+
+      # Lock-файл должен соответствовать Cargo.toml, иначе сборка в релизе пойдёт с другими версиями.
+      - name: Lock file is up to date
+        shell: bash
+        run: cargo metadata --manifest-path src-tauri/Cargo.toml --locked --format-version 1 > /dev/null
+
+      - name: Formatting (rustfmt)
+        if: runner.os == 'Linux'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Static analysis (clippy)
+        if: runner.os == 'Linux'
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --lib --bins --locked -- -D warnings
+
+      # Уязвимости (RustSec), лицензии и источники зависимостей Rust по desktop/src-tauri/deny.toml (пакет G8, ADR-060).
+      # Сторонние actions в репозитории не разрешены, поэтому cargo-deny ставится из релиза с проверкой SHA-256.
+      - name: Dependencies (cargo deny)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          DENY_VERSION: "0.20.2"
+          DENY_SHA256: 9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
+        run: |
+          set -euo pipefail
+          name="cargo-deny-${DENY_VERSION}-x86_64-unknown-linux-musl"
+          curl -sSfL -o "$RUNNER_TEMP/deny.tgz" "https://github.com/EmbarkStudios/cargo-deny/releases/download/${DENY_VERSION}/${name}.tar.gz"
+          echo "${DENY_SHA256}  $RUNNER_TEMP/deny.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/deny.tgz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/${name}/cargo-deny" --manifest-path src-tauri/Cargo.toml --locked check
+
+      - name: Tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+  build:
+    name: Production build (${{ matrix.name }})
+    needs: [changes, frontend, rust]
+    if: needs.changes.outputs.relevant == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS universal
+            os: macos-15
+            args: --bundles app --target universal-apple-darwin
+            targets: aarch64-apple-darwin x86_64-apple-darwin
+          - name: Windows x64
+            os: windows-latest
+            args: --no-bundle
+            targets: ""
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Rust targets
+        if: matrix.targets != ''
+        shell: bash
+        run: rustup target add ${{ matrix.targets }}
+      - run: npm ci --no-audit --no-fund
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            desktop/src-tauri/target
+          key: cargo-build-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-build-${{ runner.os }}-
+
+      - name: Build
+        run: npx tauri build ${{ matrix.args }}
+
+      - name: Check the macOS bundle
+        if: runner.os == 'macOS'
+        run: |
+          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/Customers.app"
+          test -x "$APP/Contents/MacOS/customers"
+          lipo -archs "$APP/Contents/MacOS/customers" | tee /dev/stderr | grep -q arm64
+          lipo -archs "$APP/Contents/MacOS/customers" | grep -q x86_64
+          plutil -extract CFBundleURLTypes xml1 -o - "$APP/Contents/Info.plist" | grep -q leadgenerator
+          plutil -extract CFBundleIdentifier raw "$APP/Contents/Info.plist" | grep -qx local.leadgenerator.app
+
+      - name: Check the Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = 'src-tauri/target/release/customers.exe'
+          if (-not (Test-Path $exe)) { throw "Не найден $exe" }
+          "{0:N1} МБ" -f ((Get-Item $exe).Length / 1MB)
+
+  # Единственная проверка, которую делают обязательной в настройках ветки: успех или «пропущено» у всех задач выше.
+  gate:
+    name: Desktop gate
+    if: always()
+    needs: [changes, frontend, rust, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All jobs passed or were skipped by the path filter
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::Задача завершилась со статусом: $r"; exit 1 ;;
+            esac
+          done

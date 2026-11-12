@@ -82,18 +82,33 @@ Deno.test("templates: escape html, contain code and link", () => {
   assert(r.html.includes("&lt;b&gt;") && !r.html.includes("<b>@"));
   assert(r.text.includes("https://x.supabase.co/auth/v1/verify?token=tok&type=signup"));
   for (const kind of ["recovery", "email_change_current", "email_change_new"] as const) {
-    assert(render({ kind, code: "1", link: "l", email: "a@b.cc", minutesValid: 5 }).subject.startsWith("Lead Generator"));
+    assert(render({ kind, code: "1", link: "l", email: "a@b.cc", minutesValid: 5 }).subject.startsWith("Customers"));
   }
 });
 
 Deno.test("smtp message: utf-8 subject, base64 body, no header injection", () => {
-  const m = buildMessage({ from: "Lead Generator <no-reply@x.ru>" }, { to: "a@b.ru", subject: "Привет", text: "текст", html: "<p>x</p>" });
+  const m = buildMessage({ from: "Customers <no-reply@x.ru>" }, { to: "a@b.ru", subject: "Привет", text: "текст", html: "<p>x</p>" });
   assert(m.includes("Subject: =?UTF-8?B?"));
   assert(m.includes("Content-Transfer-Encoding: base64"));
+  const withImage = buildMessage({ from: "Customers <no-reply@x.ru>" }, { to: "a@b.ru", subject: "s", text: "t", html: "<img src=\"cid:b\">", inline: [{ cid: "b", type: "image/png", base64: "AAAA" }] });
+  assert(withImage.includes("multipart/related") && withImage.includes("Content-ID: <b>"));
+  assertThrows(() => buildMessage({ from: "x@y.z" }, { to: "a@b.ru", subject: "s", text: "", html: "", inline: [{ cid: "b>\r\nX", type: "image/png", base64: "" }] }), SmtpError);
   assertThrows(() => buildMessage({ from: "x@y.z" }, { to: "a@b.ru\r\nBcc: c@d.ru", subject: "s", text: "", html: "" }), SmtpError);
 });
 
 Deno.test("limit messages are human readable", () => {
   assert(limitMessage({ allowed: false, reason: "cooldown", retry_after: 600 }).includes("10 мин"));
   assert(limitMessage({ allowed: false, reason: "global_daily", retry_after: 7200 }).includes("2 ч"));
+});
+
+Deno.test("templates: inactive warning has keep link, dates, no code", () => {
+  const r = render({
+    kind: "inactive_warning", code: "", link: "https://x.test/keep?token=abc", email: "a@b.c", minutesValid: 0,
+    lastActive: "1 января 2025 г.", deleteOn: "1 января 2027 г.",
+  });
+  assert(r.subject.includes("неактивности"));
+  assert(r.text.includes("https://x.test/keep?token=abc"));
+  assert(r.text.includes("1 января 2027"));
+  assert(!r.text.includes("Код:"));
+  assert(r.html.includes("Сохранить аккаунт"));
 });
