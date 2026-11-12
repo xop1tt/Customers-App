@@ -34,6 +34,7 @@ import { TodayPage } from "./crm/TodayPage";
 import { CrmCard } from "./crm/CrmCard";
 import { CollectionDialog } from "./crm/Collections";
 import { WorkspaceDialog } from "./crm/WorkspaceDialog";
+import { JournalPage } from "./crm/JournalPage";
 import { TrashPage } from "./crm/TrashPage";
 import { ProfilePage } from "./team/ProfilePage";
 import { PeoplePage } from "./team/PeoplePage";
@@ -224,7 +225,7 @@ function Shell() {
   useChatPolling();
   useMarketInstalled();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
-  const crm = section === "collection" || section === "today" || section === "calendar" || section === "deals" || section === "reports" || section === "trash";
+  const crm = section === "collection" || section === "today" || section === "calendar" || section === "deals" || section === "reports" || section === "trash" || section === "journal";
   const leadOpen = lead && (inspLive !== null ? inspLive > 0 && !floatInsp : device.inspectorShown && (!floatInsp || selected === 1));
   const showInsp = leadOpen || (crm && !!crmRecord && inspLive !== 0);
   const inspHandle = !floatInsp && (lead || (crm && !!crmRecord));
@@ -280,6 +281,7 @@ function Shell() {
           {section === "deals" && <DealBoard />}
           {section === "reports" && <ReportsPage />}
           {section === "trash" && <TrashPage />}
+          {section === "journal" && <JournalPage />}
           {section === "profile" && <ProfilePage />}
           {section === "people" && <PeoplePage />}
           {section === "chat" && <ChatPage />}
