@@ -6,7 +6,8 @@ import { integer } from "../lib/format";
 import { MODULES, moduleOf, type ModuleId } from "../lib/modules";
 import { Icon } from "../ui/icons";
 import { openModule, toggleAi, useStore } from "../state/store";
-import { unreadNotifications, unreadTotal } from "../state/team";
+import { unreadTotal } from "../state/team";
+import { useHub } from "../state/hub";
 import appIcon from "../assets/app-icon.png";
 import appIconLight from "../assets/app-icon-light.png";
 
@@ -18,13 +19,14 @@ export function ModuleRail() {
   const since = useNewSince();
   const chat = useStore((s) => s.chat);
   const aiOpen = useStore((s) => s.aiOpen);
+  const aiOn = useHub().ai.enabled;
   const hasWs = useStore((s) => !!s.ws?.active);
   const current = moduleOf(section);
   const badge: Record<ModuleId, number> = {
     crm: 0,
     search: leads.filter((l) => !l.seen && matchesSection(l, "new", since) && l.data.relevance !== "rejected").length,
     messages: unreadTotal(chat),
-    team: unreadNotifications(chat),
+    team: 0, // уведомления показывает колокольчик у учётной записи
   };
 
   return (
@@ -46,11 +48,11 @@ export function ModuleRail() {
         );
       })}
       <span className="grow" />
-      <button type="button" className={`rail-btn ai-toggle${aiOpen ? " active" : ""}`} id="ai-toggle" aria-label="Ai" aria-expanded={aiOpen} aria-controls="ai-drawer"
+      {aiOn && <button type="button" className={`rail-btn ai-toggle${aiOpen ? " active" : ""}`} id="ai-toggle" aria-label="Ai" aria-expanded={aiOpen} aria-controls="ai-drawer"
         data-tip="Ai" onClick={() => toggleAi()}>
         <Icon name="bot" size={18} />
         <span className="rail-label">Ai</span>
-      </button>
+      </button>}
     </nav>
   );
 }

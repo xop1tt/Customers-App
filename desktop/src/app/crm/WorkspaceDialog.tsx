@@ -268,9 +268,7 @@ function Structure() {
       <SettingRow title="Отделы" hint={deps.filter((d) => d.name).length ? deps.filter((d) => d.name).map((d) => `${d.name} (${d.members.length})`).join(", ") : "Отделов пока нет."}>
         <Button small icon="users" onClick={() => open()}>{manageDeps ? "Управлять отделами" : "Открыть отделы"}</Button>
       </SettingRow>
-      <SettingRow title="Ваша должность" hint={actor?.title ? actor.title : isOwner(actor) ? "Владелец" : "Не назначена"}>
-        <span className="faint">{mine.length ? `Можете назначать: ${mine.map((p) => p.name).join(", ")}` : "Назначать должности вы не можете"}</span>
-      </SettingRow>
+      <SettingRow title="Ваша должность" hint={`${actor?.title ? actor.title : isOwner(actor) ? "Владелец" : "Не назначена"}. ${mine.length ? `Можете назначать: ${mine.map((p) => p.name).join(", ")}` : "Назначать должности вы не можете"}`} />
       <div className="col" style={{ gap: 4, marginTop: 8 }} role="list" aria-label="Должности и их возможности">
         {POSITIONS.map((p) => (
           <div key={p.key} role="listitem" className="ws-position">

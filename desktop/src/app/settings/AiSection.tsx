@@ -49,8 +49,8 @@ export function AiSection() {
   return (
     <>
       <Group title="Модель" sub="model" note="Приложение не поставляется с моделью и не отправляет разговор в интернет: оно обращается к серверу модели, который вы запускаете сами.">
-        <SettingRow title="Помощник Ai" hint="Чат Ai (кнопка «Ai» внизу левой рейки) работает, когда помощник включён и выбрана модель.">
-          <Switch checked={ai.enabled} onChange={(v) => void saveAi({ enabled: v })} label="Включить помощника" />
+        <SettingRow title="Помощник Ai" hint="Включён по умолчанию. Выключатель отключает все функции Ai в программе и убирает значок «Ai» из левой рейки. Чат работает, когда выбрана модель.">
+          <Switch checked={ai.enabled} onChange={(v) => void saveAi({ enabled: v })} label="Помощник Ai" />
         </SettingRow>
         <SettingRow title="Провайдер" hint={provider.hint}>
           <Select width={280} value={ai.provider} label="Провайдер модели" options={AI_PROVIDERS.map((p) => ({ value: p.id, label: p.title }))} onChange={pickProvider} />
