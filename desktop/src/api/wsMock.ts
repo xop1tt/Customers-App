@@ -1,7 +1,7 @@
 // Демо-реализация команд ws_* для браузера, тестов и снимков экрана: Workspace и CRM в памяти.
 // Повторяет правила ядра там, где их видно в интерфейсе: версии, производные поля, права, корзина, фильтры коллекций.
 
-import type { CrmExportRequest, CrmMergeInfo, CrmMergeRequest, CrmRecord, Lead, WorkspaceInfo, WsCollection, WsConflict, WsFilter, WsMember, WsQuery, WsState } from "./types";
+import type { WsAuditItem, WsInvitation, CrmExportRequest, CrmMergeInfo, CrmMergeRequest, CrmRecord, Lead, WorkspaceInfo, WsCollection, WsConflict, WsFilter, WsMember, WsQuery, WsState } from "./types";
 
 type Row = CrmRecord;
 const ALL_PERMS = [
@@ -116,6 +116,8 @@ function ensure(): Ws {
 /** Сбросить демо-данные (тесты). */
 export function resetWsMock() {
   workspaces.length = 0;
+  invitations.clear();
+  auditLog.clear();
   lastMerge = null;
   active = null;
   imports.length = 0;
@@ -411,6 +413,22 @@ function exportRun(ws: Ws, r: CrmExportRequest): { count: number } {
   return { count: list(ws, name, { ...q, deleted: false, limit: 100_000, offset: 0 }).total };
 }
 
+const invitations = new Map<string, (WsInvitation & { token: string })[]>();
+const auditLog = new Map<string, WsAuditItem[]>();
+let auditSeq = 1;
+function seedAudit(wsId: string) {
+  if (auditLog.has(wsId)) return;
+  auditLog.set(wsId, []); // вход участников в журнале есть с самого начала
+  for (const m of workspaces.find((w) => w.info.id === wsId)?.members ?? []) audit(wsId, m.userId, "member_join", "member", m.userId, { role: m.role });
+}
+/** Запись в журнал демо-Workspace (как триггеры базы). */
+function audit(wsId: string, actor: string | null, action: string, entityType: string | null, entityId: string | null, details: Record<string, unknown> = {}) {
+  seedAudit(wsId);
+  const list = auditLog.get(wsId) ?? [];
+  list.unshift({ id: auditSeq++, actor_id: actor, action, entity_type: entityType, entity_id: entityId, at: now(), details });
+  auditLog.set(wsId, list);
+}
+
 async function remoteOnly(): Promise<never> {
   return fail("Участники и приглашения доступны в облачной учётной записи.");
 }
@@ -548,19 +566,73 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       if (!demoParams.has("team")) return remoteOnly();
       if (!has(ws, "invitations.manage")) fail("Нет прав на приглашения.");
       const token = `demo${uid().slice(-12)}`;
-      return { id: uid(), email: s("email").toLowerCase(), role: s("role"), expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(), token, link: `customers://invite?token=${token}` };
+      const email = s("email").toLowerCase();
+      const list = invitations.get(ws.info.id) ?? [];
+      if (list.some((i) => i.email === email)) fail("Этому адресу уже отправлено открытое приглашение.");
+      const inv = { id: uid(), email, role: s("role"), roleName: ROLE_NAME[s("role")] ?? s("role"), createdAt: now(), expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString(), sentCount: 1, lastSentAt: now(), invitedBy: ME, token };
+      invitations.set(ws.info.id, [inv, ...list]);
+      return { id: inv.id, email, role: inv.role, expiresAt: inv.expiresAt, token, link: `customers://invite?token=${token}` };
+    }
+    case "ws_invitations": {
+      if (!demoParams.has("team")) return [];
+      if (!has(ws, "invitations.manage")) fail("Нет прав на приглашения.");
+      return (invitations.get(ws.info.id) ?? []).map(({ token: _t, ...i }) => i);
+    }
+    case "ws_revoke_invitation": {
+      if (!has(ws, "invitations.manage")) fail("Нет прав на приглашения.");
+      invitations.set(ws.info.id, (invitations.get(ws.info.id) ?? []).filter((i) => i.id !== s("id")));
+      return true;
+    }
+    case "ws_resend_invitation": {
+      if (!has(ws, "invitations.manage")) fail("Нет прав на приглашения.");
+      const inv = (invitations.get(ws.info.id) ?? []).find((i) => i.id === s("id")) ?? fail("Приглашение не найдено.");
+      if (inv.sentCount >= 5) fail("Приглашение отправлялось слишком много раз (не больше 5).");
+      if (Date.now() - Date.parse(inv.lastSentAt) < 10 * 60_000) fail("Повторно отправить можно не раньше чем через 10 минут.");
+      inv.sentCount += 1; inv.lastSentAt = now(); inv.expiresAt = new Date(Date.now() + 7 * 86400_000).toISOString(); inv.token = `demo${uid().slice(-12)}`;
+      return { id: inv.id, email: inv.email, role: inv.role, expiresAt: inv.expiresAt, token: inv.token, link: `customers://invite?token=${inv.token}` };
+    }
+    case "ws_audit": {
+      if (!demoParams.has("team")) return { items: [], more: false };
+      if (!has(ws, "audit.view")) fail("Нет прав на журнал действий.");
+      seedAudit(ws.info.id);
+      const f = (auditLog.get(ws.info.id) ?? []).filter((i) => (!args.actor || i.actor_id === args.actor) && (!args.action || i.action === args.action) && (!args.entityId || i.entity_id === args.entityId));
+      const off = Number(args.offset ?? 0);
+      return { items: f.slice(off, off + 100), more: f.length > off + 100 };
     }
     case "ws_set_member_role": {
       if (!demoParams.has("team")) return remoteOnly();
       if (!has(ws, "members.manage")) fail("Нет прав на изменение ролей.");
       const m = ws.members.find((x) => x.userId === s("user")) ?? fail("Участник не найден.");
       Object.assign(m, member(m.userId, m.displayName, s("role"), ws.info.id));
+      audit(ws.info.id, ME, "member_role", "member", m.userId, { role: s("role") });
+      return state();
+    }
+    case "ws_transfer_ownership": {
+      if (!demoParams.has("team")) return remoteOnly();
+      if (!has(ws, "ownership.transfer")) fail("Передать владение может только владелец.");
+      const target = ws.members.find((x) => x.userId === s("user") && x.userId !== ME) ?? fail("Владельцем можно сделать только другого участника.");
+      Object.assign(target, member(target.userId, target.displayName, "owner", ws.info.id));
+      const myself = ws.members.find((x) => x.userId === ME);
+      if (myself) Object.assign(myself, member(ME, myself.displayName, "admin", ws.info.id));
+      Object.assign(ws.info, { role: "admin", roleName: ROLE_NAME.admin, rank: RANK.admin, permissions: ROLE_PERMS.admin ?? [] });
+      audit(ws.info.id, ME, "member_role", "member", s("user"), { role: "owner" });
+      return state();
+    }
+    case "ws_delete_workspace": {
+      if (!demoParams.has("team")) return remoteOnly();
+      if (!has(ws, "workspace.delete")) fail("Удалить рабочее пространство может только владелец.");
+      if (ws.info.personal) fail("Личное рабочее пространство удалить нельзя.");
+      if (s("confirmName").trim() !== ws.info.name) fail("Название не совпадает.");
+      const i = workspaces.indexOf(ws);
+      workspaces.splice(i, 1);
+      active = workspaces.find((w) => w.info.personal)?.info.id ?? workspaces[0]?.info.id ?? null;
       return state();
     }
     case "ws_remove_member":
       if (!demoParams.has("team")) return remoteOnly();
       if (!has(ws, "members.manage")) fail("Нет прав на удаление участников.");
       ws.members = ws.members.filter((x) => x.userId !== s("user"));
+      audit(ws.info.id, ME, "member_removed", "member", s("user"));
       return state();
     case "ws_accept_invitation": case "ws_leave": return remoteOnly();
     default: return null;

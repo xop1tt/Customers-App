@@ -517,6 +517,30 @@ pub async fn ws_invite(core: C<'_>, email: String, role: String) -> CmdResult<Va
     core.inner().ws_invite(&email, &role).await
 }
 #[tauri::command]
+pub async fn ws_invitations(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_invitations().await
+}
+#[tauri::command]
+pub async fn ws_revoke_invitation(core: C<'_>, id: String) -> CmdResult<Value> {
+    core.inner().ws_revoke_invitation(&id).await
+}
+#[tauri::command]
+pub async fn ws_resend_invitation(core: C<'_>, id: String) -> CmdResult<Value> {
+    core.inner().ws_resend_invitation(&id).await
+}
+#[tauri::command]
+pub async fn ws_audit(core: C<'_>, actor: Option<String>, action: Option<String>, entity_id: Option<String>, offset: Option<i64>) -> CmdResult<Value> {
+    core.inner().ws_audit(actor, action, entity_id, offset).await
+}
+#[tauri::command]
+pub async fn ws_transfer_ownership(core: C<'_>, user: String) -> CmdResult<Value> {
+    core.inner().ws_transfer_ownership(&user).await
+}
+#[tauri::command]
+pub async fn ws_delete_workspace(core: C<'_>, confirm_name: String) -> CmdResult<Value> {
+    core.inner().ws_delete_workspace(&confirm_name).await
+}
+#[tauri::command]
 pub async fn ws_accept_invitation(core: C<'_>, token: String) -> CmdResult<Value> {
     core.inner().ws_accept_invitation(&token).await
 }

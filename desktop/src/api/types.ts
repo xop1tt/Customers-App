@@ -597,6 +597,10 @@ export interface WsConverted {
   reusedContact: boolean;
 }
 
+export interface WsInvitation { id: string; email: string; role: string; roleName: string; createdAt: string; expiresAt: string; sentCount: number; lastSentAt: string; invitedBy: string | null }
+export interface WsAuditItem { id: number; actor_id: string | null; action: string; entity_type: string | null; entity_id: string | null; at: string; details: Record<string, unknown> }
+export interface WsAuditQuery { actor?: string | null; action?: string | null; entityId?: string | null; offset?: number }
+
 export interface WsInvite { id: string; email: string; role: string; expiresAt: string; token: string; link: string }
 
 // ---------------------------------------------------------------- сотрудники, чат и уведомления

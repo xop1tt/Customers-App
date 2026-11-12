@@ -3,12 +3,13 @@
 
 import { CustomFieldsSection } from "./CustomFields";
 import { WatchingNow } from "./Presence";
+import { DISCUSSABLE, DiscussDialog } from "./Discuss";
 import { AttachmentsSection } from "./Attachments";
 import { canMerge, MergeDialog, MergeUndo } from "./MergeDialog";
 import { CommsBar, NextStep } from "./Comms";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
-import type { CrmRecord, WsCard, WsConflict } from "../../api/types";
+import type { ChatCardType, CrmRecord, WsCard, WsConflict } from "../../api/types";
 import { byTable, can, cellText, CURRENCIES, ENUMS, ENTITIES, type EntityMeta, type FieldMeta, fromInput, type Lookup, memberName, STATUS_TONE, toInput } from "../../lib/crm";
 import { fullRu, money, shortRelative } from "../../lib/format";
 import { buildTimeline, filterTimeline, relatedForTimeline, type TimelineFilter, type TimelineSource } from "../../lib/timeline";
@@ -156,6 +157,8 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
   const { data, error } = useWsQuery(() => api.wsCard(e.table, id), [e.table, id]);
   const [tab, setTab] = useState<Tab>("overview");
   const [merging, setMerging] = useState(false);
+  const [discussing, setDiscussing] = useState(false);
+  const chatOn = useStore((s) => s.chat?.available ?? false);
   const market = useStore((st) => st.marketInstalled);
   if (error) return <div className="inspector-body"><EmptyState icon="alert" title="Запись не открылась">{error}</EmptyState></div>;
   if (!data) return <div className="inspector-body"><div className="boot"><Spinner size={18} /></div></div>;
@@ -187,6 +190,9 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
         <h3 className="insp-title selectable">{e.title(r)}</h3>
         <WatchingNow type={e.type} id={r.id} />
         <CommsBar e={e} data={data} lk={lk} />
+        {!r.deleted_at && !editable && ws?.isCloud && (
+          <div className="faint insp-hint">Правка недоступна: у вашей роли нет права менять эту запись. Что разрешено — «Рабочее пространство» → «Мои права».</div>
+        )}
         <div className="row insp-actions">
           {e.type === "task" && editable && (
             <IconButton icon="check" tip={r.status === "done" ? "Вернуть в работу" : "Выполнено"} active={r.status === "done"} onClick={() => save({ status: r.status === "done" ? "todo" : "done" })} />
@@ -199,6 +205,9 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
             }}><span aria-hidden>{app.icon}</span> {action.label}</Button>
           ))}
           <span className="grow" />
+          {DISCUSSABLE.includes(e.type) && !r.deleted_at && chatOn && perms.includes("records.create") && (
+            <Button small variant="ghost" icon="chat" onClick={() => setDiscussing(true)}>Обсудить</Button>
+          )}
           {(e.type === "company" || e.type === "contact") && !r.deleted_at && canMerge(perms) && <IconButton icon="merge" tip="Объединить с дубликатом" onClick={() => setMerging(true)} />}
           {deletable && (r.deleted_at
             ? <Button small icon="refresh" onClick={() => void attempt(() => api.wsRestore(e.table, id))}>Восстановить</Button>
@@ -206,6 +215,7 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
           <IconButton icon="x" tip="Закрыть (Esc)" aria-label="Закрыть" onClick={() => openRecord(e.table, null)} />
         </div>
       </div>
+      {discussing && DISCUSSABLE.includes(e.type) && <DiscussDialog type={e.type as ChatCardType} id={id} title={e.title(r)} onClose={() => setDiscussing(false)} />}
       {merging && <MergeDialog e={e} record={r} lk={lk} onClose={() => setMerging(false)} />}
       {tabs.length > 1 && <Tabs value={tab} onChange={setTab} tabs={tabs} />}
       <div className="insp-scroll">

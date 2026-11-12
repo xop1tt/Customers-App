@@ -1,14 +1,16 @@
 // Страница коллекции: таблица записей по фильтрам коллекции, поиск и создание записи.
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import type { CrmRecord } from "../../api/types";
 import { byTable, can, cellText, columnLabel, STATUS_TONE } from "../../lib/crm";
+import { sameDepartment, teamOf } from "../../lib/departments";
 import { integer, plural } from "../../lib/format";
-import { Button, Checkbox, EmptyState, Select, Spinner, Tag, TextInput } from "../../ui/kit";
+import { Button, Checkbox, EmptyState, Segmented, Select, Spinner, Tag, TextInput } from "../../ui/kit";
 import { confirmDialog } from "../../ui/overlay";
 import { Icon } from "../../ui/icons";
 import { attempt, openRecord, setSection, toast, useStore } from "../../state/store";
+import { refreshTeam } from "../../state/team";
 import { CrmExportDialog } from "./CrmExport";
 import { ImportDialog } from "./ImportDialog";
 import { useLookup, useWsQuery } from "./useCrm";
@@ -28,8 +30,21 @@ export function CollectionPage() {
   // Отмеченные записи для массовых действий (держатся по идентификаторам, пока открыта коллекция).
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // Удобный фильтр «чьи записи» (не право доступа: видимость задают роли, ADR-077).
+  const [scope, setScope] = useState<"all" | "me" | "team" | "dept">("all");
+  const team = useStore((s) => s.team);
+  useEffect(() => { if (!team.length) void refreshTeam(); }, [team.length]);
   const lk = useLookup();
-  const { data, error } = useWsQuery(() => (id ? api.wsCollectionItems(id, { search, limit: 2000, ...(sort ? { sort: [sort] } : {}) }) : Promise.resolve(null)), [id, search, sort?.field, sort?.dir]);
+  const me = ws?.me ?? "";
+  const [lastTable, setLastTable] = useState<string | null>(null);
+  useEffect(() => { setScope("all"); setLastTable(null); }, [id]);
+  const ownerField = byTable(lastTable ?? "")?.fields.find((f) => f.name === "owner_id" || f.name === "assignee_id")?.name ?? null;
+  const people = useMemo(() => (scope === "me" ? [me] : scope === "team" ? [me, ...teamOf(team, me)] : scope === "dept" ? [me, ...sameDepartment(team, me)] : null), [scope, team, me]);
+  const filters = useMemo(() => (people && ownerField ? [{ field: ownerField, op: "in", value: people }] : []), [people, ownerField]);
+  const { data, error } = useWsQuery(() => (id ? api.wsCollectionItems(id, { search, limit: 2000, ...(filters.length ? { filters } : {}), ...(sort ? { sort: [sort] } : {}) }) : Promise.resolve(null)), [id, search, sort?.field, sort?.dir, filters]);
+
+  const entityNow = data?.entity;
+  useEffect(() => { if (entityNow) setLastTable(entityNow); }, [entityNow]);
 
   if (error) return <div className="page"><EmptyState icon="alert" title="Коллекция не открылась">{error}</EmptyState></div>;
   if (!data) return <div className="page"><div className="boot"><Spinner size={18} /></div></div>;
@@ -72,13 +87,16 @@ export function CollectionPage() {
     <div className="page crm-page">
       <div className="crm-bar">
         <TextInput value={search} onChange={setSearch} onClear={() => setSearch("")} icon="search" placeholder={`Поиск: ${e.many.toLowerCase()}`} wrapClass="crm-search" aria-label="Поиск в коллекции" />
+        {ownerField && team.length > 1 && (
+          <Segmented small value={scope} onChange={setScope} options={[{ value: "all", label: "Все" }, { value: "me", label: "Мои" }, { value: "team", label: "Моей команды" }, { value: "dept", label: "Моего отдела" }]} />
+        )}
         <span className="grow" />
         {exportable && <Button icon="download" small disabled={data.total === 0} onClick={() => setExporting(true)}>Экспорт</Button>}
         {creatable && <Button icon="upload" small onClick={() => setImporting(true)}>Импорт</Button>}
         {creatable && <Button icon="plus" small onClick={() => openRecord(e.table, "new")}>{e.create}</Button>}
       </div>
       {importing && <ImportDialog onClose={() => setImporting(false)} />}
-      {exporting && <CrmExportDialog source={{ entity: e.table, collection: { id: data.collection.id, name: data.collection.name }, query: { search }, total: data.total }} onClose={() => setExporting(false)} />}
+      {exporting && <CrmExportDialog source={{ entity: e.table, collection: { id: data.collection.id, name: data.collection.name }, query: { search, ...(filters.length ? { filters } : {}) }, total: data.total }} onClose={() => setExporting(false)} />}
       {data.items.length === 0 && !search && creatable && (e.table === "companies" || e.table === "contacts") && !data.collection.config.filters?.length ? (
         <EmptyState icon="users" title="Здесь будут ваши клиенты" action={
           <div className="empty-actions">

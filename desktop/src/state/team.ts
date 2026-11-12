@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { api } from "../api";
 import { on } from "../api/backend";
 import type { ChatConversation, ChatPoll, TeamMember } from "../api/types";
+import { loadPrefs, shouldToast } from "../lib/notifyPrefs";
 import { attempt, getState, openCollection, openRecord, setState, toast, useStore } from "./store";
 
 export const POLL_EVERY = 15_000;
@@ -50,11 +51,12 @@ function announce(chat: ChatPoll) {
   const st = getState();
   if (!st.account?.notifyMessages || typeof document === "undefined" || !document.hasFocus()) return;
   const viewing = st.section === "chat" ? st.chatOpen : null;
-  for (const m of chat.fresh.filter((f) => f.conversation_id !== viewing).slice(0, 2)) {
+  const prefs = loadPrefs();
+  for (const m of chat.fresh.filter((f) => f.conversation_id !== viewing && shouldToast("message", prefs)).slice(0, 2)) {
     const where = m.kind === "group" ? ` в «${m.title ?? "обсуждении"}»` : "";
     toast(`${m.author_name}${where}: ${m.body}`);
   }
-  for (const n of chat.freshNotifications.filter((x) => x.kind !== "mention").slice(0, 2)) {
+  for (const n of chat.freshNotifications.filter((x) => x.kind !== "mention" && shouldToast("group", prefs)).slice(0, 2)) {
     toast(n.kind === "added_to_group" ? `${n.actor_name} добавляет вас в обсуждение «${n.excerpt}»` : `${n.actor_name} упоминает вас: ${n.excerpt}`);
   }
 }

@@ -131,7 +131,8 @@ export function columnLabel(e: EntityMeta, col: string): string {
 
 export interface Lookup { members: WsMember[]; stages: Map<string, CrmRecord>; companies: Map<string, CrmRecord>; pipelines: Map<string, CrmRecord> }
 
-export const memberName = (members: WsMember[], id: unknown) => (typeof id === "string" ? members.find((m) => m.userId === id)?.displayName ?? "Участник" : "");
+/** Имя участника; если список загружен, а человека в нём нет, — он вышел или удалён из рабочего пространства. */
+export const memberName = (members: WsMember[], id: unknown) => (typeof id === "string" ? members.find((m) => m.userId === id)?.displayName ?? (members.length ? "Бывший участник" : "Участник") : "");
 
 /** Значение ячейки таблицы как текст. */
 export function cellText(e: EntityMeta, r: CrmRecord, col: string, lk: Lookup): string {

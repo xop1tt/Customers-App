@@ -2,14 +2,18 @@
 
 import { useState } from "react";
 import { api } from "../../api";
-import type { WsInvite, WsOp } from "../../api/types";
+import type { WsInvitation, WsInvite, WsOp } from "../../api/types";
 import { copyText } from "../../lib/platform";
-import { integer, shortRelative } from "../../lib/format";
+import { fullRu, integer, shortRelative } from "../../lib/format";
 import { Avatar, Button, Group, IconButton, Notice, Select, SettingRow, Tag, TextInput } from "../../ui/kit";
 import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, refreshWorkspace, setState, toast, useStore } from "../../state/store";
 import { useWsQuery } from "./useCrm";
 import { PipelineEditor, RolesEditor } from "./Editors";
+import { HandoverDialog, type HandoverTarget } from "./Handover";
+import { AuditDialog } from "./AuditLog";
+import { DangerZone } from "./Danger";
+import { MyRights } from "./MyRights";
 import { usePresence } from "./Presence";
 import { CustomFieldsEditor } from "./CustomFields";
 
@@ -32,6 +36,7 @@ function WorkspaceDialogBody() {
   const [rename, setRename] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [editor, setEditor] = useState<"pipelines" | "roles" | "fields" | null>(null);
+  const [audit, setAudit] = useState(false);
   const close = () => setState({ workspaceOpen: false });
   if (!ws) {
     return (
@@ -104,10 +109,20 @@ function WorkspaceDialogBody() {
       {editor === "pipelines" && <PipelineEditor onClose={() => setEditor(null)} />}
       {editor === "fields" && <CustomFieldsEditor onClose={() => setEditor(null)} />}
       {editor === "roles" && <RolesEditor onClose={() => setEditor(null)} />}
+      {ws.isCloud && current && <MyRights />}
       {ws.isCloud && current && <Members />}
       {ws.isCloud && current && perms.includes("invitations.manage") && <Invite />}
+      {ws.isCloud && current && perms.includes("audit.view") && (
+        <Group title="Журнал рабочего пространства">
+          <SettingRow title="Кто и что менял" hint="Серверный журнал: удаления, смена ответственного, участники и роли. Последнее действие над каждой записью — в разделе «Журнал».">
+            <Button small icon="history" onClick={() => setAudit(true)}>Открыть журнал</Button>
+          </SettingRow>
+        </Group>
+      )}
+      {audit && <AuditDialog onClose={() => setAudit(false)} />}
       <SyncQueue />
 
+      <DangerZone />
       {ws.isCloud && current && !current.personal && (
         <Group title="Выход">
           <SettingRow title="Покинуть рабочее пространство" hint="Локальная копия данных этого рабочего пространства будет удалена с устройства. Владелец не может выйти, пока не передаст владение.">
@@ -129,6 +144,8 @@ function Members() {
   const manage = ws.permissions.includes("members.manage");
   const online = new Set(usePresence().map((p) => p.user_id));
   const myRank = ws.workspaces.find((w) => w.id === ws.active)?.rank ?? 0;
+  const canHand = ws.permissions.includes("records.edit");
+  const [hand, setHand] = useState<{ target: HandoverTarget; leaving: boolean } | null>(null);
   return (
     <Group title={`Участники · ${integer(ws.members.length)}`}>
       <ul className="ws-member-list">
@@ -145,18 +162,15 @@ function Members() {
                 <>
                   <Select small value={m.role} width={150} onChange={(role) => void attempt(() => api.wsSetMemberRole(m.userId, role)).then(() => refreshWorkspace())}
                     options={roleOptions.filter((r) => rankOf(r.value) < myRank)} />
-                  <IconButton icon="x" tip="Удалить из рабочего пространства" onClick={async () => {
-                    if (await confirmDialog({ title: `Удалить ${m.displayName}?`, message: "Участник потеряет доступ к данным рабочего пространства. Его записи останутся.", confirm: "Удалить", danger: true })) {
-                      await attempt(() => api.wsRemoveMember(m.userId));
-                      await refreshWorkspace();
-                    }
-                  }} />
+                  {canHand && <IconButton icon="users" tip="Передать записи коллеге" onClick={() => setHand({ target: { userId: m.userId, displayName: m.displayName }, leaving: false })} />}
+                  <IconButton icon="x" tip="Удалить из рабочего пространства" onClick={() => setHand({ target: { userId: m.userId, displayName: m.displayName }, leaving: true })} />
                 </>
               ) : <Tag>{m.roleName}</Tag>}
             </li>
           );
         })}
       </ul>
+      {hand && <HandoverDialog from={hand.target} leaving={hand.leaving} onClose={() => setHand(null)} onRemove={async () => { await api.wsRemoveMember(hand.target.userId); }} />}
     </Group>
   );
 }
@@ -166,11 +180,12 @@ function Invite() {
   const [role, setRole] = useState("employee");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<WsInvite | null>(null);
+  const [version, setVersion] = useState(0);
   const send = async () => {
     setBusy(true);
     const r = await attempt(() => api.wsInvite(email.trim(), role));
     setBusy(false);
-    if (r) { setSent(r); setEmail(""); }
+    if (r) { setSent(r); setEmail(""); setVersion((v) => v + 1); }
   };
   return (
     <Group title="Пригласить" note="Письмо не отправляется автоматически: передайте ссылку приглашённому сами. Она действует 7 дней и показывается один раз.">
@@ -181,10 +196,44 @@ function Invite() {
       </div>
       {sent && (
         <Notice tone="ok" action={<Button small icon="copy" onClick={() => void copyText(sent.link).then(() => toast("Ссылка скопирована", "success"))}>Копировать</Button>}>
-          Приглашение для {sent.email} создано. <span className="selectable mono">{sent.link}</span>
+          Приглашение для {sent.email} {sent.id ? "готово" : "создано"}. <span className="selectable mono">{sent.link}</span>
         </Notice>
       )}
+      <OpenInvitations version={version} onLink={(r) => setSent(r)} onChange={() => setVersion((v) => v + 1)} />
     </Group>
+  );
+}
+
+/** Открытые приглашения: ждут ответа, можно отправить ещё раз (новая ссылка) или отозвать. */
+function OpenInvitations({ version, onLink, onChange }: { version: number; onLink: (r: WsInvite) => void; onChange: () => void }) {
+  const { data } = useWsQuery(() => api.wsInvitations().catch(() => [] as WsInvitation[]), [version]);
+  const list = data ?? [];
+  if (!list.length) return null;
+  return (
+    <div className="col" style={{ gap: 6, marginTop: 10 }}>
+      <div className="faint">Ждут ответа · {integer(list.length)}</div>
+      <ul className="ws-member-list" aria-label="Открытые приглашения">
+        {list.map((i) => {
+          const expired = Date.parse(i.expiresAt) < Date.now();
+          return (
+            <li key={i.id} className="ws-member">
+              <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
+                <span className="ellipsis">{i.email}</span>
+                <span className="faint ellipsis" style={{ fontSize: "var(--fs-sm)" }}>{i.roleName} · {expired ? "срок истёк" : `действует до ${fullRu(i.expiresAt)}`} · отправлено: {i.sentCount}</span>
+              </span>
+              {expired && <Tag tone="orange">Истекло</Tag>}
+              <Button small icon="refresh" onClick={async () => { const r = await attempt(() => api.wsResendInvitation(i.id)); if (r) { onLink(r); onChange(); } }}>Отправить ещё раз</Button>
+              <IconButton icon="x" tip="Отозвать приглашение" onClick={async () => {
+                if (await confirmDialog({ title: `Отозвать приглашение для ${i.email}?`, message: "Ссылка перестанет работать. Пригласить можно будет заново.", confirm: "Отозвать", danger: true })) {
+                  await attempt(() => api.wsRevokeInvitation(i.id));
+                  onChange();
+                }
+              }} />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
