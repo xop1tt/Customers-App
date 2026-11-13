@@ -5,6 +5,7 @@ import { api } from "../api";
 import { on } from "../api/backend";
 import type { ChatConversation, ChatPoll, TeamMember } from "../api/types";
 import { loadPrefs, shouldToast } from "../lib/notifyPrefs";
+import { HIDDEN_SLOWDOWN, isHidden } from "../lib/visibility";
 import { attempt, getState, openCollection, openRecord, setState, toast, useStore } from "./store";
 
 export const POLL_EVERY = 15_000;
@@ -77,7 +78,7 @@ export function useChatPolling() {
       timer = setTimeout(() => {
         void pollChat().finally(loop);
         if (++tick % TEAM_EVERY === 0) void refreshTeam();
-      }, getState().chat?.live ? LIVE_POLL_EVERY : POLL_EVERY);
+      }, (getState().chat?.live ? LIVE_POLL_EVERY : POLL_EVERY) * (isHidden() ? HIDDEN_SLOWDOWN : 1));
     };
     void pollChat().finally(loop);
     // Realtime: сервер сообщает только «что-то изменилось», содержимое забирается обычным запросом.

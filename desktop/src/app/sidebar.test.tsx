@@ -52,7 +52,7 @@ describe("облачко синхронизации", () => {
   it("стоит справа от имени, подписи «Облачный аккаунт» нет, «?» в одной строке с профилем", async () => {
     render(<App />);
     const nav = await screen.findByLabelText("Навигация");
-    setState({ session: { id: "c", displayName: "Алексей", avatar: null, isCloud: true, cloudUser: null, databasePath: "" }, sync: sync({ kind: "offline" }) });
+    setState({ session: { id: "c", displayName: "Алексей", avatar: null, cloudUser: null, databasePath: "" }, sync: sync({ kind: "offline" }) });
     const account = await within(nav).findByLabelText("Учётная запись");
     expect(within(account).getByText("Алексей")).toBeInTheDocument();
     expect(within(account).getByRole("img", { name: "Потеряно соединение с облаком" })).toBeInTheDocument();

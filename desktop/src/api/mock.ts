@@ -123,7 +123,7 @@ const baseDevice: DevicePrefs = {
   accent: null, theme: "system", language: "system", uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
   sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true, sidebarCollapsed: [],
   lightModeAuto: true, lightModeThreshold: 20, checkUpdates: true, updateCheckHours: 24, lastUpdateCheck: ago(3), backgroundDownload: true,
-  lastSeenVersion: "1.1.0", closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: true, rememberedUser: null, lastSection: "home",
+  lastSeenVersion: "1.1.0", closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: true, lastSection: "home",
   listSort: "score", listSortDescending: true, reportsOfferAfterCrash: true, reportsLogErrors: true, reportsIncludeLog: true, reportsLastSeen: null, legacyImported: true,
 };
 let device: DevicePrefs = { ...baseDevice };
@@ -183,7 +183,7 @@ let cloud = IN_TEST ? demo.has("cloud") : true;
 let profile: { name: string | null; avatar: string | null } = { name: null, avatar: null };
 let signedEmail = "alex@example.ru";
 const session = (): SessionInfo => ({
-  id: cloud ? "cloud-1" : "alex", displayName: profile.name ?? (cloud ? signedEmail : "alex"), avatar: profile.avatar, isCloud: cloud,
+  id: cloud ? "cloud-1" : "alex", displayName: profile.name ?? (cloud ? signedEmail : "alex"), avatar: profile.avatar,
   cloudUser: cloud ? { id: "1", email: signedEmail, newEmail: null, confirmed: true } : null, databasePath: "/Users/demo/Library/Application Support/Customers/demo/leads.db",
 });
 
@@ -293,17 +293,9 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
   switch (cmd) {
     case "boot_info":
       return {
-        version: "1.1.0", platform: demo.get("platform") === "windows" ? "windows" : "macos", cloudAvailable: true, hasUsers: true, existingInstall: true,
+        version: "1.1.0", platform: demo.get("platform") === "windows" ? "windows" : "macos", cloudAvailable: true,
         session: signedIn ? session() : null, device, error: null,
       } satisfies BootInfo;
-    case "local_accounts":
-      return [];
-    case "register":
-    case "login":
-      signedIn = true;
-      cloud = false;
-      emit("session-changed", session());
-      return null;
     case "cloud_sign_in":
       if (String(args.email)) signedEmail = String(args.email);
       if (String(args.password) === "wrong") throw { code: "", message: "Неверный адрес почты или пароль." };
@@ -340,8 +332,6 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
       signedIn = false;
       emit("session-ended", { reason: "" });
       return null;
-    case "is_remembered":
-      return !!device.rememberedUser;
     case "snapshot":
       return snapshot();
     case "lead_events":

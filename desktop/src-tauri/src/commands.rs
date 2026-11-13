@@ -30,13 +30,7 @@ macro_rules! sync_cmds {
 
 sync_cmds! {
     boot_info() -> Value = |c: &Arc<Core>| to_value(c.boot_info());
-    local_accounts() -> Value = |c: &Arc<Core>| to_value(c.local_accounts().iter().map(|a| a.username.clone()).collect::<Vec<_>>());
-    register(username: String, password: String, confirm: String, remember: bool) -> Option<String> = |c: &Arc<Core>, u: String, p: String, cf: String, r: bool| c.register(&u, &p, &cf, r);
-    login(username: String, password: String, remember: bool) -> () = |c: &Arc<Core>, u: String, p: String, r: bool| c.login(&u, &p, r);
     logout() -> () = |c: &Arc<Core>| { c.logout(); Ok(()) };
-    set_remembered(on: bool) -> () = |c: &Arc<Core>, on: bool| { c.set_remembered(on); Ok(()) };
-    is_remembered() -> bool = |c: &Arc<Core>| Ok(c.remembered());
-    change_password(old: String, new: String, confirm: String) -> () = |c: &Arc<Core>, o: String, n: String, cf: String| c.change_password(&o, &n, &cf);
 }
 
 #[tauri::command]
@@ -94,10 +88,6 @@ pub async fn delete_cloud_account(core: C<'_>, password: String) -> CmdResult<St
 #[tauri::command]
 pub async fn cloud_stats(core: C<'_>) -> CmdResult<BTreeMap<String, i64>> {
     core.cloud_stats().await
-}
-#[tauri::command]
-pub async fn import_local(core: C<'_>, username: String, password: String) -> CmdResult<String> {
-    core.inner().import_local(&username, &password).await
 }
 #[tauri::command]
 pub async fn handle_auth_url(core: C<'_>, url: String) -> CmdResult<Value> {

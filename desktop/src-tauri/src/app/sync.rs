@@ -77,7 +77,7 @@ impl Session {
     pub fn sync_status(&self) -> SyncStatus {
         let st = self.sync.lock().unwrap();
         SyncStatus {
-            enabled: self.is_cloud,
+            enabled: true,
             kind: st.kind,
             message: st.message.clone(),
             last_sync: st.last_sync.as_ref().map(format_date),
@@ -124,7 +124,7 @@ impl Core {
 
     /// После локального изменения: отправить через 3 секунды (изменения за это время уходят одной пачкой).
     pub fn sync_soon(self: &Arc<Self>, s: &Arc<Session>) {
-        if !s.is_cloud {
+        if self.env.cloud.is_none() {
             return;
         }
         self.refresh_pending(s);
@@ -153,15 +153,12 @@ impl Core {
     /// Кнопка «Синхронизировать»: настройки и лиды, затем Workspace (список, участники, CRM-данные).
     pub async fn sync_everything_command(self: &Arc<Self>) -> super::CmdResult<()> {
         self.sync_now_command()?;
-        let s = self.require()?;
-        if s.is_cloud {
-            let _ = self.ws_refresh().await;
-        }
+        let _ = self.ws_refresh().await;
         Ok(())
     }
 
     pub(crate) fn sync_now(self: &Arc<Self>, s: &Arc<Session>) {
-        let Some(cloud) = self.env.cloud.clone().filter(|_| s.is_cloud) else { return };
+        let Some(cloud) = self.env.cloud.clone() else { return };
         {
             let mut st = s.sync.lock().unwrap();
             if st.running {
@@ -309,17 +306,5 @@ mod tests {
         }
         assert!(core.session().is_none(), "после отзыва сессии запись закрыта");
         assert!(f.events.count("session-ended") >= 1);
-    }
-
-    #[tokio::test]
-    async fn sync_is_off_for_local_accounts() {
-        let f = fixture(true, vec![]);
-        let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
-        assert!(!core.sync_status().unwrap().enabled);
-        let s = core.session().unwrap();
-        core.sync_now(&s);
-        core.sync_soon(&s);
-        assert!(f.transport.requests.lock().unwrap().is_empty());
     }
 }

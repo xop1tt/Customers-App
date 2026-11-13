@@ -64,14 +64,6 @@ impl AppPaths {
     pub fn default_backups(&self, username: &str) -> PathBuf {
         self.documents.join(APP.backups).join(username)
     }
-    /// Папка резервных копий прежней macOS-версии: если она есть, копии продолжают лежать в ней.
-    pub fn legacy_backups(&self, username: &str) -> PathBuf {
-        self.documents.join("Lead Generator Backups").join(username)
-    }
-    /// База версии 1.0, созданная до появления учётных записей.
-    pub fn legacy_database(&self) -> PathBuf {
-        self.root.join("leads.db")
-    }
 }
 
 #[cfg(test)]
@@ -91,7 +83,6 @@ mod tests {
         assert_eq!(p.documents, Path::new("/home/a/Documents"));
         assert_eq!(p.secrets(), p.root.join("secrets"));
         assert_eq!(p.default_backups("anna"), Path::new("/home/a/Documents/Customers Backups/anna"));
-        assert_eq!(p.legacy_backups("anna"), Path::new("/home/a/Documents/Lead Generator Backups/anna"));
         assert_eq!(p.device_prefs(), p.root.join("device.json"));
     }
 }

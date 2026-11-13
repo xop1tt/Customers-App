@@ -16,7 +16,7 @@ function describeExport(value: unknown): string {
 
 describe("золотой слепок API", () => {
   for (const path of Object.keys(modules).sort()) {
-    it(path.replace("../", ""), () => {
+    it(path.replace(/^\.\.\//, ""), () => {
       const mod = modules[path]!;
       const surface = Object.fromEntries(Object.keys(mod).sort().map((k) => [k, describeExport(mod[k])]));
       expect(surface).toMatchSnapshot();

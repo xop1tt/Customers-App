@@ -168,9 +168,6 @@ impl LeadStore {
     pub fn key(&self) -> Option<&DbKey> {
         self.key.as_ref()
     }
-    pub fn is_encrypted(&self) -> bool {
-        self.key.is_some()
-    }
     pub fn sync_tracking(&self) -> bool {
         self.sync_tracking
     }
@@ -977,69 +974,6 @@ impl LeadStore {
     pub fn reset_sync_cursors(&self) -> AppResult<()> {
         self.conn.execute("DELETE FROM kv WHERE key LIKE 'sync.cursor.%'", [])?;
         Ok(())
-    }
-
-    /// Копирует в эту базу лиды, исключения и синхронизируемые настройки из другой базы и отмечает их
-    /// для выгрузки. Источник только читается. Лиды, которые уже есть здесь (тот же id или тот же
-    /// отпечаток), не дублируются. Возвращает число добавленных лидов.
-    pub fn import_from(&self, src: &LeadStore) -> AppResult<usize> {
-        let ts = Self::stamp(import_stamp());
-        let mut added = 0;
-        let cols = [
-            "lead_id",
-            "fingerprint",
-            "kind",
-            "source",
-            "title",
-            "score",
-            "relevance",
-            "discovered_at",
-            "updated_at",
-            "data_json",
-            "imported_at",
-            "favorite",
-            "archived",
-            "deleted",
-            "excluded",
-            "seen",
-            "note",
-        ];
-        let select = format!("SELECT {} FROM leads", cols.join(", "));
-        let exclusions = src.exclusions()?;
-        self.transaction(|| {
-            let mut st = src.conn.prepare(&select)?;
-            let mut rows = st.query([])?;
-            while let Some(r) = rows.next()? {
-                let id: String = r.get(0)?;
-                let fp: String = r.get::<_, Option<String>>(1)?.unwrap_or_default();
-                if self.exists("SELECT 1 FROM leads WHERE lead_id=?1 OR (?2<>'' AND fingerprint=?2)", params![id, fp]) {
-                    continue;
-                }
-                let values: Vec<rusqlite::types::Value> = (0..cols.len()).map(|i| r.get::<_, rusqlite::types::Value>(i)).collect::<Result<_, _>>()?;
-                let placeholders = vec!["?"; cols.len()].join(",");
-                self.conn.execute(&format!("INSERT INTO leads({}) VALUES({placeholders})", cols.join(",")), rusqlite::params_from_iter(values))?;
-                self.mark_dirty("lead", &id, &LEAD_FIELDS, Some(&ts))?;
-                added += 1;
-            }
-            for e in &exclusions {
-                self.conn.execute(
-                    "INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)",
-                    params![e.kind.as_str(), e.value, util::now_string()],
-                )?;
-                self.mark_dirty("exclusion", &format!("{}|{}", e.kind.as_str(), e.value), &["deleted"], Some(&ts))?;
-            }
-            for k in SYNCED_KEYS {
-                if self.value(k).is_none() {
-                    if let Some(v) = src.value(k) {
-                        self.conn.execute("INSERT INTO kv(key, value) VALUES(?1,?2)", params![k, v])?;
-                        self.mark_dirty("setting", k, &["value"], Some(&ts))?;
-                    }
-                }
-            }
-            Ok(())
-        })?;
-        self.apply_exclusions()?;
-        Ok(added)
     }
 
     /// Записать синхронизируемую настройку (JSON-текст) и отметить её для выгрузки.

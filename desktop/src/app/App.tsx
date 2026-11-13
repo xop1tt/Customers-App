@@ -1,10 +1,11 @@
 import { QuickSearch, toggleQuick } from "./QuickSearch";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { isLeadList } from "../lib/leads";
 import { applyAccent, applyTheme, resolveTheme, systemIsDark } from "../lib/theme";
 import { resolveLanguage, setLanguage, systemLanguage } from "../lib/i18n";
 import { BASE_AUTO } from "../lib/autoScale";
+import { isHidden } from "../lib/visibility";
 import { copyText, isMac, readText } from "../lib/platform";
 import { Icon } from "../ui/icons";
 import { ConfirmHost, MenuHost, TooltipHost, installInputContextMenu } from "../ui/overlay";
@@ -18,34 +19,39 @@ import { Inspector } from "./Inspector";
 import { HomePage } from "./pages/Home";
 import { LeadsPage } from "./pages/LeadsPage";
 import { RunsPage } from "./pages/RunsPage";
-import { Settings } from "./settings/Settings";
-import { Marketplace } from "./market/Marketplace";
 import { useMarketInstalled } from "../state/market";
 import { useHubSync } from "../state/hub";
 import { AiDrawer } from "./AiDrawer";
-import { ReportDialog } from "./settings/SystemSections";
-import { ExportDialog } from "./ExportDialog";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
 import { useViewportWidth } from "../state/hooks";
-import { CalendarPage } from "./crm/CalendarPage";
 import { CollectionPage } from "./crm/CollectionPage";
 import { ModuleRail, RAIL_W } from "./ModuleRail";
-import { DealBoard } from "./crm/DealBoard";
-import { ReportsPage } from "./crm/ReportsPage";
 import { TodayPage } from "./crm/TodayPage";
 import { CrmCard } from "./crm/CrmCard";
 import { CollectionDialog } from "./crm/Collections";
-import { WorkspaceDialog } from "./crm/WorkspaceDialog";
-import { JournalPage } from "./crm/JournalPage";
-import { TrashPage } from "./crm/TrashPage";
 import { ProfilePage } from "./team/ProfilePage";
-import { PeoplePage } from "./team/PeoplePage";
 import { ChatWindow } from "./team/ChatWindow";
 import { useChatPolling } from "../state/team";
 import { useConnectionWatch } from "../state/connection";
 import { ReconnectToast } from "./Reconnect";
-import { OrgChartPage } from "./team/OrgChart";
 
+
+/** Редкие экраны и окна загружаются при первом открытии: запуск разбирает меньше кода, окно появляется быстрее. */
+function later<K extends string, M extends Record<K, React.ComponentType<any>>>(load: () => Promise<M>, name: K) {
+  return lazy(() => load().then((m) => ({ default: m[name] })));
+}
+const Settings = later(() => import("./settings/Settings"), "Settings");
+const Marketplace = later(() => import("./market/Marketplace"), "Marketplace");
+const ReportDialog = later(() => import("./settings/SystemSections"), "ReportDialog");
+const ExportDialog = later(() => import("./ExportDialog"), "ExportDialog");
+const CalendarPage = later(() => import("./crm/CalendarPage"), "CalendarPage");
+const DealBoard = later(() => import("./crm/DealBoard"), "DealBoard");
+const ReportsPage = later(() => import("./crm/ReportsPage"), "ReportsPage");
+const WorkspaceDialog = later(() => import("./crm/WorkspaceDialog"), "WorkspaceDialog");
+const JournalPage = later(() => import("./crm/JournalPage"), "JournalPage");
+const TrashPage = later(() => import("./crm/TrashPage"), "TrashPage");
+const PeoplePage = later(() => import("./team/PeoplePage"), "PeoplePage");
+const OrgChartPage = later(() => import("./team/OrgChart"), "OrgChartPage");
 
 const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const MIN_CENTER = 560;
@@ -55,6 +61,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), h
 
 export function App() {
   const phase = useStore((s) => s.phase);
+  const settingsOpen = useStore((s) => s.settings !== null);
+  const marketOpen = useStore((s) => s.market !== null);
   const device = useStore((s) => s.device);
   const lightMode = useStore((s) => s.lightMode);
   const platform = useStore((s) => s.boot?.platform);
@@ -87,7 +95,7 @@ export function App() {
   useEffect(() => { if (platform) document.documentElement.dataset.platform = platform; }, [platform]);
   useEffect(() => {
     // Заряд меняется медленно: проверяем раз в минуту.
-    const t = setInterval(() => { void checkPower(); }, 60_000);
+    const t = setInterval(() => { if (!isHidden()) void checkPower(); }, 60_000);
     return () => clearInterval(t);
   }, []);
 
@@ -128,8 +136,8 @@ export function App() {
       {phase === "auth" && <AuthScreen />}
       {phase === "welcome" && <Welcome />}
       {phase === "ready" && <Shell />}
-      <Settings />
-      <Marketplace />
+      {settingsOpen && <Suspense fallback={null}><Settings /></Suspense>}
+      {marketOpen && <Suspense fallback={null}><Marketplace /></Suspense>}
       {phase === "ready" && <QuickSearch />}
       <MenuHost />
       <ConfirmHost />
@@ -202,6 +210,7 @@ function Shell() {
   const section = useStore((s) => s.section);
   const device = useStore((s) => s.device);
   const exportOpen = useStore((s) => s.exportOpen);
+  const workspaceOpen = useStore((s) => s.workspaceOpen);
   const whatsNew = useStore((s) => s.whatsNewOpen);
   const [navLive, setNavLive] = useState<number | null>(null);
   const [inspLive, setInspLive] = useState<number | null>(null);
@@ -285,14 +294,16 @@ function Shell() {
           {section === "runs" && <RunsPage />}
           {section === "collection" && <CollectionPage />}
           {section === "today" && <TodayPage />}
-          {section === "calendar" && <CalendarPage />}
-          {section === "deals" && <DealBoard />}
-          {section === "reports" && <ReportsPage />}
-          {section === "trash" && <TrashPage />}
-          {section === "journal" && <JournalPage />}
+          <Suspense fallback={null}>
+            {section === "calendar" && <CalendarPage />}
+            {section === "deals" && <DealBoard />}
+            {section === "reports" && <ReportsPage />}
+            {section === "trash" && <TrashPage />}
+            {section === "journal" && <JournalPage />}
+            {section === "people" && <PeoplePage />}
+            {section === "structure" && <OrgChartPage />}
+          </Suspense>
           {section === "profile" && <ProfilePage />}
-          {section === "people" && <PeoplePage />}
-          {section === "structure" && <OrgChartPage />}
         </div>
       </main>
       {showInsp && floatInsp && (
@@ -309,11 +320,13 @@ function Shell() {
           <InspectorBody />
         </aside>
       )}
-      {exportOpen && <ExportDialog />}
+      <Suspense fallback={null}>
+        {exportOpen && <ExportDialog />}
+        {reportOpen && <ReportDialog onClose={() => setState({ reportOpen: false })} />}
+        {workspaceOpen && <WorkspaceDialog />}
+      </Suspense>
       {whatsNew && <WhatsNewDialog />}
-      {reportOpen && <ReportDialog onClose={() => setState({ reportOpen: false })} />}
       <AiDrawer />
-      <WorkspaceDialog />
       <CollectionDialog key={collectionKey} />
       <CrashPrompt />
     </div>

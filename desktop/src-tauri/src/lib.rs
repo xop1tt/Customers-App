@@ -1,4 +1,3 @@
-pub mod accounts;
 pub mod app;
 pub mod cloud;
 pub mod commands;
@@ -102,7 +101,6 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::cancel_integration,
         commands::change_cloud_email,
         commands::change_cloud_password,
-        commands::change_password,
         commands::check_updates,
         commands::set_ui_language,
         commands::clear_error_log,
@@ -138,15 +136,11 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::export_to_file,
         commands::handle_auth_url,
         commands::import_exclusions,
-        commands::import_local,
         commands::install_update,
-        commands::is_remembered,
         commands::issue_url,
         commands::lead_events,
         commands::list_backups,
-        commands::local_accounts,
         commands::log_event,
-        commands::login,
         commands::logout,
         commands::mail_forget,
         commands::mail_preset,
@@ -169,7 +163,6 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::quit_app,
         commands::recent_releases,
         commands::refresh_notion,
-        commands::register,
         commands::remove_exclusion,
         commands::remove_oauth_key,
         commands::resend_cloud_email_change,
@@ -188,7 +181,6 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         commands::set_favorite,
         commands::set_note,
         commands::set_notion_mapping,
-        commands::set_remembered,
         commands::set_search_settings,
         commands::set_zoom,
         commands::set_vk_token,

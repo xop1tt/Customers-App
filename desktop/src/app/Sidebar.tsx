@@ -18,6 +18,7 @@ import { openLink } from "../state/actions";
 import { GroupTitle, useCollapsed } from "./SideGroup";
 import { pollChat, unreadNotifications } from "../state/team";
 import { isMuted, loadPrefs, setMute } from "../lib/notifyPrefs";
+import { isHidden } from "../lib/visibility";
 import { openMarket } from "../state/market";
 
 const SCORE_STEPS = [90, 70, 50, 30];
@@ -265,7 +266,7 @@ export function AccountBar({ withUpdate = true }: { withUpdate?: boolean } = {})
   useEffect(() => {
     const bump = () => setTick((n) => n + 1);
     window.addEventListener("customers:notify-prefs", bump);
-    const t = setInterval(bump, 30_000);
+    const t = setInterval(() => { if (!isHidden()) bump(); }, 30_000);
     return () => { window.removeEventListener("customers:notify-prefs", bump); clearInterval(t); };
   }, []);
   const muted = isMuted(loadPrefs());
@@ -307,15 +308,15 @@ export function AccountBar({ withUpdate = true }: { withUpdate?: boolean } = {})
             </span>
             <span className="side-name-row grow">
               <span className="ellipsis side-name">{session?.displayName}</span>
-              {session?.isCloud && <SyncBadge sync={sync} />}
+              {sync?.enabled && <SyncBadge sync={sync} />}
             </span>
           </button>
-          {(session?.isCloud || chat?.available) && (
-            <span className="avatar-wrap" ref={bellWrap}>
-              <IconButton icon={muted ? "bellOff" : "bell"} tip={muted ? "Уведомления отключены" : "Уведомления"} aria-label={notes > 0 ? `Уведомления, новых: ${notes}` : muted ? "Уведомления отключены" : "Уведомления"} onClick={(e: React.MouseEvent<HTMLElement>) => { setState({ bellOpen: !bellOpen }); setBellRect(e.currentTarget.getBoundingClientRect()); }}
-                onContextMenu={(e: React.MouseEvent<HTMLElement>) => { e.preventDefault(); showMenu(bellMenu(e.currentTarget.getBoundingClientRect()), e.currentTarget.getBoundingClientRect(), "top-start"); }} />
-              {notes > 0 && <span className="red-badge" aria-hidden="true">{notes > 99 ? "99+" : integer(notes)}</span>}
-            </span>
+          {(sync?.enabled || chat?.available) && (
+          <span className="avatar-wrap" ref={bellWrap}>
+            <IconButton icon={muted ? "bellOff" : "bell"} tip={muted ? "Уведомления отключены" : "Уведомления"} aria-label={notes > 0 ? `Уведомления, новых: ${notes}` : muted ? "Уведомления отключены" : "Уведомления"} onClick={(e: React.MouseEvent<HTMLElement>) => { setState({ bellOpen: !bellOpen }); setBellRect(e.currentTarget.getBoundingClientRect()); }}
+              onContextMenu={(e: React.MouseEvent<HTMLElement>) => { e.preventDefault(); showMenu(bellMenu(e.currentTarget.getBoundingClientRect()), e.currentTarget.getBoundingClientRect(), "top-start"); }} />
+            {notes > 0 && <span className="red-badge" aria-hidden="true">{notes > 99 ? "99+" : integer(notes)}</span>}
+          </span>
           )}
           <IconButton icon="help" tip="Справка" onClick={(e) => showMenu(helpItems(), e.currentTarget.getBoundingClientRect(), "top-start")} />
         </div>

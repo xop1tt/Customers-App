@@ -106,14 +106,17 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
     #[cfg(e2e)]
     let transport = crate::e2e::wrap_transport(transport);
     let device_id = device_id(secrets.as_ref());
-    let cloud = CloudConfig::embedded()
-        .map(|config| Arc::new(CloudAuth::new(config, transport.clone(), Arc::new(SecretSessionStore(secrets.clone())), device_id.clone())));
+    #[cfg(e2e)]
+    let cloud_config = crate::e2e::cloud_config().or_else(CloudConfig::embedded);
+    #[cfg(not(e2e))]
+    let cloud_config = CloudConfig::embedded();
+    let cloud =
+        cloud_config.map(|config| Arc::new(CloudAuth::new(config, transport.clone(), Arc::new(SecretSessionStore(secrets.clone())), device_id.clone())));
     let events: Arc<dyn crate::app::Events> = Arc::new(TauriEvents(app.clone()));
     let bundle = app_bundle();
     let can_update = !cfg!(debug_assertions) && if cfg!(target_os = "macos") { bundle.is_some() } else { cfg!(windows) };
     Ok(Arc::new(Env {
         device: Mutex::new(PrefsFile::load(&paths.device_prefs())),
-        accounts: crate::accounts::LocalAccounts::open(&paths.root).map_err(|e| e.to_string())?,
         keys: DatabaseKeys::new(secrets.clone()),
         errors: ErrorLog::new(&paths.logs),
         paths,
@@ -176,7 +179,7 @@ fn build_tray_menu(app: &AppHandle, lang: Lang, status: &str, searching: bool, c
     Menu::with_items(app, &items)
 }
 
-/// Пересобирает меню и подсказку по состоянию: идёт ли поиск, сколько новых лидов, облачный ли аккаунт.
+/// Пересобирает меню и подсказку по состоянию: идёт ли поиск, сколько новых лидов, вошёл ли пользователь (тогда в меню есть «Синхронизировать»).
 pub fn refresh_tray(app: &AppHandle) {
     let app = app.clone();
     // Вызывается из обработчиков событий, где могут быть заняты замки: работаем в отдельном потоке.
@@ -184,7 +187,7 @@ pub fn refresh_tray(app: &AppHandle) {
         let Some(core) = app.try_state::<Arc<Core>>() else { return };
         let lang = ui_lang();
         let (searching, new_leads, cloud) = match core.session() {
-            Some(s) => (s.search_status().running, s.with_store(|st| st.new_lead_count()), s.is_cloud),
+            Some(s) => (s.search_status().running, s.with_store(|st| st.new_lead_count()), true),
             None => (false, 0, false),
         };
         let status = tray_text::status(lang, searching, new_leads);
