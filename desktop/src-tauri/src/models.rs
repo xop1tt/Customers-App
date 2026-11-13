@@ -4,7 +4,7 @@
 use crate::util::{format_date, normalize, parse_date};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -401,10 +401,6 @@ pub fn lead_to_ui(l: &LeadItem) -> Value {
         "phones": d.phones(),
         "emails": d.emails(),
     })
-}
-
-pub fn empty_object() -> Map<String, Value> {
-    Map::new()
 }
 
 #[cfg(test)]

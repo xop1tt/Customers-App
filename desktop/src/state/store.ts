@@ -84,7 +84,7 @@ export const DEFAULT_DEVICE: DevicePrefs = {
   accent: null, theme: "system", language: "system", uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
   sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true, sidebarCollapsed: [],
   lightModeAuto: true, lightModeThreshold: 20, checkUpdates: true, updateCheckHours: 24, lastUpdateCheck: null, backgroundDownload: true, lastSeenVersion: null,
-  closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: false, rememberedUser: null, lastSection: "home", listSort: "score",
+  closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: false, lastSection: "home", listSort: "score",
   listSortDescending: true, reportsOfferAfterCrash: true, reportsLogErrors: true, reportsIncludeLog: true, reportsLastSeen: null, legacyImported: false,
 };
 

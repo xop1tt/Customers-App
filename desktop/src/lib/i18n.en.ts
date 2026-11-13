@@ -553,6 +553,7 @@ export const EN: Record<string, string> = {
   "Начнём с первого поиска": "Let’s start with the first search",
   "Недавние ошибки": "Recent errors",
   "Новые": "New",
+  "Новое": "New",
   "Новые за 14 дней": "New in 14 days",
   "Новых лидов нет. Запустите поиск, чтобы найти свежие.": "No new leads. Run a search to find fresh ones.",
   "Организации": "Businesses",
@@ -1008,6 +1009,8 @@ export const EN: Record<string, string> = {
   "Помощник": "Assistant",
   "Настройки Ai": "Ai settings",
   "Чат Ai": "Ai chat",
+  "Чат": "Chat",
+  "Свернуть чат": "Collapse chat",
   "Очистить разговор": "Clear conversation",
   "Закрыть чат": "Close chat",
   "Приложить файл": "Attach a file",
@@ -1593,6 +1596,7 @@ export const EN: Record<string, string> = {
 
 /** Дополнительные шаблоны на регулярных выражениях (числа, склонения). */
 export const PATTERNS: Array<[RegExp, string]> = [
+  [/^Чат, новых: (\d+)$/, "Chat, $1 new"],
   [/^Поиск завершён: новых (\d+), обновлено (\d+)(.*)$/s, "Search finished: $1 new, $2 updated$3"],
   [/^\. С ошибками: (.+)$/s, ". With errors: $1"],
   [/^1 запись$/, "1 item"],

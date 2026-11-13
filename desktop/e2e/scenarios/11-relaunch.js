@@ -1,30 +1,24 @@
-// Второй запуск на тех же данных: аккаунт, ключ базы, настройки и записи пережили перезапуск приложения.
+// Второй запуск на тех же данных: облачная сессия, ключ базы, настройки и записи пережили перезапуск приложения.
 // Это проверка настоящего хранилища ключей (Связка ключей macOS, DPAPI Windows): ключ базы читается после перезапуска процесса.
 {
   const { scenario, waitFor, $, $$, click, type, check, eq, core, sleep, norm, shot, golden, skipIf, hasCore, healthy } = E2E;
   const opts = { phase: "relaunch" };
-  const PASSWORD = ["E2e", "Test", "Pass", "9"].join("") + "-2"; // пароль после сценария change-password
 
-  scenario("relaunch-boot", "Перезапуск: окно открывается, аккаунт на месте, тема и язык сохранились", async () => {
+  scenario("relaunch-boot", "Перезапуск: окно открывается, облачная сессия на месте, тема и язык сохранились", async () => {
     await waitFor(() => $(".auth, .welcome, .shell"), "первый экран после перезапуска", { timeout: 45000 });
     healthy("после перезапуска");
     const b = await core("boot_info");
     eq(b.error, null, "ошибка запуска ядра");
-    check(b.hasUsers, "аккаунт не найден после перезапуска");
-    eq(b.session, null, "сессия не должна сохраняться без «Запомнить»");
+    check(b.session && b.session.cloudUser, "сессия не восстановилась после перезапуска");
+    eq(b.session.cloudUser.email, E2E.account ? E2E.account.email : "e2e-owner@e2e-test.com", "почта сохранённой сессии");
     eq([b.device.theme, b.device.language], ["light", "ru"], "тема и язык из настроек устройства");
     eq(document.documentElement.dataset.theme, "light", "тема применена в окне при запуске");
-    await waitFor(() => $(".auth-card"), "экран входа");
-    eq(await core("local_accounts"), ["e2e-owner"], "локальные аккаунты");
   }, { ...opts, fatal: true });
 
-  scenario("relaunch-login", "Перезапуск: вход по паролю открывает базу ключом из хранилища, мастер повторно не показывается", async () => {
-    await waitFor(() => /Вход на этом компьютере/.test(norm($(".auth-card h2")?.textContent)), "форма входа");
-    type($(".auth-card input[type=password]"), PASSWORD);
-    click($(".auth-submit"));
-    await waitFor(() => $(".shell, .welcome"), "рабочее окно после входа", { timeout: 40000 });
-    check($(".shell"), "после входа показан мастер первого запуска, хотя он уже пройден");
-    healthy("после входа");
+  scenario("relaunch-login", "Перезапуск: сессия открывает базу ключом из хранилища без повторного входа, мастер не показывается", async () => {
+    await waitFor(() => $(".shell, .welcome"), "рабочее окно после перезапуска", { timeout: 40000 });
+    check($(".shell"), "после перезапуска показан мастер первого запуска, хотя он уже пройден");
+    healthy("после перезапуска");
     await shot("relaunch-shell");
   }, { ...opts, fatal: true });
 

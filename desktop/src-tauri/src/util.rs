@@ -55,10 +55,6 @@ pub fn now_string() -> String {
     format_date(&Utc::now())
 }
 
-pub fn now_precise() -> String {
-    format_precise(&Utc::now())
-}
-
 // ---------------------------------------------------------------- нормализация
 
 pub mod normalize {

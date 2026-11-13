@@ -53,7 +53,6 @@ export function Settings() {
   const section = useStore((s) => s.settings);
   const sub = useStore((s) => s.settingsSub);
   const update = useStore((s) => s.update);
-  const cloud = useStore((s) => !!s.session?.isCloud);
   const appVersion = useStore((s) => s.boot?.version ?? s.update?.current ?? "");
   const admin = useStore((s) => canAdminister(s.ws?.active ? s.ws.permissions : undefined));
   const fresh = useUnseenSettings();
@@ -65,7 +64,7 @@ export function Settings() {
     return () => document.removeEventListener("keydown", key);
   }, []);
   const current = ALL.find((s) => s.id === section) ?? (ALL[0] as Item);
-  const subs = subsectionsOf(current.id, cloud);
+  const subs = subsectionsOf(current.id, true);
   const activeSub = subs.find((x) => x.id === sub)?.id ?? subs[0]?.id ?? null;
   // Открытый раздел или подраздел перестаёт считаться новым.
   useEffect(() => { if (section) markSettingsSeen(current.id, subs.length > 1 ? activeSub : null); }, [section, current.id, activeSub, subs.length]);

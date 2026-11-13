@@ -71,8 +71,6 @@ pub struct DevicePrefs {
     pub start_minimized: bool,
     pub launch_at_login: bool,
     pub tray_hint_shown: bool,
-    /// Имя локальной учётной записи, в которую входить автоматически.
-    pub remembered_user: Option<String>,
     pub last_section: String,
     pub list_sort: String,
     pub list_sort_descending: bool,
@@ -118,7 +116,6 @@ impl Default for DevicePrefs {
             start_minimized: true,
             launch_at_login: false,
             tray_hint_shown: false,
-            remembered_user: None,
             last_section: "all".into(),
             list_sort: "score".into(),
             list_sort_descending: true,
@@ -159,9 +156,6 @@ impl DevicePrefs {
 
     pub fn last_update_check(&self) -> Option<DateTime<Utc>> {
         self.last_update_check.as_deref().and_then(parse_date)
-    }
-    pub fn set_last_update_check(&mut self, at: DateTime<Utc>) {
-        self.last_update_check = Some(format_date(&at));
     }
 }
 
@@ -388,38 +382,6 @@ pub fn legacy_device_patch(defaults: &plist::Dictionary) -> Value {
     Value::Object(out)
 }
 
-/// Настройки учётной записи из UserDefaults macOS (ключи вида `search.auto.<имя в нижнем регистре>`).
-pub fn legacy_account_patch(defaults: &plist::Dictionary, username: &str) -> Value {
-    let u = username.to_lowercase();
-    let get = |k: &str| defaults.get(&format!("{k}.{u}")).and_then(plist_json);
-    let mut out = Map::new();
-    let mut put = |key: &str, v: Option<Value>| {
-        if let Some(v) = v {
-            out.insert(key.into(), v);
-        }
-    };
-    put("autoSearchMinutes", get("search.auto"));
-    put("backupDirectory", get("data.backupDir"));
-    put("autoBackup", get("data.autoBackup"));
-    put("keepBackups", get("data.keepBackups").filter(|v| v.as_i64().unwrap_or(0) > 0));
-    put("dataPath", get("data.path"));
-    put("mailAccount", defaults.get(&format!("mail.account.{u}")).or_else(|| defaults.get(&format!("mail.account.{username}"))).and_then(plist_json));
-    put("mailDelivery", defaults.get(&format!("mail.delivery.{u}")).or_else(|| defaults.get(&format!("mail.delivery.{username}"))).and_then(plist_json));
-    put("welcomeDone", get("welcome.done"));
-    put("exportLastTab", defaults.get("export.lastTab").and_then(plist_json));
-    Value::Object(out)
-}
-
-/// Подключение Notion (JSON без токена) из UserDefaults macOS. Теперь оно лежит в базе пользователя
-/// (значение `export.notion`), как в Windows-версии, и переносится вместе с ней.
-pub fn legacy_notion_config(defaults: &plist::Dictionary, username: &str) -> Option<String> {
-    let u = username.to_lowercase();
-    match defaults.get(&format!("export.notion.{u}")).or_else(|| defaults.get(&format!("export.notion.{username}")))? {
-        plist::Value::Data(d) => String::from_utf8(d.clone()).ok().filter(|t| !t.trim().is_empty()),
-        _ => None,
-    }
-}
-
 /// Файл настроек macOS: ~/Library/Preferences/<bundle id>.plist.
 pub fn read_defaults_plist(path: &Path) -> Option<plist::Dictionary> {
     plist::Value::from_file(path).ok()?.into_dictionary()
@@ -451,7 +413,8 @@ mod tests {
         assert_eq!(p.accent.as_deref(), Some("#12AB34"));
         assert_eq!((p.nav_width, p.inspector_width, p.light_mode_threshold, p.update_check_hours), (420.0, 280.0, 50, 24));
         assert!(!p.nav_open && p.compact_rows);
-        assert_eq!((p.remembered_user.as_deref(), p.last_section.as_str(), p.list_sort.as_str()), (Some("anna"), "favorites", "score"));
+        // Устаревший ключ `rememberedUser` в старом файле не мешает загрузке.
+        assert_eq!((p.last_section.as_str(), p.list_sort.as_str()), ("favorites", "score"));
         assert_eq!(p.last_update_check().unwrap().timestamp(), 1_793_871_720);
     }
 
@@ -543,13 +506,6 @@ mod tests {
         d.insert("sidebar.hidden".into(), "archive, excluded".into());
         d.insert("sidebar.counts".into(), false.into());
         d.insert("app.lastSeenVersion".into(), "1.0.9".into());
-        d.insert("search.auto.anna".into(), 30.into());
-        d.insert("data.backupDir.anna".into(), "/Users/a/Копии".into());
-        d.insert("data.keepBackups.anna".into(), 0.into());
-        d.insert("mail.account.anna".into(), r#"{"email":"a@b.c"}"#.into());
-        d.insert("welcome.done.anna".into(), true.into());
-        d.insert("export.notion.anna".into(), plist::Value::Data(br#"{"database":"x"}"#.to_vec()));
-        d.insert("search.auto.boris".into(), 5.into());
         let mut dev = PrefsFile::<DevicePrefs>::load(Path::new("/nonexistent/device.json"));
         let dir = tempfile::tempdir().unwrap();
         dev.path = dir.path().join("device.json");
@@ -561,17 +517,6 @@ mod tests {
         assert_eq!(dev.value.sidebar_hidden, ["archive", "excluded"]);
         assert!(!dev.value.sidebar_counts);
         assert_eq!(dev.value.last_seen_version.as_deref(), Some("1.0.9"));
-        let mut acc = PrefsFile::<AccountPrefs>::load(&dir.path().join("prefs.json"));
-        assert!(acc.patch(&legacy_account_patch(&d, "Anna")));
-        assert_eq!(
-            (acc.value.auto_search_minutes, acc.value.backup_directory.as_str(), acc.value.keep_backups, acc.value.welcome_done),
-            (120, "/Users/a/Копии", 14, true)
-        );
-        assert_eq!(acc.value.mail_account, r#"{"email":"a@b.c"}"#);
-        assert_eq!(legacy_notion_config(&d, "Anna").as_deref(), Some(r#"{"database":"x"}"#));
-        assert!(legacy_notion_config(&d, "boris").is_none());
-        let boris = legacy_account_patch(&d, "boris");
-        assert_eq!(boris["autoSearchMinutes"], 5);
     }
 
     #[test]

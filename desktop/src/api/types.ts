@@ -117,7 +117,6 @@ export interface SessionInfo {
   displayName: string;
   /** Аватар в виде data-URL; приходит из облака вместе с остальными настройками. */
   avatar?: string | null;
-  isCloud: boolean;
   cloudUser: CloudUserInfo | null;
   databasePath: string;
 }
@@ -161,7 +160,6 @@ export interface DevicePrefs {
   startMinimized: boolean;
   launchAtLogin: boolean;
   trayHintShown: boolean;
-  rememberedUser: string | null;
   lastSection: string;
   listSort: string;
   listSortDescending: boolean;
@@ -198,8 +196,6 @@ export interface BootInfo {
   version: string;
   platform: "windows" | "macos" | "linux";
   cloudAvailable: boolean;
-  hasUsers: boolean;
-  existingInstall: boolean;
   session: SessionInfo | null;
   device: DevicePrefs;
   error: string | null;

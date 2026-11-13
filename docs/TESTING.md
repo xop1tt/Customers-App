@@ -32,7 +32,7 @@
 | `cloud::config::tests::links_from_emails_return_to_the_app` | ссылки из писем ведут в приложение (`leadgenerator://`) |
 | `reports::tests::crash_reports_of_old_beta_are_not_ours` | отчёты о сбоях старой Customers Beta не попадают в отчёты приложения |
 | `updates::tests::never_picks_old_beta_installers` | файлы старых Beta-сборок не устанавливаются, даже если оказались в релизе |
-| `app::data::tests::backups_go_to_default_folder_or_keep_using_the_legacy_one` | резервные копии — в «Документах», прежняя папка копий продолжает использоваться |
+| `app::data::tests::backups_go_to_the_default_folder_of_the_account` | резервные копии — в «Документах», в папке своей учётной записи |
 | `tests/test_release_check.py` (25) | `release-check.cjs` проходит на проекте и ловит 20 видов порчи (идентичность, конфигурация Beta, признак `beta`, модуль `debug`, команды `debug_*`, devtools, AppId и вариант Beta установщика, облако Beta, ключи сервера); тег с суффиксом отклоняется; `set-version.cjs` принимает только X.Y.Z |
 | `tests/test_workflows.py::test_no_beta_channel_workflows` | ни один workflow не собирает и не публикует Beta и Pre-release |
 

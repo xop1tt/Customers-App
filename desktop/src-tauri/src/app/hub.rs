@@ -254,8 +254,7 @@ mod tests {
 
     fn signed_in(f: &super::super::testing::Fixture) -> Arc<Core> {
         let core = Core::new(f.env.clone());
-        let pw = uuid::Uuid::new_v4().to_string();
-        core.register("anna", &pw, &pw, false).unwrap();
+        core.sign_in_test_user("anna");
         core
     }
 

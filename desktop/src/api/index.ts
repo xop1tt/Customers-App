@@ -15,13 +15,7 @@ const ids = (ids: string[]) => ({ ids });
 export const api = {
   // запуск и сессия
   bootInfo: () => call<BootInfo>("boot_info"),
-  register: (username: string, password: string, confirm: string, remember: boolean) => call<string | null>("register", { username, password, confirm, remember }),
-  login: (username: string, password: string, remember: boolean) => call("login", { username, password, remember }),
-  localAccounts: () => call<string[]>("local_accounts"),
   logout: () => call("logout"),
-  setRemembered: (on: boolean) => call("set_remembered", { on }),
-  isRemembered: () => call<boolean>("is_remembered"),
-  changePassword: (old: string, next: string, confirm: string) => call("change_password", { old, new: next, confirm }),
   cloudSignIn: (email: string, password: string) => call("cloud_sign_in", { email, password }),
   cloudSignUp: (email: string, password: string, confirm: string, username: string) => call<string | null>("cloud_sign_up", { email, password, confirm, username }),
   setProfile: (name?: string, avatar?: string) => call<SessionInfo>("set_profile", { name: name ?? null, avatar: avatar ?? null }),
@@ -36,7 +30,6 @@ export const api = {
   resendCloudEmailChange: () => call("resend_cloud_email_change"),
   deleteCloudAccount: (password: string) => call<string>("delete_cloud_account", { password }),
   cloudStats: () => call<Record<string, number>>("cloud_stats"),
-  importLocal: (username: string, password: string) => call<string>("import_local", { username, password }),
   handleAuthUrl: (url: string) => call<AuthCallback>("handle_auth_url", { url }),
 
   // данные

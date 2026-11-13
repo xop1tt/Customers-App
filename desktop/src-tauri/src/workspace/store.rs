@@ -908,12 +908,6 @@ impl WorkspaceStore {
         self.set_meta("seed_deduped", "1")
     }
 
-    /// Шаблон локального Workspace не уходит на сервер: при подключении облака Workspace создаётся там со своим шаблоном.
-    pub fn drop_seed_ops(&self) -> AppResult<()> {
-        self.conn.execute("DELETE FROM sync_outbox WHERE entity IN ('pipelines', 'pipeline_stages', 'collections')", [])?;
-        Ok(())
-    }
-
     pub fn row_counts(&self) -> AppResult<std::collections::BTreeMap<String, i64>> {
         db::row_counts(&self.conn)
     }

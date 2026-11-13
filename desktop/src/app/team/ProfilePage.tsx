@@ -21,6 +21,7 @@ import { messageMember, refreshTeam } from "../../state/team";
 export function ProfilePage() {
   const session = useStore((s) => s.session);
   const ws = useStore((s) => s.ws);
+  const cloudAccount = useStore((s) => !!s.sync?.enabled);
   const team = useStore((s) => s.team);
   const id = useStore((s) => s.profileId);
   const [editing, setEditing] = useState(false);
@@ -73,7 +74,7 @@ export function ProfilePage() {
             {(m.title || m.department) && <div className="profile-sub">{[m.title, m.department].filter(Boolean).join(" · ")}</div>}
             <div className="row profile-tags">
               <Tag tone="blue" icon="shield">{m.role_name}</Tag>
-              {!cloud && <Tag>{session.isCloud ? "Облачная учётная запись" : "Локальная учётная запись"}</Tag>}
+              {!cloud && cloudAccount && <Tag>Облачная учётная запись</Tag>}
             </div>
           </div>
           <span className="grow" />

@@ -1,4 +1,4 @@
-// Локальный сервер, вместо внешних сервисов: RSS-лента, GitHub (обновления), вебхук, WebDAV, Битрикс24.
+// Локальный сервер, вместо внешних сервисов: RSS-лента, GitHub (обновления), вебхук, WebDAV, Битрикс24, облако (вход Supabase).
 // Ядро приложения в сборке e2e подменяет адреса вида https://rss.e2e.example на этот сервер (CUSTOMERS_E2E_REWRITE),
 // поэтому проверяется настоящий сетевой код: разбор ответов, повторы, 304, заголовки, тело запросов.
 // Всё, что получил сервер, запоминается в `received` и сверяется с эталоном после прогона (run.cjs).
@@ -12,6 +12,7 @@ const HOSTS = {
   dav: "https://dav.e2e.example",
   b24: "https://b24.e2e.example",
   dl: "https://dl.e2e.example",
+  cloud: "https://cloud.e2e.example",
 };
 
 const RSS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -37,7 +38,55 @@ function release(tag) {
   };
 }
 
+/** Облако Supabase для проверок: вход, регистрация, пользователь, смена пароля, пустые таблицы и RPC. Данные CRM на сервере не хранятся. */
+function cloud() {
+  const users = new Map(); // почта в нижнем регистре → { id, email, password, name }
+  const tokens = new Map(); // access- и refresh-токены → почта
+  const uuid = (email) => { const h = crypto.createHash("sha256").update(email).digest("hex"); return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`; };
+  const userJson = (u) => ({ id: u.id, email: u.email, email_confirmed_at: "2026-11-12T00:00:00Z", created_at: "2026-11-12T00:00:00Z", user_metadata: u.name ? { display_name: u.name } : {} });
+  const session = (u) => {
+    const access = `at-${crypto.randomUUID()}`, refresh = `rt-${crypto.randomUUID()}`;
+    tokens.set(access, u.email); tokens.set(refresh, u.email);
+    return { access_token: access, refresh_token: refresh, expires_in: 3600, token_type: "bearer", user: userJson(u) };
+  };
+  const bearer = (req) => tokens.get(String(req.headers.authorization || "").replace(/^Bearer /, ""));
+  /** Возвращает true, если запрос обработан. `rest` — путь после `/cloud`. */
+  return function handle(req, rest, body, json, empty) {
+    const data = () => { try { return JSON.parse(body.toString() || "{}"); } catch { return {}; } };
+    const url = new URL(req.url, "http://127.0.0.1");
+    if (rest.startsWith("/functions/v1/email-gate")) return json(200, {});
+    if (rest.startsWith("/functions/v1/delete-account")) { const e = bearer(req); if (e) users.delete(e); return json(200, {}); }
+    if (rest === "/auth/v1/signup") {
+      const b = data(); const email = String(b.email || "").toLowerCase();
+      if (users.has(email)) return json(422, { error_code: "user_already_exists", msg: "User already registered" });
+      const u = { id: uuid(email), email, password: b.password, name: b.data && b.data.display_name };
+      users.set(email, u);
+      return json(200, session(u));
+    }
+    if (rest === "/auth/v1/token") {
+      const b = data();
+      if (url.searchParams.get("grant_type") === "refresh_token") {
+        const u = users.get(tokens.get(b.refresh_token));
+        return u ? json(200, session(u)) : json(400, { error_code: "refresh_token_not_found", msg: "Invalid Refresh Token" });
+      }
+      const u = users.get(String(b.email || "").toLowerCase());
+      return u && u.password === b.password ? json(200, session(u)) : json(400, { error_code: "invalid_credentials", msg: "Invalid login credentials" });
+    }
+    if (rest === "/auth/v1/user") {
+      const u = users.get(bearer(req));
+      if (!u) return json(401, { error_code: "bad_jwt", msg: "invalid JWT" });
+      if (req.method === "PUT") { const b = data(); if (b.password) u.password = b.password; }
+      return json(200, userJson(u));
+    }
+    if (rest.startsWith("/auth/v1/logout")) return empty(204);
+    if (rest.startsWith("/rest/v1/rpc/")) return json(200, rest.endsWith("/sync_push") || rest.endsWith("/sync_stats") ? {} : []);
+    if (rest.startsWith("/rest/v1/")) return json(200, []);
+    return json(404, { message: "нет такого адреса в облаке проверки" });
+  };
+}
+
 function start({ live = false } = {}) {
+  const cloudHandler = cloud();
   const received = { rssRequests: [], webhook: [], dav: [], b24: [], github: [], other: [] };
   const state = { mode: "none" }; // none | uptodate:<версия> | available | error — переключается сценарием через событие e2e-mock
 
@@ -50,6 +99,9 @@ function start({ live = false } = {}) {
       const path = url.pathname;
       const json = (code, obj, headers = {}) => { res.writeHead(code, { "content-type": "application/json", ...headers }); res.end(JSON.stringify(obj)); };
       const entry = { method: req.method, path, query: url.search, size: body.length, headers: req.headers };
+
+      const empty = (code) => { res.writeHead(code); res.end(); };
+      if (path.startsWith("/cloud/")) return cloudHandler(req, path.slice("/cloud".length), body, json, empty);
 
       if (path === "/rss/feed.xml") {
         const etag = '"e2e-feed-1"';

@@ -310,8 +310,8 @@ impl Core {
     /// Нужно ли при запуске показать «Что нового», и что именно.
     pub async fn whats_new(self: &Arc<Self>) -> CmdResult<Value> {
         let prefs = self.env.device_prefs();
-        let boot = self.boot_info();
-        match whatsnew::decide(prefs.last_seen_version.as_deref(), &self.env.version, boot.existing_install) {
+        // Первый запуск без входа только запоминает версию; обновление у вошедшего пользователя показывает экран.
+        match whatsnew::decide(prefs.last_seen_version.as_deref(), &self.env.version, self.session().is_some()) {
             Decision::None => Ok(json!({"show": false})),
             Decision::RecordOnly => {
                 self.mark_whats_new_seen();

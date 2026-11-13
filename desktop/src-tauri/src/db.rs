@@ -41,11 +41,6 @@ impl DbKey {
         Some(DbKey::Passphrase(v.to_string()))
     }
 
-    pub fn raw_hex(hex: &str) -> Option<Self> {
-        let h = hex.to_lowercase();
-        (h.len() == 64 && h.chars().all(|c| c.is_ascii_hexdigit())).then_some(DbKey::Raw(h))
-    }
-
     /// Новый случайный ключ.
     pub fn random() -> Self {
         use rand::TryRng;

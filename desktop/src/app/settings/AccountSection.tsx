@@ -24,11 +24,11 @@ export function AccountSection() {
           <h3 className="ellipsis">{session.displayName}</h3>
           <span className="muted">{syncView(sync)?.label ?? "Синхронизировано"}</span>
         </div>
-        {session.isCloud && <Button icon="refresh" busy={sync?.kind === "syncing"} onClick={() => void attempt(() => api.syncNow())}>Синхронизировать</Button>}
+        {sync?.enabled && <Button icon="refresh" busy={sync?.kind === "syncing"} onClick={() => void attempt(() => api.syncNow())}>Синхронизировать</Button>}
         <Button icon="logout" onClick={() => void leaveSession()}>Выйти</Button>
       </div>
       <ProfileGroup />
-      {session.isCloud && <CloudAccountActions />}
+      {sync?.enabled && <CloudAccountActions />}
       <CloudAccount />
     </>
   );
@@ -57,10 +57,10 @@ function ProfileGroup() {
   const pick = async (f: File | undefined) => {
     if (!f) return;
     const url = await attempt(() => avatarFromFile(f));
-    if (url) { await attempt(() => api.setProfile(undefined, url)); toast(session.isCloud ? "Фото сохранено и появится на других устройствах" : "Фото сохранено", "success"); }
+    if (url) { await attempt(() => api.setProfile(undefined, url)); toast("Фото сохранено и появится на других устройствах", "success"); }
   };
   return (
-    <Group title="Профиль" sub="profile" note={session.isCloud ? "Имя и фото хранятся в облаке и одинаковы на всех ваших устройствах." : "Имя и фото хранятся на этом компьютере."}>
+    <Group title="Профиль" sub="profile" note="Имя и фото хранятся в облаке и одинаковы на всех ваших устройствах.">
       <SettingRow title="Фото" hint="Квадратная картинка, лучше от 200 пикселей.">
         <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
         <Button icon="upload" onClick={() => file.current?.click()}>{session.avatar ? "Заменить" : "Выбрать"}</Button>
@@ -118,16 +118,14 @@ function CloudAccount() {
   );
 }
 
-/** Перенос локального аккаунта и удаление облачного: подраздел «Профиль». */
+/** Удаление облачного аккаунта: подраздел «Профиль». */
 function CloudAccountActions() {
-  const [dialog, setDialog] = useState<"import" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"delete" | null>(null);
   return (
     <>
       <Group title="Облачный аккаунт" sub="profile">
-        <SettingRow title="Перенести данные старого аккаунта" hint="Локальные аккаунты больше не создаются. Здесь можно один раз перенести лиды и настройки прежнего локального аккаунта в облачный."><Button onClick={() => setDialog("import")}>Перенести…</Button></SettingRow>
         <SettingRow title="Удалить облачный аккаунт" hint="Все облачные данные будут стёрты без возможности восстановления. Данные на этом компьютере останутся."><Button variant="danger" onClick={() => setDialog("delete")}>Удалить…</Button></SettingRow>
       </Group>
-      {dialog === "import" && <ImportDialog onClose={() => setDialog(null)} />}
       {dialog === "delete" && <DeleteDialog onClose={() => setDialog(null)} />}
     </>
   );
@@ -165,31 +163,6 @@ function EmailDialog({ onClose }: { onClose: () => void }) {
           <Field label="Новый адрес"><TextInput value={email} onChange={setEmail} placeholder="name@example.com" data-autofocus /></Field>
           <Field label="Пароль от аккаунта"><PasswordInput value={password} onChange={setPassword} /></Field>
           <div><Button variant="primary" busy={busy} disabled={!/^\S+@\S+\.\S+$/.test(email.trim()) || !password} onClick={() => void request()}>Получить код</Button></div>
-        </div>
-      )}
-    </Dialog>
-  );
-}
-
-function ImportDialog({ onClose }: { onClose: () => void }) {
-  const [names, setNames] = useState<string[]>([]);
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { void api.localAccounts().then((n) => { setNames(n); setName(n[0] ?? ""); }).catch(() => {}); }, []);
-  const go = async () => {
-    setBusy(true);
-    const r = await attempt(() => api.importLocal(name, password));
-    setBusy(false);
-    if (r) { toast(r, "success"); onClose(); }
-  };
-  return (
-    <Dialog title="Перенести локальный аккаунт" onClose={onClose} width={440} footer={<><Button variant="ghost" onClick={onClose}>Отмена</Button><Button variant="primary" busy={busy} disabled={!name || !password} onClick={() => void go()}>Перенести</Button></>}>
-      {names.length === 0 ? <p className="muted">На этом компьютере нет локальных аккаунтов.</p> : (
-        <div className="col" style={{ gap: 12 }}>
-          <Field label="Локальный аккаунт"><TextInput value={name} onChange={setName} list="local-accounts" /></Field>
-          <datalist id="local-accounts">{names.map((n) => <option key={n} value={n} />)}</datalist>
-          <Field label="Пароль локального аккаунта"><PasswordInput value={password} onChange={setPassword} /></Field>
         </div>
       )}
     </Dialog>

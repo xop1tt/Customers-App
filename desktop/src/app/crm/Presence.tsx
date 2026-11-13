@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { WsPresence } from "../../api/types";
 import { useStore, NONE } from "../../state/store";
+import { isHidden } from "../../lib/visibility";
 
 const EVERY = 25_000;
 
@@ -17,7 +18,7 @@ export function usePresence(entity?: { type: string; id: string }): WsPresence[]
   useEffect(() => {
     if (!cloud) { setList([]); return; }
     let live = true;
-    const tick = () => { api.wsPresence(type, id).then((l) => { if (live) setList(l.filter((p) => p.user_id !== me)); }, () => { if (live) setList([]); }); };
+    const tick = () => { if (isHidden()) return; api.wsPresence(type, id).then((l) => { if (live) setList(l.filter((p) => p.user_id !== me)); }, () => { if (live) setList([]); }); };
     tick();
     const t = setInterval(tick, EVERY);
     return () => { live = false; clearInterval(t); };
