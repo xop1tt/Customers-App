@@ -153,7 +153,7 @@ describe("интерфейс CRM", () => {
     await waitFor(() => expect(getState().ws).not.toBeNull());
     expect(document.querySelector(".ws-avatars")).toBeNull();
     const ws = getState().ws as WsState;
-    const people = ["Анна", "Борис", "Вера", "Глеб", "Дина", "Егор"].map((n, i) => ({ userId: `u${i}`, displayName: n, role: "employee", roleName: "Сотрудник", rank: 40, avatarPath: null, email: null }));
+    const people = ["Алексей", "Борис", "Вера", "Глеб", "Дина", "Егор"].map((n, i) => ({ userId: `u${i}`, displayName: n, role: "employee", roleName: "Сотрудник", rank: 40, avatarPath: null, email: null }));
     setState({ ws: { ...ws, isCloud: true, members: people } });
     const btn = await screen.findByRole("button", { name: "Участники: 6" });
     // Широкое окно: 4 аватара и «+2»; узкое (< 1100 px): один и «+5».

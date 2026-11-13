@@ -3,21 +3,21 @@
 import { isTauri } from "../api/backend";
 
 export async function pickFolder(title: string, defaultPath?: string): Promise<string | null> {
-  if (!isTauri) return "/Users/anna/Documents/Customers";
+  if (!isTauri) return "/Users/demo/Documents/Customers";
   const { open } = await import("@tauri-apps/plugin-dialog");
   const r = await open({ directory: true, multiple: false, title, defaultPath });
   return typeof r === "string" ? r : null;
 }
 
 export async function pickFile(title: string, extensions?: string[]): Promise<string | null> {
-  if (!isTauri) return "/Users/anna/Documents/exclusions.csv";
+  if (!isTauri) return "/Users/demo/Documents/exclusions.csv";
   const { open } = await import("@tauri-apps/plugin-dialog");
   const r = await open({ multiple: false, directory: false, title, filters: extensions ? [{ name: "Файлы", extensions }] : undefined });
   return typeof r === "string" ? r : null;
 }
 
 export async function pickSavePath(title: string, defaultName: string, extension: string): Promise<string | null> {
-  if (!isTauri) return `/Users/anna/Documents/${defaultName}`;
+  if (!isTauri) return `/Users/demo/Documents/${defaultName}`;
   const { save } = await import("@tauri-apps/plugin-dialog");
   const r = await save({ title, defaultPath: defaultName, filters: [{ name: extension.toUpperCase(), extensions: [extension] }] });
   return r ?? null;

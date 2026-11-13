@@ -249,18 +249,19 @@ impl Core {
                 }
             }
         }));
-        // Приложение может работать в фоне днями: проверяем суточную копию каждый час.
+        // Приложение может работать в фоне днями: проверяем суточную копию каждый час. Первая проверка — не сразу:
+        // запуск и открытие окна важнее копии базы, а копирование файла идёт в отдельном потоке, не занимая рабочие потоки.
         let (core, session) = (self.clone(), s.clone());
         tasks.push(tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(90)).await;
             loop {
-                core.daily_backup_if_needed(&session);
+                let (core, session) = (core.clone(), session.clone());
+                let _ = tokio::task::spawn_blocking(move || core.daily_backup_if_needed(&session)).await;
                 tokio::time::sleep(Duration::from_secs(3600)).await;
             }
         }));
         drop(tasks);
-        if s.is_cloud {
-            self.start_sync(s);
-        }
+        self.start_sync(s);
     }
 }
 
@@ -298,7 +299,7 @@ mod tests {
     async fn search_adds_leads_reports_and_notifies() {
         let f = fixture(false, vec![Ok(HttpResponse::new(200, RSS_XML))]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.sign_in_test_user("anna");
         core.set_search_settings(&rss_settings()).unwrap();
         core.run_search(true, None, false).unwrap();
         wait_finished(&core).await;
@@ -321,7 +322,7 @@ mod tests {
     async fn disabled_sources_give_a_clear_message_and_vk_needs_a_token() {
         let f = fixture(false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.sign_in_test_user("anna");
         let s = core.session().unwrap();
         let mut settings = SearchSettings::blank_start();
         settings.rss.enabled = false;
@@ -347,10 +348,10 @@ mod tests {
     async fn settings_are_stored_in_the_database_and_survive_reopen() {
         let f = fixture(false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", true).unwrap();
+        core.sign_in_test_user("anna");
         core.set_search_settings(&rss_settings()).unwrap();
         core.logout();
-        core.login("anna", "password-1", false).unwrap();
+        core.sign_in_test_user("anna");
         assert!(core.session().unwrap().settings.lock().unwrap().rss.enabled);
     }
 
@@ -358,7 +359,7 @@ mod tests {
     async fn only_one_search_runs_at_a_time_and_stop_cancels() {
         let f = fixture(false, vec![Ok(HttpResponse::new(200, RSS_XML))]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.sign_in_test_user("anna");
         core.set_search_settings(&rss_settings()).unwrap();
         let s = core.session().unwrap();
         s.search.lock().unwrap().running = true; // имитируем идущий поиск

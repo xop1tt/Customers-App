@@ -87,13 +87,13 @@ describe("показатели сотрудников", () => {
   it("сделки по ответственному, задачи по исполнителю, события по автору", () => {
     const from = new Date(2026, 10, 1);
     const deals = [
-      deal("a", { owner_id: "anna" }),
-      deal("b", { owner_id: "anna", status: "won", closed_at: "2026-11-05T10:00:00Z" }),
+      deal("a", { owner_id: "alex" }),
+      deal("b", { owner_id: "alex", status: "won", closed_at: "2026-11-05T10:00:00Z" }),
       deal("c", { owner_id: "boris", status: "lost", closed_at: "2026-11-05T10:00:00Z" }),
     ];
     const tasks = [
-      rec("t1", { assignee_id: "anna", status: "done", completed_at: "2026-11-04T10:00:00Z" }),
-      rec("t2", { assignee_id: "anna", status: "done", completed_at: "2026-10-04T10:00:00Z" }), // вне периода
+      rec("t1", { assignee_id: "alex", status: "done", completed_at: "2026-11-04T10:00:00Z" }),
+      rec("t2", { assignee_id: "alex", status: "done", completed_at: "2026-10-04T10:00:00Z" }), // вне периода
       rec("t3", { assignee_id: "vera", status: "todo", due_at: "2026-11-10T10:00:00Z" }), // просрочена
       rec("t4", { assignee_id: "vera", status: "cancelled", due_at: "2026-11-10T10:00:00Z" }),
       rec("t5", { assignee_id: null, status: "todo", due_at: "2026-11-01T10:00:00Z" }),
@@ -105,8 +105,8 @@ describe("показатели сотрудников", () => {
     ];
     const rows = team(deals, tasks, activities, P, from, now);
     const by = (o: string | null) => rows.find((r) => r.owner === o)!;
-    expect(rows[0]!.owner).toBe("anna");
-    expect([by("anna").open, by("anna").won, by("anna").winRate, by("anna").tasksDone]).toEqual([1, 1, 1, 1]);
+    expect(rows[0]!.owner).toBe("alex");
+    expect([by("alex").open, by("alex").won, by("alex").winRate, by("alex").tasksDone]).toEqual([1, 1, 1, 1]);
     expect([by("boris").lost, by("boris").winRate, by("boris").activities]).toEqual([1, 0, 1]);
     expect([by("vera").overdue, by("vera").open]).toEqual([1, 0]);
     expect(by(null).overdue).toBe(1);

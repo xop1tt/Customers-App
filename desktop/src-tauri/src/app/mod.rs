@@ -13,7 +13,6 @@ pub mod system;
 pub mod update;
 pub mod workspace;
 
-use crate::accounts::LocalAccounts;
 use crate::cloud::auth::{CloudAuth, CloudSession, SessionStore};
 use crate::cloud::error::CloudError;
 use crate::error::AppError;
@@ -83,11 +82,6 @@ impl From<CloudError> for CmdError {
         CmdError::new(code, e.to_string())
     }
 }
-impl From<crate::accounts::AuthError> for CmdError {
-    fn from(e: crate::accounts::AuthError) -> Self {
-        CmdError::msg(e.to_string())
-    }
-}
 
 /// Сессия облака в защищённом хранилище (имя секрета `cloud.session` — как в прежних версиях).
 pub struct SecretSessionStore(pub Arc<dyn SecretStore>);
@@ -120,7 +114,6 @@ pub struct Env {
     pub secrets: Arc<dyn SecretStore>,
     pub keys: DatabaseKeys,
     pub device: Mutex<PrefsFile<DevicePrefs>>,
-    pub accounts: LocalAccounts,
     pub transport: Arc<dyn HttpTransport>,
     pub events: Arc<dyn Events>,
     pub opener: Arc<dyn Opener>,
@@ -232,7 +225,6 @@ pub mod testing {
         });
         let env = Arc::new(Env {
             device: Mutex::new(PrefsFile::load(&paths.device_prefs())),
-            accounts: LocalAccounts::open_with(&paths.root, 1000).unwrap(),
             keys: DatabaseKeys::new(secrets.clone()),
             errors: ErrorLog::new(&paths.logs),
             paths,

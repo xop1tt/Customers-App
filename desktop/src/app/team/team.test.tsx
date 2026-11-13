@@ -11,7 +11,7 @@ import { getState, setState } from "../../state/store";
 import { App } from "../App";
 
 afterEach(cleanup);
-beforeEach(() => { resetWsMock(); resetChatMock(); setState({ section: "home", record: null }); });
+beforeEach(() => { resetWsMock(); resetChatMock(); setState({ section: "home", record: null, chatPopup: false, bellOpen: false }); });
 
 async function nav() {
   render(<App />);
@@ -25,11 +25,11 @@ async function nav() {
 }
 
 describe("команда в левой панели", () => {
-  it("«Сообщения» — отдельный модуль рейки с числом непрочитанных; в группе «Команда» уведомления, группа сворачивается", async () => {
+  it("«Чат» — кнопка рейки с числом непрочитанных; в группе «Команда» уведомления, группа сворачивается", async () => {
     const n = await nav();
     const rail = within(screen.getByRole("navigation", { name: "Модули" }));
-    await waitFor(() => expect(rail.getByRole("button", { name: "Сообщения, новых: 3" })).toBeInTheDocument());
-    expect(Array.from(n.querySelectorAll(".side-scroll .nav-item")).some((b) => /Сообщения/.test(b.textContent ?? ""))).toBe(false);
+    await waitFor(() => expect(rail.getByRole("button", { name: "Чат, новых: 3" })).toBeInTheDocument());
+    expect(Array.from(n.querySelectorAll(".side-scroll .nav-item")).some((b) => /Сообщения|Чат/.test(b.textContent ?? ""))).toBe(false);
     // Уведомления — колокольчик у учётной записи с красным числом; в группе «Команда» их больше нет.
     const bell = within(n).getByRole("button", { name: "Уведомления, новых: 2" });
     expect(bell.parentElement?.querySelector(".red-badge")?.textContent).toBe("2");
@@ -44,28 +44,57 @@ describe("команда в левой панели", () => {
   });
 });
 
+describe("структура организации", () => {
+  it("вкладка в левой панели: вертикальное дерево, правый клик по карточке открывает меню, клик — профиль", async () => {
+    const n = await nav();
+    fireEvent.click(within(n).getByRole("button", { name: /Структура организации/ }));
+    const tree = await screen.findByRole("tree");
+    const items = within(tree).getAllByRole("treeitem").map((li) => li.querySelector(".org-name")?.textContent ?? "");
+    // Борис — глава, под ним вы, под вами Вера и Глеб.
+    expect(items.findIndex((t) => t.includes("Борис"))).toBeLessThan(items.findIndex((t) => t.includes("Вера")));
+    expect(within(tree).getByText("подчинённых: 2")).toBeInTheDocument();
+    fireEvent.contextMenu(within(tree).getByText("Вера Ким"));
+    expect((await screen.findAllByRole("menuitem")).map((i) => i.textContent)).toEqual(["Открыть профиль", "Открыть чат", "Скопировать имя", "Скопировать почту"]);
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(within(tree).getByText("Вера Ким"));
+    expect(await screen.findByRole("heading", { name: "Вера Ким" })).toBeInTheDocument();
+  });
+
+  it("правый клик по карточке сотрудника в «Сотрудниках» открывает меню", async () => {
+    const n = await nav();
+    fireEvent.click(within(n).getByRole("button", { name: /Сотрудники/ }));
+    const list = await screen.findByRole("list", { name: "Сотрудники" });
+    fireEvent.contextMenu(within(list).getByText("Вера Ким"));
+    expect((await screen.findAllByRole("menuitem")).map((i) => i.textContent)).toContain("Скопировать имя");
+    expect(getState().section).toBe("people");
+  });
+
+  it("возле каждого сотрудника, кроме вас, кнопка «Открыть чат»: открывает личный чат", async () => {
+    const n = await nav();
+    fireEvent.click(within(n).getByRole("button", { name: /Сотрудники/ }));
+    const list = await screen.findByRole("list", { name: "Сотрудники" });
+    expect(within(list).queryByRole("button", { name: /Открыть чат: Алексей/ })).toBeNull();
+    fireEvent.click(within(list).getByRole("button", { name: "Открыть чат: Борис Петров" }));
+    await waitFor(() => expect(getState().chatPopup).toBe(true));
+    expect(getState().chatOpen).toBeTruthy();
+  });
+});
+
 describe("сотрудники и профили", () => {
-  it("список, структура и профиль коллеги с кнопкой «Отправить сообщение»", async () => {
+  it("список и профиль коллеги с кнопкой «Отправить сообщение»", async () => {
     const n = await nav();
     fireEvent.click(within(n).getByRole("button", { name: /Сотрудники/ }));
     const list = await screen.findByRole("list", { name: "Сотрудники" });
     expect(within(list).getByText("Борис Петров")).toBeInTheDocument();
     expect(within(list).getAllByLabelText("В сети").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("tab", { name: "Структура" }));
-    const tree = await screen.findByRole("list", { name: "Структура" });
-    const rows = within(tree).getAllByRole("listitem").map((li) => li.textContent ?? "");
-    // Борис — глава, под ним вы, под вами Вера и Глеб.
-    expect(rows.findIndex((t) => t.includes("Борис"))).toBeLessThan(rows.findIndex((t) => t.includes("Вера")));
-    expect(within(tree).getByText("подчинённых: 2")).toBeInTheDocument();
-
-    fireEvent.click(within(tree).getByText("Вера Ким"));
+    fireEvent.click(within(list).getByText("Вера Ким"));
     expect(await screen.findByRole("heading", { name: "Вера Ким" })).toBeInTheDocument();
     expect(screen.getByText("Менеджер по продажам · Продажи")).toBeInTheDocument();
     expect(screen.getByText("vera@example.com")).toBeInTheDocument();
     expect(screen.getByText(/с 1 февраля 2023/)).toBeInTheDocument();
     // Руководитель — ссылка на профиль.
     const facts = screen.getByText("Руководитель").closest(".profile-fact") as HTMLElement;
-    expect(within(facts).getByRole("button", { name: /anna|Анна/i })).toBeInTheDocument();
+    expect(within(facts).getByRole("button", { name: /alex|Алексей/i })).toBeInTheDocument();
 
     // Кнопка «Назад» возвращает к списку сотрудников.
     fireEvent.click(screen.getByRole("button", { name: "Назад" }));
@@ -73,8 +102,9 @@ describe("сотрудники и профили", () => {
     fireEvent.click(await screen.findByText("Вера Ким"));
     await screen.findByRole("heading", { name: "Вера Ким" });
     fireEvent.click(screen.getByRole("button", { name: "Отправить сообщение" }));
-    await waitFor(() => expect(getState().section).toBe("chat"));
-    expect(await screen.findByRole("heading", { name: "Вера Ким" })).toBeInTheDocument();
+    await waitFor(() => expect(getState().chatPopup).toBe(true));
+    // Личный чат открывается во всплывающем окне, профиль остаётся под ним.
+    expect(await within(await screen.findByRole("dialog", { name: "Чат" })).findByRole("heading", { name: "Вера Ким" })).toBeInTheDocument();
   });
 
   it("руководитель меняет карточку подчинённого; круг руководителей не предлагается", async () => {
@@ -119,7 +149,7 @@ describe("сотрудники и профили", () => {
 describe("сообщения", () => {
   it("лента, отправка с @упоминанием из подсказки, непрочитанное сбрасывается", async () => {
     await nav();
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Сообщения/ }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Чат/ }));
     const items = await screen.findByRole("complementary", { name: "Обсуждения" });
     fireEvent.click(await within(items).findByText("Отдел продаж"));
     expect(await screen.findByText(/подскажи, где шаблон договора/)).toBeInTheDocument();
@@ -141,22 +171,22 @@ describe("сообщения", () => {
 
   it("карточка CRM в сообщении: выбор, отправка без текста и переход к карточке", async () => {
     await nav();
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Сообщения/ }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Чат/ }));
     const items = await screen.findByRole("complementary", { name: "Обсуждения" });
     fireEvent.click(await within(items).findByText("Отдел продаж"));
     await screen.findByText(/подскажи, где шаблон договора/);
-    fireEvent.click(screen.getByRole("button", { name: "Прикрепить карточку CRM" }));
-    const dlg = await screen.findByRole("dialog", { name: "Прикрепить карточку" });
-    fireEvent.click(within(dlg).getByRole("tab", { name: "Компании" }));
+    fireEvent.click(screen.getByRole("button", { name: "Прикрепить вложение" }));
+    const dlg = await screen.findByRole("dialog", { name: "Прикрепить вложение" });
+    fireEvent.click(within(dlg).getByRole("button", { name: "Компании" }));
     const list = await within(dlg).findByRole("list", { name: "Карточки" });
     const first = within(list).getAllByRole("button")[0]!;
     const name = first.textContent!.replace("🏢", "").trim();
     fireEvent.click(first);
-    const pending = await screen.findByLabelText("Карточки в сообщении");
+    const pending = await screen.findByLabelText("Вложения сообщения");
     expect(within(pending).getByText(name.split(/\s{2,}/)[0]!, { exact: false })).toBeInTheDocument();
     // Без текста: отправляется одна карточка.
     fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
-    await waitFor(() => expect(screen.queryByLabelText("Карточки в сообщении")).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText("Вложения сообщения")).toBeNull());
     const sent = (await screen.findAllByRole("button", { name: /Компания/ })).at(-1)!;
     expect(sent.className).toContain("chat-card");
     fireEvent.click(sent);
@@ -165,7 +195,7 @@ describe("сообщения", () => {
 
   it("новое групповое обсуждение с участниками, участники добавляют коллег", async () => {
     await nav();
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Сообщения/ }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Чат/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Новое сообщение или обсуждение" }));
     fireEvent.click(await screen.findByText("Групповое обсуждение"));
     const dialog = await screen.findByRole("dialog", { name: "Новое обсуждение" });
@@ -208,10 +238,13 @@ describe("уведомления", () => {
   it("список упоминаний, переход к обсуждению отмечает прочитанным", async () => {
     const n = await nav();
     fireEvent.click(within(n).getByRole("button", { name: /^Уведомления/ }));
-    const list = await screen.findByRole("list", { name: "Входящие" });
+    const list = await screen.findByRole("list", { name: "Уведомления" });
+    // Всплывающее окно у колокольчика, а не отдельный экран: раздел не меняется.
+    expect(list.closest(".popover")).not.toBeNull();
+    expect(getState().section).toBe("people");
     expect(within(list).getByText("Глеб Орлов упоминает вас в заметке")).toBeInTheDocument();
     fireEvent.click(within(list).getByText("Вера Ким упоминает вас в обсуждении"));
-    await waitFor(() => expect(getState().section).toBe("chat"));
+    await waitFor(() => expect(getState().chatPopup).toBe(true));
     await waitFor(() => expect(getState().chat?.notifications.find((x) => x.kind === "mention")?.read).toBe(true));
   });
 });

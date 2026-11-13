@@ -34,13 +34,13 @@ describe("имя профиля", () => {
     const dialog = await screen.findByRole("dialog", { name: "Запрос на смену имени" });
     const send = within(dialog).getByRole("button", { name: "Отправить запрос" });
     expect(send).toBeDisabled();
-    fireEvent.change(within(dialog).getByLabelText("Новое имя"), { target: { value: "Анна Ким" } });
+    fireEvent.change(within(dialog).getByLabelText("Новое имя"), { target: { value: "Алексей Ким" } });
     fireEvent.change(within(dialog).getByLabelText("Причина"), { target: { value: "вышла замуж" } });
     fireEvent.click(send);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Запрос на смену имени" })).toBeNull());
     const direct = (await api.wsChat<ChatConversation[]>("chat_list")).find((c) => c.kind === "direct" && c.participants.some((p) => p.user_id === BORIS))!;
     const { messages } = await api.wsChat<{ messages: ChatMessage[] }>("chat_messages", { conversation: direct.id });
-    expect(messages.some((x) => x.body.includes("Запрос на смену имени профиля: «Анна Ким»") && x.body.includes("вышла замуж"))).toBe(true);
+    expect(messages.some((x) => x.body.includes("Запрос на смену имени профиля: «Алексей Ким»") && x.body.includes("вышла замуж"))).toBe(true);
   });
 
   it("владелец имя меняет сам", async () => {
@@ -86,8 +86,8 @@ describe("отделы", () => {
     fireEvent.click(within(dialog).getAllByRole("checkbox")[0]!);
     fireEvent.click(create);
     await waitFor(() => expect(within(screen.getByLabelText("Отделы")).getByText("Поддержка")).toBeInTheDocument());
-    const section = within(screen.getByLabelText("Отделы")).getByText("Поддержка").closest("section") as HTMLElement;
-    fireEvent.click(within(section).getByRole("button", { name: "Закрыть отдел…" }));
+    fireEvent.click(within(screen.getByLabelText("Отделы")).getByText("Поддержка"));
+    fireEvent.click(await screen.findByRole("button", { name: "Закрыть отдел…" }));
     fireEvent.click(await screen.findByRole("button", { name: "Закрыть отдел" }));
     await waitFor(() => expect(within(screen.getByLabelText("Отделы")).queryByText("Поддержка")).toBeNull());
   });

@@ -15,7 +15,7 @@
     check(/^\d+\.\d+\.\d+/.test(b.version), `версия ${b.version}`);
     if (C.platform) eq(b.platform, C.platform, "платформа");
     eq(b.session, null, "до входа сессии быть не должно");
-    check(!b.hasUsers, "в чистой папке данных уже есть аккаунты");
+    check(b.cloudAvailable, "облако проверки не подключено");
   }, { fatal: true });
 
   scenario("paths", "Папки данных: приложение пишет только в отведённую папку", async () => {

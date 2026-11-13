@@ -77,7 +77,7 @@ impl Core {
 
     /// Вызывается после изменения настроек этого компьютера: оформление и панель уходят в облако.
     pub fn push_interface_prefs(self: &Arc<Self>, changes: &Value) {
-        let Some(s) = self.session().filter(|s| s.is_cloud) else { return };
+        let Some(s) = self.session() else { return };
         if !touches(changes, &INTERFACE_FIELDS) {
             return;
         }
@@ -105,7 +105,7 @@ impl Core {
             }
         }
         if let Some(i) = interface {
-            if s.is_cloud && self.env.patch_device(&pick(&i, &INTERFACE_FIELDS)) {
+            if self.env.patch_device(&pick(&i, &INTERFACE_FIELDS)) {
                 changed = true;
             }
         }
@@ -215,7 +215,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn interface_prefs_sync_only_for_cloud_accounts_and_skip_device_fields() {
+    async fn interface_prefs_sync_and_skip_device_fields() {
         let (_f1, a) = cloud_core("U-1").await;
         let changes = json!({"compactRows": true, "sidebarOrder": ["new", "all"], "uiScale": 1.5, "closeToTray": false});
         a.env.patch_device(&changes);
@@ -224,11 +224,5 @@ mod tests {
         let ui = out.iter().find(|(k, _)| k == INTERFACE_KEY).expect("оформление в журнале").1.clone();
         assert_eq!(ui["compactRows"], json!(true));
         assert!(ui.get("uiScale").is_none() && ui.get("closeToTray").is_none(), "масштаб и трей — настройки компьютера");
-
-        let f = fixture(false, vec![]);
-        let local = Core::new(f.env.clone());
-        local.register("anna", &password(), &password(), false).unwrap();
-        local.push_interface_prefs(&changes);
-        assert!(pushed(&local).is_empty(), "локальная учётная запись ничего не отправляет");
     }
 }

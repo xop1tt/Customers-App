@@ -21,7 +21,7 @@ export interface AiTool {
 const str = (d: string) => ({ type: "string", description: d });
 const ids = (d: string) => ({ type: "array", items: { type: "string" }, description: d, maxItems: 100 });
 
-export const NAV_SECTIONS = ["home", "all", "new", "favorites", "archive", "runs", "today", "calendar", "deals", "reports", "trash", "chat", "people", "notifications"] as const;
+export const NAV_SECTIONS = ["home", "all", "new", "favorites", "archive", "runs", "today", "calendar", "deals", "reports", "trash", "people", "structure"] as const;
 export const SETTINGS_SECTIONS = ["appearance", "system", "notifications", "search", "account", "data", "exclusions", "outreach", "reports", "updates", "sources", "ai"] as const;
 export const SETTING_KEYS = ["theme", "uiScale", "compactRows", "animations", "language", "sidebarCounts"] as const;
 export const CRM_ENTITIES = ["company", "contact", "crm_lead", "deal", "task", "activity"] as const;

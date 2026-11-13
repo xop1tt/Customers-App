@@ -90,3 +90,23 @@ export function presenceText(m: Pick<TeamMember, "online" | "last_seen" | "offli
   if (m.online) return "В сети";
   return m.last_seen ? `Был(а) в сети: ${short(m.last_seen)}` : "Не в сети";
 }
+
+/** Ответ на сообщение хранится первой строкой текста «↪ Имя: цитата», без изменений сервера. */
+export const REPLY_MARK = "↪ ";
+export interface ReplyQuote { name: string; text: string }
+
+export function replyLine(name: string, text: string): string {
+  const flat = parseReply(text).rest.replace(/\s+/g, " ").trim();
+  const cut = flat.length > 140 ? `${flat.slice(0, 139)}…` : flat;
+  return `${REPLY_MARK}${name.replace(/[\n:]/g, " ").trim()}: ${cut || "вложение"}`;
+}
+
+/** Делит тело на цитату (если есть) и сам текст. */
+export function parseReply(body: string): { quote: ReplyQuote | null; rest: string; line: string } {
+  if (!body.startsWith(REPLY_MARK)) return { quote: null, rest: body, line: "" };
+  const nl = body.indexOf("\n");
+  const first = nl < 0 ? body : body.slice(0, nl);
+  const m = /^↪ ([^:]{1,60}): (.*)$/.exec(first);
+  if (!m) return { quote: null, rest: body, line: "" };
+  return { quote: { name: m[1]!, text: m[2]! }, rest: nl < 0 ? "" : body.slice(nl + 1), line: first };
+}

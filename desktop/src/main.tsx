@@ -7,6 +7,7 @@ import { Component, StrictMode, useSyncExternalStore, type ReactNode } from "rea
 import { createRoot } from "react-dom/client";
 import { initBackend } from "./api/backend";
 import { App } from "./app/App";
+import { TitleBar } from "./app/TitleBar";
 import { applyTheme, resolveTheme, systemIsDark } from "./lib/theme";
 import { getLanguage, subscribeLanguage } from "./lib/i18n";
 
@@ -36,7 +37,14 @@ function Root() {
   return <App key={lang} />;
 }
 
+function Title() {
+  const lang = useSyncExternalStore(subscribeLanguage, getLanguage);
+  return <TitleBar key={lang} />;
+}
+
 void initBackend().then(() => {
+  const bar = document.getElementById("titlebar");
+  if (bar) createRoot(bar).render(<StrictMode><Title /></StrictMode>);
   createRoot(document.getElementById("root") as HTMLElement).render(
     <StrictMode>
       <Crash><Root /></Crash>

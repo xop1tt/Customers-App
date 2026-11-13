@@ -91,9 +91,9 @@ describe("передача записей", () => {
 });
 
 describe("бывший участник", () => {
-  const members = [{ userId: "a", displayName: "Анна", role: "owner", roleName: "Владелец", rank: 100, avatarPath: null, email: null }];
+  const members = [{ userId: "a", displayName: "Алексей", role: "owner", roleName: "Владелец", rank: 100, avatarPath: null, email: null }];
   it("подписывает ответственного, которого нет в списке", () => {
-    expect(memberName(members, "a")).toBe("Анна");
+    expect(memberName(members, "a")).toBe("Алексей");
     expect(memberName(members, "gone")).toBe("Бывший участник");
     expect(memberName([], "gone")).toBe("Участник");
     expect(memberName(members, null)).toBe("");

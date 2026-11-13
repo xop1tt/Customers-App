@@ -6,7 +6,7 @@
   const itemLabel = (el) => norm(($(".ellipsis", el) || el).textContent);
   const sideItems = () => $$(".sidebar .nav-item").filter((el) => !/Настроить панель/.test(el.textContent));
 
-  scenario("rail", "Рейка модулей: CRM, поиск, сообщения, команда, Ai (настроек в рейке нет)", async () => {
+  scenario("rail", "Рейка модулей: CRM, поиск, команда, чат, Ai (настроек в рейке нет)", async () => {
     await waitFor(() => $(".rail"), "рейка модулей");
     const labels = railLabels();
     for (const want of golden("navigation").rail) check(labels.some((l) => l.startsWith(want)), `в рейке нет «${want}»: ${labels}`);
@@ -20,7 +20,7 @@
       check(btn, `нет кнопки модуля ${module}`);
       click(btn);
       await sleep(250);
-      if (module !== "messages") await waitFor(() => $(".sidebar"), `панель разделов модуля ${module}`);
+      await waitFor(() => $(".sidebar"), `панель разделов модуля ${module}`);
       const labels = sideItems().map(itemLabel);
       for (const w of want) check(labels.some((l) => l.startsWith(w)), `модуль ${module}: нет раздела «${w}» среди ${JSON.stringify(labels)}`);
       // Каждый раздел открывается, страница не пустая, ошибок нет.

@@ -53,16 +53,9 @@ type Store = Arc<Mutex<WorkspaceStore>>;
 
 const MAX_ATTACHMENT: usize = 5 * 1024 * 1024;
 
-/// Идентификатор пользователя в записях CRM: uuid облачной учётной записи или постоянный uuid локальной.
+/// Идентификатор пользователя в записях CRM: uuid облачной учётной записи (`cloud-<uuid>`).
 pub fn user_id(s: &Session) -> String {
-    if let Some(id) = s.id.strip_prefix("cloud-") {
-        return id.to_lowercase();
-    }
-    use sha2::Digest;
-    let hash = sha2::Sha256::digest(format!("customers-local-user:{}", s.key()).as_bytes());
-    let mut bytes = [0u8; 16];
-    bytes.copy_from_slice(&hash[..16]);
-    uuid::Builder::from_bytes(bytes).with_version(uuid::Version::Sha1).with_variant(uuid::Variant::RFC4122).into_uuid().to_string()
+    s.id.strip_prefix("cloud-").unwrap_or(&s.id).to_lowercase()
 }
 
 /// Базы Workspace в папке: `<id>.db`, без служебных копий (`before-restore`, `restore-…`).
@@ -119,11 +112,7 @@ impl Core {
         if c.workspaces.is_empty() {
             c.workspaces.push(WorkspaceInfo {
                 id: uuid::Uuid::new_v4().to_string(),
-                name: if s.is_cloud {
-                    "Личное пространство (на этом устройстве)".into()
-                } else {
-                    "Личное пространство".into()
-                },
+                name: "Личное пространство (на этом устройстве)".into(),
                 personal: true,
                 role: "owner".into(),
                 role_name: "Владелец".into(),
@@ -157,10 +146,7 @@ impl Core {
             return Ok(st);
         }
         let c = self.ws_catalog(s)?;
-        let info = c
-            .active_info()
-            .cloned()
-            .ok_or_else(|| CmdError::new("noWorkspace", if s.is_cloud { "Workspace ещё не загружен: нужна связь с облаком." } else { "Нет Workspace." }))?;
+        let info = c.active_info().cloned().ok_or_else(|| CmdError::new("noWorkspace", "Workspace ещё не загружен: нужна связь с облаком."))?;
         let path = database_file(&self.ws_dir(s), &info.id);
         let key = self.env.keys.key_for(&s.id).map_err(|e| CmdError::msg(format!("Не удалось открыть базу Workspace: {e}")))?;
         let store =
@@ -214,7 +200,8 @@ impl Core {
         };
         let st = s.workspace.lock().unwrap();
         Ok(json!({
-            "isCloud": s.is_cloud,
+            // Вход только облачный; поле оставлено для интерфейса (демо-режим различает командное и личное пространство).
+            "isCloud": true,
             "me": user_id(&s),
             "workspaces": c.workspaces,
             "active": c.active,
@@ -239,52 +226,29 @@ impl Core {
         self.set_catalog(&s, c)?;
         s.workspace.lock().unwrap().store = None;
         self.env.emit("workspace-changed", json!({"workspace": id}));
-        if s.is_cloud {
-            self.ws_sync_soon(&s);
-        }
+        self.ws_sync_soon(&s);
         self.ws_state()
     }
 
-    /// Новый Workspace: в облаке — через `create_workspace`, у локальной учётной записи — на устройстве.
+    /// Новый Workspace создаётся на сервере (`create_workspace`).
     pub async fn ws_create_workspace(self: &Arc<Self>, name: &str) -> CmdResult<Value> {
         let s = self.require()?;
         let name = name.trim();
         if name.is_empty() || name.chars().count() > 120 {
             return Err(CmdError::msg("Название — от 1 до 120 символов."));
         }
-        let id = if s.is_cloud {
-            let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-            let id = sync::rpc(&cloud, "create_workspace", json!({"p_name": name})).await.map_err(cloud_err)?;
-            self.ws_refresh_inner(&s).await?;
-            id.as_str().unwrap_or_default().to_string()
-        } else {
-            let mut c = self.ws_catalog(&s)?;
-            let id = uuid::Uuid::new_v4().to_string();
-            c.workspaces.push(WorkspaceInfo {
-                id: id.clone(),
-                name: name.into(),
-                personal: false,
-                role: "owner".into(),
-                role_name: "Владелец".into(),
-                rank: 100,
-                permissions: ALL_PERMISSIONS.iter().map(|p| p.to_string()).collect(),
-                members: 1,
-                remote: false,
-                default_currency: "RUB".into(),
-            });
-            self.set_catalog(&s, c)?;
-            id
-        };
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        let id = sync::rpc(&cloud, "create_workspace", json!({"p_name": name})).await.map_err(cloud_err)?;
+        self.ws_refresh_inner(&s).await?;
+        let id = id.as_str().unwrap_or_default().to_string();
         self.ws_switch(&id)
     }
 
     /// Список Workspace и участники с сервера; Workspace, из которых пользователя удалили, исчезают с устройства.
     pub async fn ws_refresh(self: &Arc<Self>) -> CmdResult<Value> {
         let s = self.require()?;
-        if s.is_cloud {
-            self.ws_refresh_inner(&s).await?;
-            self.ws_sync_soon(&s);
-        }
+        self.ws_refresh_inner(&s).await?;
+        self.ws_sync_soon(&s);
         self.ws_state()
     }
 
@@ -532,7 +496,7 @@ impl Core {
 
     fn ws_changed(self: &Arc<Self>) {
         self.env.emit("workspace-changed", Value::Null);
-        if let Some(s) = self.session().filter(|s| s.is_cloud) {
+        if let Some(s) = self.session() {
             self.ws_sync_soon(&s);
         }
     }
@@ -660,15 +624,12 @@ impl Core {
             }
             st.resolve_conflict(id)
         })?;
-        let s = self.require()?;
-        if s.is_cloud {
-            if let Some(cloud) = self.env.cloud.clone() {
-                let id = id.to_string();
-                tokio::spawn(async move {
-                    let body = json!({"resolved_at": stamp(Utc::now())});
-                    let _ = cloud.authorized("PATCH", &format!("/rest/v1/sync_conflicts?id=eq.{id}"), Some(&body), &[("Prefer", "return=minimal")]).await;
-                });
-            }
+        if let Some(cloud) = self.env.cloud.clone() {
+            let id = id.to_string();
+            tokio::spawn(async move {
+                let body = json!({"resolved_at": stamp(Utc::now())});
+                let _ = cloud.authorized("PATCH", &format!("/rest/v1/sync_conflicts?id=eq.{id}"), Some(&body), &[("Prefer", "return=minimal")]).await;
+            });
         }
         self.ws_changed();
         Ok(())
@@ -684,9 +645,6 @@ impl Core {
 
     async fn ws_rpc(self: &Arc<Self>, name: &str, mut args: Value, with_workspace: bool) -> CmdResult<Value> {
         let s = self.require()?;
-        if !s.is_cloud {
-            return Err(CmdError::msg("Участники и приглашения доступны в облачной учётной записи."));
-        }
         let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
         if with_workspace {
             let ws = self.ws_catalog(&s)?.active.ok_or_else(|| CmdError::msg("Workspace не выбран."))?;
@@ -820,17 +778,7 @@ impl Core {
     }
 
     pub async fn ws_rename_workspace(self: &Arc<Self>, name: &str) -> CmdResult<Value> {
-        let s = self.require()?;
-        if s.is_cloud {
-            self.ws_rpc("update_workspace", json!({"p_name": name}), true).await?;
-        } else {
-            let mut c = self.ws_catalog(&s)?;
-            let active = c.active.clone();
-            if let Some(w) = c.workspaces.iter_mut().find(|w| Some(&w.id) == active.as_ref()) {
-                w.name = name.trim().chars().take(120).collect();
-            }
-            self.set_catalog(&s, c)?;
-        }
+        self.ws_rpc("update_workspace", json!({"p_name": name}), true).await?;
         self.ws_state()
     }
 
@@ -908,31 +856,12 @@ impl Core {
 
     /// Удаление этапа воронки: сделки переходят на этап `move_to`.
     pub async fn ws_delete_stage(self: &Arc<Self>, stage: &str, move_to: &str) -> CmdResult<Value> {
-        let s = self.require()?;
         if stage == move_to {
             return Err(CmdError::msg("Выберите другой этап для переноса сделок."));
         }
-        if s.is_cloud {
-            let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-            let moved = sync::rpc(&cloud, "delete_stage", json!({"p_stage": stage, "p_move_to": move_to})).await.map_err(cloud_err)?;
-            self.ws_sync_now().await?;
-            return Ok(json!({"moved": moved}));
-        }
-        let moved = self.with_crm(|st| {
-            let target = st.get("pipeline_stages", move_to)?.ok_or_else(|| crate::error::AppError::msg("Этап для переноса не найден."))?;
-            let pipeline = target["pipeline_id"].clone();
-            let q = Query { filters: vec![crate::workspace::query::Filter::eq("stage_id", stage)], ..Default::default() };
-            let deals = st.list("deals", &q)?;
-            for d in &deals {
-                let mut f = Map::new();
-                f.insert("stage_id".into(), json!(move_to));
-                f.insert("pipeline_id".into(), pipeline.clone());
-                st.save("deals", d["id"].as_str(), &f)?;
-            }
-            st.delete("pipeline_stages", stage)?;
-            Ok(deals.len())
-        })?;
-        self.ws_changed();
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        let moved = sync::rpc(&cloud, "delete_stage", json!({"p_stage": stage, "p_move_to": move_to})).await.map_err(cloud_err)?;
+        self.ws_sync_now().await?;
         Ok(json!({"moved": moved}))
     }
 
@@ -943,9 +872,6 @@ impl Core {
     /// Локальный Workspace остаётся на месте.
     pub async fn ws_upload_local(self: &Arc<Self>) -> CmdResult<Value> {
         let s = self.require()?;
-        if !s.is_cloud {
-            return Err(CmdError::msg("Загрузка доступна в облачной учётной записи."));
-        }
         let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
         let catalog = self.ws_catalog(&s)?;
         let local =
@@ -1119,7 +1045,7 @@ impl Core {
         let data = match local {
             Some(d) => d,
             None => {
-                let cloud = self.env.cloud.clone().filter(|_| s.is_cloud).ok_or_else(|| CmdError::msg("Файл есть только в облаке: нужна связь."))?;
+                let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Файл есть только в облаке: нужна связь."))?;
                 let rows = sync::select(&cloud, &format!("attachment_blobs?select=data&attachment_id=eq.{id}")).await.map_err(cloud_err)?;
                 let text = rows[0]["data"].as_str().ok_or_else(|| CmdError::msg("Файл ещё не загружен автором в облако."))?;
                 let d = base64::engine::general_purpose::STANDARD.decode(text).map_err(|_| CmdError::msg("Файл в облаке повреждён."))?;
@@ -1312,9 +1238,8 @@ impl Core {
             return Err(CmdError::msg("Неизвестное действие маркетплейса."));
         }
         let s = self.require()?;
-        let cloud = match (&self.env.cloud, s.is_cloud) {
-            (Some(c), true) => c.clone(),
-            _ => return Err(CmdError::new("cloudOnly", "Маркетплейс доступен в облачной учётной записи.")),
+        let Some(cloud) = self.env.cloud.clone() else {
+            return Err(CmdError::new("cloudOnly", "Облако не настроено."));
         };
         let mut body = Map::new();
         for (k, v) in args {
@@ -1407,7 +1332,7 @@ impl Core {
     // ------------------------------------------------------------ синхронизация
 
     fn ws_sync_soon(self: &Arc<Self>, s: &Arc<Session>) {
-        let Some(cloud) = self.env.cloud.clone().filter(|_| s.is_cloud) else { return };
+        let Some(cloud) = self.env.cloud.clone() else { return };
         if !self.ws_catalog(s).ok().and_then(|c| c.active_info().map(|w| w.remote)).unwrap_or(false) {
             return;
         }
@@ -1462,13 +1387,11 @@ impl Core {
 
     pub async fn ws_sync_now(self: &Arc<Self>) -> CmdResult<Value> {
         let s = self.require()?;
-        if s.is_cloud {
-            if let Ok(st) = self.ws_store(&s) {
-                st.lock().unwrap().retry_now().map_err(cmd)?;
-            }
-            self.ws_refresh_inner(&s).await?;
-            self.ws_sync_soon(&s);
+        if let Ok(st) = self.ws_store(&s) {
+            st.lock().unwrap().retry_now().map_err(cmd)?;
         }
+        self.ws_refresh_inner(&s).await?;
+        self.ws_sync_soon(&s);
         self.ws_state()
     }
 
@@ -1587,14 +1510,11 @@ mod team_tests {
     use super::*;
 
     // Пароль собирается из частей, чтобы сканер не считал тестовую строку секретом (как в data.rs).
-    fn password() -> String {
-        ["password", "-1"].concat()
-    }
 
     fn local() -> (super::super::testing::Fixture, Arc<Core>) {
         let f = fixture(false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", &password(), &password(), false).unwrap();
+        core.sign_in_test_user("anna");
         (f, core)
     }
 
@@ -1641,7 +1561,7 @@ mod team_tests {
         let list = team.as_array().unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0]["user_id"], json!(user_id(&core.require().unwrap())));
-        assert_eq!(list[0]["display_name"], "anna");
+        assert_eq!(list[0]["display_name"], "anna@example.com");
         assert_eq!(core.ws_chat("chat_list", Map::new()).await.unwrap(), json!([]));
         let e = core.ws_chat("chat_send", Map::new()).await.unwrap_err();
         assert_eq!(e.code, "localWorkspace");

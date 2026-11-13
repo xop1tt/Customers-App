@@ -123,13 +123,7 @@ impl Core {
         if !p.backup_directory.trim().is_empty() {
             return PathBuf::from(p.backup_directory);
         }
-        // Папка копий прежней macOS-версии, если в ней уже есть копии, продолжает использоваться.
-        let legacy = self.env.paths.legacy_backups(&s.id);
-        if legacy.exists() {
-            legacy
-        } else {
-            self.env.paths.default_backups(&s.id)
-        }
+        self.env.paths.default_backups(&s.id)
     }
 
     pub fn list_backups(&self) -> CmdResult<Vec<Value>> {
@@ -289,7 +283,7 @@ mod tests {
     fn seeded() -> (super::super::testing::Fixture, Arc<Core>, Vec<String>) {
         let f = fixture(false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", "password-1", "password-1", false).unwrap();
+        core.sign_in_test_user("anna");
         let s = core.session().unwrap();
         let mut ids = vec![];
         for i in 1..=3 {
@@ -404,7 +398,7 @@ mod tests {
         assert_eq!(core.snapshot().unwrap().leads.len(), 3);
         assert_eq!(core.info().unwrap().database_path, target.join("leads.db").display().to_string());
         core.logout();
-        core.login("anna", "password-1", false).unwrap();
+        core.sign_in_test_user("anna");
         assert_eq!(core.snapshot().unwrap().leads.len(), 3, "после входа база открывается из новой папки");
     }
 
@@ -416,27 +410,18 @@ mod tests {
         assert_eq!(core.session().unwrap().with_store(|st| st.value("search.auto")).as_deref(), Some("240"));
         assert!(f.events.count("account-prefs") >= 1);
         core.logout();
-        core.login("anna", "password-1", false).unwrap();
+        core.sign_in_test_user("anna");
         assert_eq!(core.account_prefs().unwrap()["autoSearchMinutes"], 240);
     }
 
-    /// Пароль собирается во время работы теста, чтобы в коде не было постоянного пароля.
-    fn password() -> String {
-        ["password", "-1"].concat()
-    }
-
     #[tokio::test]
-    async fn backups_go_to_default_folder_or_keep_using_the_legacy_one() {
+    async fn backups_go_to_the_default_folder_of_the_account() {
         let f = super::super::testing::fixture(false, vec![]);
         let core = Core::new(f.env.clone());
-        core.register("anna", &password(), &password(), false).unwrap();
+        core.sign_in_test_user("anna");
         let s = core.session().unwrap();
         let path = core.backup_now(&s).unwrap();
-        assert!(path.starts_with(f.env.paths.documents.join("Customers Backups").join("anna")), "{}", path.display());
-        // Папка копий прежней macOS-версии существует — копии продолжают складываться в неё.
-        std::fs::create_dir_all(f.env.paths.legacy_backups("anna")).unwrap();
-        let path = core.backup_now(&s).unwrap();
-        assert!(path.starts_with(f.env.paths.legacy_backups("anna")), "{}", path.display());
+        assert!(path.starts_with(f.env.paths.documents.join("Customers Backups").join(&s.id)), "{}", path.display());
     }
 
     fn company(core: &Arc<Core>, name: &str) {

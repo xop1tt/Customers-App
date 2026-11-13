@@ -52,9 +52,9 @@ describe("облачко синхронизации", () => {
   it("стоит справа от имени, подписи «Облачный аккаунт» нет, «?» в одной строке с профилем", async () => {
     render(<App />);
     const nav = await screen.findByLabelText("Навигация");
-    setState({ session: { id: "c", displayName: "Анна", avatar: null, isCloud: true, cloudUser: null, databasePath: "" }, sync: sync({ kind: "offline" }) });
+    setState({ session: { id: "c", displayName: "Алексей", avatar: null, cloudUser: null, databasePath: "" }, sync: sync({ kind: "offline" }) });
     const account = await within(nav).findByLabelText("Учётная запись");
-    expect(within(account).getByText("Анна")).toBeInTheDocument();
+    expect(within(account).getByText("Алексей")).toBeInTheDocument();
     expect(within(account).getByRole("img", { name: "Потеряно соединение с облаком" })).toBeInTheDocument();
     expect(within(nav).queryByText("Облачный аккаунт")).toBeNull();
     expect(account.parentElement).toContainElement(within(nav).getByLabelText("Справка"));
@@ -91,16 +91,13 @@ describe("подразделы настроек", () => {
 
 describe("экран входа", () => {
   beforeEach(() => { window.history.pushState({}, "", "/?auth&cloud"); });
-  it("выбор «облачный / на этом компьютере» — две отдельные кнопки, а не растянутое поле", async () => {
+  it("на экране входа нет выбора «на этом компьютере»: вход только в облако", async () => {
     const { AuthScreen } = await import("./Auth");
     const { setState: set } = await import("../state/store");
     set({ phase: "auth", boot: { version: "1", platform: "macos", cloudAvailable: true, hasUsers: true, existingInstall: false, session: null, device: { rememberedUser: null } } as never });
     const { container } = render(<AuthScreen />);
-    const tabs = screen.getByRole("tablist");
-    const buttons = within(tabs).getAllByRole("tab");
-    expect(buttons.map((b) => b.textContent)).toEqual(["Облачный аккаунт", "На этом компьютере"]);
-    expect(buttons.every((b) => b.className.includes("auth-mode"))).toBe(true);
-    expect(tabs.className).toBe("auth-modes");
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByText("На этом компьютере")).toBeNull();
     expect(container.querySelector("img.brand")).not.toBeNull();
     expect(container.querySelector(".brand svg")).toBeNull();
   });

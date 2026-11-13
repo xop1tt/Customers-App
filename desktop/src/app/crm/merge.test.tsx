@@ -54,20 +54,20 @@ describe("объединение дубликатов", () => {
   });
 
   it("можно оставить вторую запись; поиск находит непохожую", async () => {
-    const a = await api.wsSave("contacts", null, { first_name: "Анна", emails: ["anna@a.ru"] });
-    const b = await api.wsSave("contacts", null, { first_name: "Аня", last_name: "Смирнова" });
+    const a = await api.wsSave("contacts", null, { first_name: "Алексей", emails: ["alex@a.ru"] });
+    const b = await api.wsSave("contacts", null, { first_name: "Алекс", last_name: "Смирнова" });
     openRecord("contacts", a.id);
     card();
     fireEvent.click(await screen.findByRole("button", { name: "Объединить с дубликатом" }));
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByText("Похожих записей нет. Найдите вторую запись поиском.");
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Поиск второй записи" }), { target: { value: "Смирнова" } });
-    fireEvent.click(within(await within(dialog).findByRole("list", { name: "Найденные записи" })).getByRole("button", { name: /Аня Смирнова/ }));
-    fireEvent.click(await within(screen.getByRole("dialog")).findByRole("tab", { name: "Аня Смирнова" }));
+    fireEvent.click(within(await within(dialog).findByRole("list", { name: "Найденные записи" })).getByRole("button", { name: /Алекс Смирнова/ }));
+    fireEvent.click(await within(screen.getByRole("dialog")).findByRole("tab", { name: "Алекс Смирнова" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Объединить" }));
     await waitFor(() => expect(getState().record).toEqual({ table: "contacts", id: b.id }));
     const kept = (await api.wsCard("contacts", b.id)).record;
-    expect([kept.first_name, kept.emails]).toEqual(["Аня", ["anna@a.ru"]]);
+    expect([kept.first_name, kept.emails]).toEqual(["Алекс", ["alex@a.ru"]]);
     expect((await api.wsCard("contacts", a.id)).record.deleted_at).toBeTruthy();
   });
 

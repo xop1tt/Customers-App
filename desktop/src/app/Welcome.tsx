@@ -235,7 +235,7 @@ function CommsStep({ signature, onSignature }: { signature: string; onSignature:
       <h2 className="welcome-sub">Письма</h2>
       <Group><MailPanel /></Group>
       <h2 className="welcome-sub">Подпись в письмах</h2>
-      <TextArea value={signature} onChange={onSignature} rows={3} placeholder={"Анна Смирнова, Студия «Пиксель»\n+7 900 000-00-00"} aria-label="Подпись в письмах" />
+      <TextArea value={signature} onChange={onSignature} rows={3} placeholder={"Алексей Смирнова, Студия «Пиксель»\n+7 900 000-00-00"} aria-label="Подпись в письмах" />
       <h2 className="welcome-sub">Звонки</h2>
       <Group><CallApps /></Group>
     </div>

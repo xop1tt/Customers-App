@@ -293,11 +293,6 @@ export function Field({ label, hint, error, children }: { label?: string; hint?:
 /** Открытый подраздел настроек: группы с `sub` показываются, только когда выбран их подраздел. */
 export const SubContext = createContext<string | null>(null);
 
-export function Sub({ id, children }: { id: string; children: ReactNode }) {
-  const current = useContext(SubContext);
-  return current === null || current === id ? <>{children}</> : null;
-}
-
 export function Group({ title, note, children, action, sub }: { title?: string; note?: ReactNode; children: ReactNode; action?: ReactNode; sub?: string }) {
   const current = useContext(SubContext);
   if (sub && current !== null && current !== sub) return null;

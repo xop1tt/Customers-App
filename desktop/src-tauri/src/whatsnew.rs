@@ -357,8 +357,8 @@ pub enum Decision {
     RecordOnly,
 }
 
-/// `last_seen` — версия, для которой экран уже показывали; `has_existing_data` — на этом компьютере уже были
-/// учётные записи, то есть это не первая установка.
+/// `last_seen` — версия, для которой экран уже показывали; `has_existing_data` — пользователь уже вошёл в
+/// учётную запись, то есть это не первая установка.
 pub fn decide(last_seen: Option<&str>, current: &AppVersion, has_existing_data: bool) -> Decision {
     let Some(seen) = last_seen.and_then(AppVersion::parse) else {
         return if has_existing_data { Decision::Show } else { Decision::RecordOnly };

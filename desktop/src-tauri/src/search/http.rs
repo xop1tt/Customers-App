@@ -189,10 +189,6 @@ impl SourceHttp {
         Self { name: name.into(), transport, cfg, sleeper, cancel, state: Mutex::new((0, None)) }
     }
 
-    pub fn requests_made(&self) -> usize {
-        self.state.lock().unwrap().0
-    }
-
     pub fn is_cancelled(&self) -> bool {
         self.cancel.is_cancelled()
     }

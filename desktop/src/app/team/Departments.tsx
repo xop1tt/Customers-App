@@ -5,7 +5,8 @@ import { api } from "../../api";
 import type { TeamMember } from "../../api/types";
 import { departmentError, departmentsOf, renamePlan, type Department } from "../../lib/departments";
 import { canManageDepartments } from "../../lib/positions";
-import { Button, EmptyState, Field, Notice, TextInput } from "../../ui/kit";
+import { Avatar, Button, EmptyState, Field, IconButton, Notice, TextInput } from "../../ui/kit";
+import { Icon } from "../../ui/icons";
 import { useActor } from "./actor";
 import { confirmDialog, Dialog } from "../../ui/overlay";
 import { attempt, toast } from "../../state/store";
@@ -26,23 +27,39 @@ export function Departments({ team }: { team: TeamMember[] }) {
     await refreshTeam();
     toast(failed ? `Не удалось изменить: ${failed}` : `Отдел «${d.name}» закрыт`, failed ? "error" : "success");
   };
+  const [picked, setPicked] = useState<string | null>(null);
+  const current = picked === null ? null : deps.find((d) => d.name === picked) ?? null;
+  if (picked !== null && !current) setPicked(null);
+  const createBtn = manage ? <Button small icon="plus" onClick={() => setCreating(true)}>Создать отдел</Button> : <span className="faint">Отделы создают и закрывают владелец, заместители и руководители.</span>;
   return (
     <div className="col" style={{ gap: 14 }} aria-label="Отделы">
-      <div className="row" style={{ gap: 8, alignItems: "center" }}>
-        {manage ? <Button small icon="plus" onClick={() => setCreating(true)}>Создать отдел</Button> : <span className="faint">Отделы создают и закрывают владелец, заместители и руководители.</span>}
-      </div>
-      {!deps.length && <EmptyState icon="users" title="Отделов нет">{manage ? "Создайте отдел и назначьте в него сотрудников." : "Отдел назначает руководитель в карточке сотрудника."}</EmptyState>}
-      {deps.map((d) => (
-        <section key={d.name || "—"} className="col" style={{ gap: 4 }}>
+      {current ? (
+        <>
           <div className="row" style={{ gap: 8, alignItems: "center" }}>
-            <strong className="grow">{d.name || "Без отдела"}</strong>
-            <span className="faint">сотрудников: {d.members.length}</span>
-            {manage && d.name && d.members.some((m) => m.can_edit) && <Button small onClick={() => setEditing(d)}>Переименовать…</Button>}
-            {manage && d.name && d.members.some((m) => m.can_edit) && <Button small variant="ghost" onClick={() => void close(d)}>Закрыть отдел…</Button>}
+            <IconButton icon="chevronLeft" tip="Ко всем отделам" onClick={() => setPicked(null)} />
+            <strong className="grow dep-title">{current.name || "Без отдела"}</strong>
+            <span className="faint">сотрудников: {current.members.length}</span>
+            {manage && current.name && current.members.some((m) => m.can_edit) && <Button small onClick={() => setEditing(current)}>Переименовать…</Button>}
+            {manage && current.name && current.members.some((m) => m.can_edit) && <Button small variant="ghost" onClick={() => void close(current)}>Закрыть отдел…</Button>}
           </div>
-          <ul className="people-list">{d.members.map((m) => <PersonRow key={m.user_id} m={m} depth={0} />)}</ul>
-        </section>
-      ))}
+          <ul className="people-list cards" aria-label={`Сотрудники отдела ${current.name || "без отдела"}`}>{current.members.map((m) => <PersonRow key={m.user_id} m={m} depth={0} card />)}</ul>
+        </>
+      ) : (
+        <>
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>{createBtn}</div>
+          {!deps.length && <EmptyState icon="users" title="Отделов нет">{manage ? "Создайте отдел и назначьте в него сотрудников." : "Отдел назначает руководитель в карточке сотрудника."}</EmptyState>}
+          <div className="dep-cards" role="list" aria-label="Выбор отдела">
+            {deps.map((d) => (
+              <button key={d.name || "—"} type="button" role="listitem" className="dep-card" onClick={() => setPicked(d.name)}>
+                <span className="dep-card-icon"><Icon name="building" size={22} /></span>
+                <strong className="dep-card-name">{d.name || "Без отдела"}</strong>
+                <span className="faint">Сотрудников: {d.members.length}{d.members.some((m) => m.online) ? ` · в сети: ${d.members.filter((m) => m.online).length}` : ""}</span>
+                <span className="dep-card-faces">{d.members.slice(0, 5).map((m) => <Avatar key={m.user_id} name={m.display_name} src={m.avatar} size={28} />)}{d.members.length > 5 && <span className="faint">+{d.members.length - 5}</span>}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       {editing && <RenameDialog dep={editing} others={deps.filter((d) => d.name && d !== editing).map((d) => d.name)} onClose={() => setEditing(null)} />}
       {creating && <CreateDialog team={team} existing={deps.map((d) => d.name).filter(Boolean)} onClose={() => setCreating(false)} />}
     </div>

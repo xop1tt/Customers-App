@@ -47,7 +47,6 @@ futures-util = "0.3"
 rusqlite = { version = "0.42", features = ["bundled-sqlcipher-vendored-openssl", "functions"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 sha2 = "0.11"
-pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
 base64 = "0.23"
 hex = "0.4"
 rand = "0.10"

@@ -117,7 +117,6 @@ export interface SessionInfo {
   displayName: string;
   /** Аватар в виде data-URL; приходит из облака вместе с остальными настройками. */
   avatar?: string | null;
-  isCloud: boolean;
   cloudUser: CloudUserInfo | null;
   databasePath: string;
 }
@@ -161,7 +160,6 @@ export interface DevicePrefs {
   startMinimized: boolean;
   launchAtLogin: boolean;
   trayHintShown: boolean;
-  rememberedUser: string | null;
   lastSection: string;
   listSort: string;
   listSortDescending: boolean;
@@ -198,8 +196,6 @@ export interface BootInfo {
   version: string;
   platform: "windows" | "macos" | "linux";
   cloudAvailable: boolean;
-  hasUsers: boolean;
-  existingInstall: boolean;
   session: SessionInfo | null;
   device: DevicePrefs;
   error: string | null;
@@ -664,7 +660,11 @@ export interface ChatMessage {
   deleted: boolean;
   /** Карточки CRM в сообщении; название и подпись — только при праве просмотра. */
   attachments?: ChatAttachment[];
+  /** Файлы в сообщении (только если сервер чата их поддерживает). */
+  files?: ChatFile[];
 }
+
+export interface ChatFile { id: string; name: string; size: number; mime: string }
 
 export type ChatCardType = "company" | "contact" | "crm_lead" | "deal";
 export interface ChatCardRef { type: ChatCardType; id: string }

@@ -20,7 +20,7 @@ describe("сотрудники", () => {
   });
 
   it("дерево подчинения: корни, вложенность, руководитель не из рабочего пространства, цикл", () => {
-    const team = [m("a", "Анна"), m("b", "Борис", "a"), m("c", "Вера", "b"), m("d", "Глеб", "zzz"), m("x", "Икс", "y"), m("y", "Игрек", "x")];
+    const team = [m("a", "Алексей"), m("b", "Борис", "a"), m("c", "Вера", "b"), m("d", "Глеб", "zzz"), m("x", "Икс", "y"), m("y", "Игрек", "x")];
     const tree = buildTree(team);
     expect(tree.map((n) => n.member.user_id)).toEqual(["a", "d", "x"]);
     expect(tree[0]!.children[0]!.member.user_id).toBe("b");
@@ -45,13 +45,13 @@ describe("упоминания", () => {
   it("находит набираемое @упоминание перед курсором", () => {
     expect(mentionQuery("Привет @Ве", 10)).toEqual({ start: 7, query: "Ве" });
     expect(mentionQuery("@", 1)).toEqual({ start: 0, query: "" });
-    expect(mentionQuery("почта anna@example.com", 22)).toBeNull();
+    expect(mentionQuery("почта alex@example.com", 22)).toBeNull();
     expect(mentionQuery("без собаки", 10)).toBeNull();
     expect(mentionQuery("@Вера\nдальше", 12)).toBeNull();
   });
 
   it("подсказка ищет по началу имени, фамилии и почты", () => {
-    const team = [m("a", "Анна Смирнова"), m("b", "Борис Петров", null, "boris@x.ru"), m("c", "Вера Ким")];
+    const team = [m("a", "Алексей Смирнова"), m("b", "Борис Петров", null, "boris@x.ru"), m("c", "Вера Ким")];
     expect(mentionMatches(team, "пе").map((x) => x.user_id)).toEqual(["b"]);
     expect(mentionMatches(team, "bor").map((x) => x.user_id)).toEqual(["b"]);
     expect(mentionMatches(team, "").length).toBe(3);
@@ -63,9 +63,9 @@ describe("упоминания", () => {
   });
 
   it("упомянутые: по @имени и по почте, без учёта регистра", () => {
-    const team = [m("a", "Анна"), m("b", "Борис Петров", null, "boris@x.ru"), m("c", "Вера")];
+    const team = [m("a", "Алексей"), m("b", "Борис Петров", null, "boris@x.ru"), m("c", "Вера")];
     expect(mentionedIds("@борис петров и ANNA? нет. BORIS@X.RU", team)).toEqual(["b"]);
-    expect(mentionedIds("@Анна, @Вера", team)).toEqual(["a", "c"]);
+    expect(mentionedIds("@Алексей, @Вера", team)).toEqual(["a", "c"]);
   });
 
   it("тексты уведомлений", () => {

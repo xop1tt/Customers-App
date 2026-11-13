@@ -306,11 +306,6 @@ impl CloudAuth {
         self.set_session(None);
     }
 
-    /// Только забыть сессию на этом компьютере (без запроса на сервер).
-    pub fn forget_session(&self) {
-        self.set_session(None);
-    }
-
     /// Действующая сессия: при скором истечении токен обновляется.
     pub async fn valid_session(&self) -> CloudResult<CloudSession> {
         let s = self.session().ok_or(CloudError::SessionExpired)?;

@@ -180,3 +180,15 @@
 .icon-light { display: none; }
 :root[data-theme="light"] .icon-light { display: inline-block; }
 :root[data-theme="light"] .icon-dark { display: none; }
+
+/* Плашка связи: выезжает из нижнего края по центру. Красная — связи нет, зелёная — восстановлена. */
+.reconnect { position: fixed; left: 50%; bottom: 0; z-index: 3100; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-radius: 10px 10px 0 0; font-weight: 500; color: #fff; animation: reconnect-up 280ms var(--ease) both; transition: background-color 240ms; }
+.reconnect.lost { background: #c9302c; }
+.reconnect.ok { background: #2f8f55; }
+.reconnect-spin { transform-origin: 12px 12px; animation: reconnect-rot 1s linear infinite; }
+.reconnect-ring { stroke-dasharray: 57; stroke-dashoffset: 57; animation: reconnect-draw 420ms ease-out forwards; }
+.reconnect-tick { stroke-dasharray: 16; stroke-dashoffset: 16; animation: reconnect-draw 300ms 360ms ease-out forwards; }
+@keyframes reconnect-up { from { transform: translate(-50%, 100%); } to { transform: translate(-50%, 0); } }
+@keyframes reconnect-rot { to { transform: rotate(360deg); } }
+@keyframes reconnect-draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .reconnect, .reconnect-spin { animation: none; } .reconnect-ring, .reconnect-tick { animation: none; stroke-dashoffset: 0; } }

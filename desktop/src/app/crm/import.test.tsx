@@ -7,7 +7,7 @@ import { ImportDialog } from "./ImportDialog";
 afterEach(cleanup);
 beforeEach(() => resetWsMock());
 
-const CSV = "Компания;Контакт;Телефон\nКофейня Зерно;Анна Петрова;+7 900 000-00-01\nПекарня;;\n";
+const CSV = "Компания;Контакт;Телефон\nКофейня Зерно;Алексей Петрова;+7 900 000-00-01\nПекарня;;\n";
 const b64 = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
 
 describe("импорт таблиц", () => {

@@ -3,17 +3,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
-import type { ChatAttachment, ChatCardRef, ChatCardType, ChatConversation, ChatMessage, ChatPage as ChatPageData, CrmRecord, TeamMember } from "../../api/types";
+import type { ChatAttachment, ChatCardRef, ChatFile, ChatCardType, ChatConversation, ChatMessage, ChatPage as ChatPageData, CrmRecord, TeamMember } from "../../api/types";
 import { ENTITIES } from "../../lib/crm";
 import { dateOnly, shortRelative } from "../../lib/format";
-import { insertMention, mentionMatches, mentionQuery, mentionedIds } from "../../lib/team";
-import { Avatar, Button, Checkbox, EmptyState, Field, IconButton, Notice, Segmented, Spinner, Switch, Tag, TextInput } from "../../ui/kit";
+import { insertMention, mentionMatches, mentionQuery, mentionedIds, parseReply, replyLine } from "../../lib/team";
+import { bytes } from "../../lib/format";
+import { copyText, pickSavePath } from "../../lib/platform";
+import { Avatar, Button, Checkbox, EmptyState, Field, IconButton, Notice, Spinner, Switch, Tag, TextInput } from "../../ui/kit";
 import { Icon } from "../../ui/icons";
 import { Dialog, type MenuItem, confirmDialog, showMenu } from "../../ui/overlay";
-import { attempt, openProfile, useStore } from "../../state/store";
+import { attempt, openProfile, toast, useStore } from "../../state/store";
 import { conversationTitle, memberName, messageMember, openChat, openCrmCard, pollChat, refreshTeam } from "../../state/team";
 import { PersonAvatar } from "./PeoplePage";
-import { AccountBar } from "../Sidebar";
 
 const PAGE = 50;
 
@@ -67,7 +68,6 @@ export function ChatPage() {
             {shown.map((c) => <ConversationRow key={c.id} c={c} active={c.id === open} team={team} me={me} />)}
           </ul>
         )}
-        <div className="chat-list-foot"><AccountBar /></div>
       </aside>
       <section className="chat-main">
         {current ? <Conversation key={current.id} c={current} onChanged={reload} /> : (
@@ -116,6 +116,10 @@ function Conversation({ c, onChanged }: { c: ChatConversation; onChanged: () => 
   const [more, setMore] = useState(false);
   const [members, setMembers] = useState(false);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [filesOk, setFilesOk] = useState(false);
+  // Файлы в чате появятся, когда сервер их поддержит: узнаём у ядра, не предполагая.
+  useEffect(() => { void api.wsChat<{ files?: boolean }>("chat_capabilities").then((r) => setFilesOk(!!r?.files), () => setFilesOk(false)); }, []);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
 
@@ -165,18 +169,20 @@ function Conversation({ c, onChanged }: { c: ChatConversation; onChanged: () => 
     requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight - before; });
   };
 
-  const send = async (body: string, mentions: string[], cards: ChatCardRef[]) => {
+  const send = async (text: string, mentions: string[], cards: ChatCardRef[], files: PickedFile[]) => {
     stick.current = true;
+    const quote = editing ? parseReply(editing.body).line : replyTo ? replyLine(replyTo.author_id === me ? "Вы" : team.find((x) => x.user_id === replyTo.author_id)?.display_name ?? "Участник", replyTo.body) : "";
+    const body = quote ? `${quote}\n${text}` : text;
     if (editing) {
       const m = await attempt(() => api.wsChat<ChatMessage>("chat_edit", { message: editing.id, body }));
       if (m) { setMessages((cur) => cur?.map((x) => (x.id === m.id ? m : x)) ?? cur); setEditing(null); }
       return !!m;
     }
     // Без карточек — прежняя chat_send: так текстовый чат работает и на сервере без новой миграции.
-    const m = await attempt(() => cards.length
-      ? api.wsChat<ChatMessage>("chat_post", { conversation: c.id, body, mentions, attachments: cards.map(({ type, id }) => ({ type, id })) })
+    const m = await attempt(() => cards.length || files.length
+      ? api.wsChat<ChatMessage>("chat_post", { conversation: c.id, body, mentions, attachments: cards.map(({ type, id }) => ({ type, id })), files: files.map(({ name, size, mime, data }) => ({ name, size, mime, data })) })
       : api.wsChat<ChatMessage>("chat_send", { conversation: c.id, body, mentions }));
-    if (m) { setMessages((cur) => [...(cur ?? []), m]); void onChanged(); }
+    if (m) { setMessages((cur) => [...(cur ?? []), m]); setReplyTo(null); void onChanged(); }
     return !!m;
   };
 
@@ -184,7 +190,6 @@ function Conversation({ c, onChanged }: { c: ChatConversation; onChanged: () => 
   const people = team.filter((m) => participants.includes(m.user_id));
   const title = conversationTitle(view, team, me);
   const other = view.kind === "direct" ? team.find((m) => m.user_id === participants.find((p) => p !== me)) : undefined;
-  const isAdmin = view.my_role !== "member" || ws.permissions.includes("members.manage");
 
   const menu = (): MenuItem[] => [
     ...(view.kind === "group" ? [{ label: "Участники и настройки", icon: "users", onSelect: () => setMembers(true) }] : []),
@@ -200,12 +205,17 @@ function Conversation({ c, onChanged }: { c: ChatConversation; onChanged: () => 
   };
 
   const messageMenu = (m: ChatMessage): MenuItem[] => [
-    { label: "Изменить", icon: "edit", disabled: m.author_id !== me, onSelect: () => setEditing(m) },
-    { label: "Удалить", icon: "trash", danger: true, disabled: m.author_id !== me && !isAdmin,
-      onSelect: async () => {
-        if (!(await confirmDialog({ title: "Удалить сообщение?", message: "Текст сотрётся у всех участников.", confirm: "Удалить", danger: true }))) return;
-        if ((await attempt(() => api.wsChat("chat_delete", { message: m.id }))) !== undefined) setMessages((cur) => cur?.map((x) => (x.id === m.id ? { ...x, deleted: true, body: "", attachments: [] } : x)) ?? cur);
-      } },
+    { label: "Ответить", icon: "send", onSelect: () => { setEditing(null); setReplyTo(m); } },
+    { label: "Скопировать", icon: "copy", onSelect: () => { void copyText(parseReply(m.body).rest || m.body); toast("Скопировано"); } },
+    ...(m.author_id === me ? [
+      { separator: true } as MenuItem,
+      { label: "Изменить", icon: "edit", onSelect: () => { setReplyTo(null); setEditing(m); } } as MenuItem,
+      { label: "Удалить", icon: "trash", danger: true,
+        onSelect: async () => {
+          if (!(await confirmDialog({ title: "Удалить сообщение?", message: "Текст сотрётся у всех участников.", confirm: "Удалить", danger: true }))) return;
+          if ((await attempt(() => api.wsChat("chat_delete", { message: m.id }))) !== undefined) setMessages((cur) => cur?.map((x) => (x.id === m.id ? { ...x, deleted: true, body: "", attachments: [], files: [] } : x)) ?? cur);
+        } } as MenuItem,
+    ] : []),
   ];
 
   return (
@@ -243,6 +253,7 @@ function Conversation({ c, onChanged }: { c: ChatConversation; onChanged: () => 
         )}
       </div>
       <Composer people={people.filter((p) => p.user_id !== me)} team={team} editing={editing} onCancelEdit={() => setEditing(null)} onSend={send}
+        replyTo={replyTo} replyName={replyTo ? (replyTo.author_id === me ? "Вы" : team.find((x) => x.user_id === replyTo.author_id)?.display_name ?? "Участник") : ""} onCancelReply={() => setReplyTo(null)} filesOk={filesOk}
         disabled={view.kind === "direct" && view.participants.some((p) => !p.active) ? "Собеседник больше не участник рабочего пространства." : null} />
       {members && <MembersDialog view={view} team={team} me={me} perms={ws.permissions} onClose={() => setMembers(false)} onChanged={(v) => { if (v) setView(v); void onChanged(); }} />}
     </>
@@ -264,15 +275,18 @@ function MessageRow({ m, me, team, grouped, onMenu }: { m: ChatMessage; me: stri
   const author = team.find((x) => x.user_id === m.author_id);
   const name = m.author_id === me ? "Вы" : author?.display_name ?? "Участник";
   const mine = m.author_id === me;
+  const parsed = parseReply(m.body);
   return (
     <div className={`chat-msg${grouped ? " grouped" : ""}${mine ? " mine" : ""}${m.mentions.includes(me) ? " mentioned" : ""}`} onContextMenu={(e) => { if (!m.deleted) { e.preventDefault(); onMenu(e); } }}>
       <span className="chat-msg-ava">{!grouped && <button type="button" className="chat-ava-btn" aria-label={`Профиль: ${name}`} onClick={() => m.author_id && openProfile(m.author_id === me ? null : m.author_id)}><Avatar name={author?.display_name ?? name} src={author?.avatar} size={30} /></button>}</span>
       <div className="col grow" style={{ gap: 2, minWidth: 0 }}>
         {!grouped && <div className="row" style={{ gap: 8 }}><span className="chat-author">{name}</span><span className="faint chat-time">{shortRelative(m.created_at)}</span></div>}
         <div className={`chat-body selectable${m.deleted ? " faint" : ""}`}>
-          {m.deleted ? "Сообщение удалено" : m.body ? <MessageText text={m.body} team={team} /> : null}
+          {!m.deleted && parsed.quote && <div className="chat-quote"><strong className="ellipsis">{parsed.quote.name}</strong><span className="ellipsis faint">{parsed.quote.text}</span></div>}
+          {m.deleted ? "Сообщение удалено" : parsed.rest ? <MessageText text={parsed.rest} team={team} /> : null}
           {m.edited_at && !m.deleted && <span className="faint chat-edited"> (изменено)</span>}
         </div>
+        {!m.deleted && !!m.files?.length && <div className="chat-cards">{m.files.map((f) => <FileChip key={f.id} file={f} />)}</div>}
         {!m.deleted && !!m.attachments?.length && <div className="chat-cards">{m.attachments.map((a) => <CardChip key={`${a.type}:${a.id}`} card={a} />)}</div>}
       </div>
       {!m.deleted && <IconButton icon="more" tip="Действия" className="chat-msg-act" onClick={(e) => onMenu(e)} />}
@@ -280,9 +294,42 @@ function MessageRow({ m, me, team, grouped, onMenu }: { m: ChatMessage; me: stri
   );
 }
 
-function Composer({ people, team, editing, onCancelEdit, onSend, disabled }: {
-  people: TeamMember[]; team: TeamMember[]; editing: ChatMessage | null; onCancelEdit: () => void; onSend: (body: string, mentions: string[], cards: ChatAttachment[]) => Promise<boolean>; disabled: string | null;
+export interface PickedFile { name: string; size: number; mime: string; data: string }
+const MAX_FILE = 5 * 1024 * 1024;
+
+function readBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(new Error("Файл не читается."));
+    r.onload = () => resolve(String(r.result).split(",", 2)[1] ?? "");
+    r.readAsDataURL(file);
+  });
+}
+
+/** Файл в сообщении: имя и размер; по нажатию сохраняется на диск. */
+function FileChip({ file, onRemove }: { file: ChatFile | PickedFile; onRemove?: () => void }) {
+  const save = async () => {
+    const path = await pickSavePath("Сохранить файл", file.name, file.name.includes(".") ? file.name.split(".").pop()! : "");
+    if (path && "id" in file) { await attempt(() => api.wsChat("chat_file_save", { file: file.id, path })); toast("Файл сохранён", "success"); }
+  };
+  const body = (
+    <>
+      <span className="chat-card-emoji" aria-hidden><Icon name="file" size={16} /></span>
+      <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
+        <span className="ellipsis chat-card-title">{file.name}</span>
+        <span className="ellipsis faint chat-card-sub">Файл · {bytes(file.size)}</span>
+      </span>
+    </>
+  );
+  if (onRemove) return <span className="chat-card">{body}<IconButton icon="x" tip="Убрать" onClick={onRemove} /></span>;
+  return <button type="button" className="chat-card" onClick={() => void save()}>{body}<Icon name="download" size={14} className="faint" /></button>;
+}
+
+function Composer({ people, team, editing, onCancelEdit, onSend, disabled, replyTo, replyName, onCancelReply, filesOk }: {
+  people: TeamMember[]; team: TeamMember[]; editing: ChatMessage | null; onCancelEdit: () => void; onSend: (body: string, mentions: string[], cards: ChatAttachment[], files: PickedFile[]) => Promise<boolean>; disabled: string | null;
+  replyTo: ChatMessage | null; replyName: string; onCancelReply: () => void; filesOk: boolean;
 }) {
+  const [files, setFiles] = useState<PickedFile[]>([]);
   const [text, setText] = useState("");
   const [cards, setCards] = useState<ChatAttachment[]>([]);
   const [picking, setPicking] = useState(false);
@@ -292,7 +339,8 @@ function Composer({ people, team, editing, onCancelEdit, onSend, disabled }: {
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { if (editing) { setText(editing.body); area.current?.focus(); } }, [editing]);
+  useEffect(() => { if (editing) { setText(parseReply(editing.body).rest); area.current?.focus(); } }, [editing]);
+  useEffect(() => { if (replyTo) area.current?.focus(); }, [replyTo]);
   const matches = suggest ? mentionMatches(people, suggest.query) : [];
 
   const update = (v: string) => {
@@ -313,20 +361,32 @@ function Composer({ people, team, editing, onCancelEdit, onSend, disabled }: {
   const submit = async () => {
     const body = text.trim();
     const withCards = editing ? [] : cards;
-    if ((!body && !withCards.length && !(editing?.attachments?.length)) || busy) return;
+    const withFiles = editing ? [] : files;
+    if ((!body && !withCards.length && !withFiles.length && !(editing?.attachments?.length)) || busy) return;
     setBusy(true);
     const mentions = [...new Set([...picked.filter((id) => text.includes(`@${team.find((m) => m.user_id === id)?.display_name ?? "\u0000"}`)), ...mentionedIds(body, people)])];
-    const ok = await onSend(body, mentions, withCards);
+    const ok = await onSend(body, mentions, withCards, withFiles);
     setBusy(false);
-    if (ok) { setText(""); setPicked([]); setSuggest(null); setCards([]); }
+    if (ok) { setText(""); setPicked([]); setSuggest(null); setCards([]); setFiles([]); }
   };
 
   if (disabled) return <div className="chat-compose"><Notice>{disabled}</Notice></div>;
   return (
     <div className="chat-compose">
       {editing && <div className="row chat-editing"><Icon name="edit" size={13} /><span className="grow">Изменение сообщения</span><Button small variant="ghost" onClick={() => { onCancelEdit(); setText(""); }}>Отмена</Button></div>}
-      {!editing && cards.length > 0 && (
-        <div className="chat-cards compose" aria-label="Карточки в сообщении">
+      {replyTo && !editing && (
+        <div className="row chat-replying" aria-label="Ответ на сообщение">
+          <Icon name="send" size={13} />
+          <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
+            <strong className="ellipsis">Ответ: {replyName}</strong>
+            <span className="ellipsis faint">{parseReply(replyTo.body).rest.replace(/\s+/g, " ").trim() || "вложение"}</span>
+          </span>
+          <IconButton icon="x" tip="Отменить ответ" onClick={onCancelReply} />
+        </div>
+      )}
+      {!editing && (cards.length > 0 || files.length > 0) && (
+        <div className="chat-cards compose" aria-label="Вложения сообщения">
+          {files.map((f, i) => <FileChip key={`f${i}${f.name}`} file={f} onRemove={() => setFiles((cur) => cur.filter((x) => x !== f))} />)}
           {cards.map((c) => <CardChip key={`${c.type}:${c.id}`} card={c} onRemove={() => setCards((cur) => cur.filter((x) => x !== c))} />)}
         </div>
       )}
@@ -342,6 +402,7 @@ function Composer({ people, team, editing, onCancelEdit, onSend, disabled }: {
         </ul>
       )}
       <div className="row chat-compose-row">
+        {!editing && (canAttach || filesOk) && <IconButton icon="paperclip" tip="Прикрепить вложение" disabled={cards.length + files.length >= 10} onClick={() => setPicking(true)} />}
         <textarea
           ref={area}
           className="textarea chat-input"
@@ -363,10 +424,9 @@ function Composer({ people, team, editing, onCancelEdit, onSend, disabled }: {
           }}
         />
         <IconButton icon="at" tip="Упомянуть" onClick={() => { const caret = area.current?.selectionStart ?? text.length; const pre = caret > 0 && !/\s/.test(text[caret - 1]!) ? " @" : "@"; update(text.slice(0, caret) + pre + text.slice(caret)); area.current?.focus(); }} />
-        {!editing && canAttach && <IconButton icon="paperclip" tip="Прикрепить карточку CRM" disabled={cards.length >= 10} onClick={() => setPicking(true)} />}
-        <Button variant="primary" icon="send" busy={busy} disabled={!text.trim() && !(editing ? editing.attachments?.length : cards.length)} onClick={() => void submit()}>{editing ? "Сохранить" : "Отправить"}</Button>
+        <Button variant="primary" icon="send" busy={busy} disabled={!text.trim() && !(editing ? editing.attachments?.length : cards.length + files.length)} onClick={() => void submit()}>{editing ? "Сохранить" : "Отправить"}</Button>
       </div>
-      {picking && <AttachCardDialog taken={cards} onClose={() => setPicking(false)} onPick={(c) => { setCards((cur) => (cur.some((x) => x.type === c.type && x.id === c.id) ? cur : [...cur, c].slice(0, 10))); setPicking(false); requestAnimationFrame(() => area.current?.focus()); }} />}
+      {picking && <AttachCardDialog taken={cards} canCards={canAttach} filesOk={filesOk} onFiles={async (list) => { const next: PickedFile[] = []; for (const f of Array.from(list)) { if (f.size > MAX_FILE) { toast(`«${f.name}» больше 5 МБ.`, "error"); continue; } next.push({ name: f.name, size: f.size, mime: f.type || "application/octet-stream", data: await readBase64(f) }); } setFiles((cur) => [...cur, ...next].slice(0, 5)); setPicking(false); }} onClose={() => setPicking(false)} onPick={(c) => { setCards((cur) => (cur.some((x) => x.type === c.type && x.id === c.id) ? cur : [...cur, c].slice(0, 10))); setPicking(false); requestAnimationFrame(() => area.current?.focus()); }} />}
     </div>
   );
 }
@@ -406,23 +466,38 @@ function cardSubtitle(type: ChatCardType, r: CrmRecord): string {
 }
 
 /** Выбор карточки из CRM этого рабочего пространства: лиды, компании, контакты, сделки. */
-function AttachCardDialog({ taken, onClose, onPick }: { taken: ChatAttachment[]; onClose: () => void; onPick: (c: ChatAttachment) => void }) {
-  const [type, setType] = useState<ChatCardType>("crm_lead");
+function AttachCardDialog({ taken, onClose, onPick, canCards, filesOk, onFiles }: { taken: ChatAttachment[]; onClose: () => void; onPick: (c: ChatAttachment) => void; canCards: boolean; filesOk: boolean; onFiles: (f: FileList) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<"file" | ChatCardType>(canCards ? "crm_lead" : "file");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<CrmRecord[] | null>(null);
+  const type: ChatCardType = mode === "file" ? "crm_lead" : mode;
   const meta = ENTITIES[type];
   useEffect(() => {
+    if (mode === "file") return;
     let live = true;
     setItems(null);
     const t = setTimeout(() => {
       void api.wsList(meta.table, { search: q.trim() || null, limit: 30 }).then((r) => { if (live) setItems(r.items); }, () => { if (live) setItems([]); });
     }, q ? 200 : 0);
     return () => { live = false; clearTimeout(t); };
-  }, [type, q]);
+  }, [mode, q]);
   return (
-    <Dialog title="Прикрепить карточку" onClose={onClose} width={520}>
+    <Dialog title="Прикрепить вложение" onClose={onClose} width={560}>
       <div className="col" style={{ gap: 10, alignItems: "stretch" }}>
-        <Segmented small value={type} onChange={(v) => setType(v)} options={CARD_TYPES.map((t) => ({ value: t, label: ENTITIES[t].many }))} />
+        <div className="attach-kinds" role="group" aria-label="Что прикрепить">
+          {filesOk && <button type="button" className={`attach-kind${mode === "file" ? " on" : ""}`} aria-pressed={mode === "file"} onClick={() => setMode("file")}><Icon name="file" size={18} /><span>Файл</span></button>}
+          {canCards && CARD_TYPES.map((t) => (
+            <button key={t} type="button" className={`attach-kind${mode === t ? " on" : ""}`} aria-pressed={mode === t} onClick={() => setMode(t)}><Icon name={ENTITIES[t].icon} size={18} /><span>{ENTITIES[t].many}</span></button>
+          ))}
+        </div>
+        {mode === "file" ? (
+          <div className="col" style={{ gap: 8, alignItems: "flex-start" }}>
+            <input ref={input} type="file" multiple hidden aria-label="Выбрать файлы" onChange={(e) => { if (e.target.files?.length) onFiles(e.target.files); }} />
+            <Button icon="upload" variant="primary" onClick={() => input.current?.click()}>Выбрать файлы…</Button>
+            <span className="faint">До 5 файлов, каждый до 5 МБ.</span>
+          </div>
+        ) : (<>
         <TextInput value={q} onChange={setQ} icon="search" placeholder={`Поиск: ${ENTITIES[type].many.toLowerCase()}`} aria-label="Поиск карточки" autoFocus />
         {items === null ? <div className="center-fill" style={{ minHeight: 120 }}><Spinner /></div> : items.length === 0 ? (
           <div className="faint" style={{ padding: "16px 4px" }}>Ничего не нашлось.</div>
@@ -446,6 +521,7 @@ function AttachCardDialog({ taken, onClose, onPick }: { taken: ChatAttachment[];
             })}
           </ul>
         )}
+        </>)}
       </div>
     </Dialog>
   );

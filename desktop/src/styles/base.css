@@ -1,5 +1,5 @@
 *, *::before, *::after { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
 html { background: var(--bg); }
 body {
   font-family: var(--font);
@@ -15,7 +15,9 @@ body {
   -webkit-user-select: none;
   cursor: default;
 }
-#root { position: fixed; inset: 0; }
+#titlebar { position: fixed; top: 0; left: 0; right: 0; height: var(--titlebar-h); z-index: 5000; }
+/* Высота задаётся только краями (top/bottom): иначе `height: 100%` вытолкнет низ окна за край на высоту заголовка. */
+#root { position: fixed; inset: var(--titlebar-h) 0 0 0; height: auto; overflow: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: default; }
 input, textarea, .selectable, .selectable * { user-select: text; -webkit-user-select: text; }

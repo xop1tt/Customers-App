@@ -1,6 +1,6 @@
 import { SECTIONS, isLeadList } from "../lib/leads";
 import { integer } from "../lib/format";
-import { Avatar, Button, IconButton, Spinner, TextInput } from "../ui/kit";
+import { Avatar, Button, Spinner, TextInput } from "../ui/kit";
 import { Icon } from "../ui/icons";
 import { sourceTitle } from "../lib/sources";
 import { setFilter, setState, useStore } from "../state/store";
@@ -9,8 +9,6 @@ import { visibleLeads } from "../lib/leads";
 import { useMemo, useRef, useState } from "react";
 import { Popover } from "../ui/overlay";
 import { useNewSince, useViewportWidth } from "../state/hooks";
-import { modKey } from "../lib/platform";
-import { toggleQuick } from "./QuickSearch";
 import { moduleOf } from "../lib/modules";
 import { collectionGlyph } from "../lib/crm";
 
@@ -19,7 +17,6 @@ export function TopBar() {
   const filter = useStore((s) => s.filter);
   const leads = useStore((s) => s.snap.leads);
   const search = useStore((s) => s.search);
-  const ws = useStore((s) => s.ws);
   const sourceTitleKey = filter.source;
   const collection = useStore((s) => (s.section === "collection" ? s.collections.find((c) => c.id === s.collectionId) : undefined));
   const lead = isLeadList(section);
@@ -49,7 +46,6 @@ export function TopBar() {
           aria-label="Поиск по лидам"
         />
       )}
-      {ws && <IconButton icon="search" tip={`Быстрый поиск (${modKey()}+K)`} aria-label="Быстрый поиск" onClick={toggleQuick} />}
       <WorkspaceAvatars />
       {/* «Найти лиды» — только в модуле «Поиск»; в CRM кнопки нет. */}
       {moduleOf(section) === "search" && (search.running ? (

@@ -316,11 +316,6 @@ pub mod input {
         crate::search::sources::is_public_http_url(&s).then_some(s)
     }
 
-    pub fn keyword(raw: &str) -> Option<String> {
-        let s = raw.trim().to_lowercase();
-        (!s.is_empty()).then_some(s)
-    }
-
     pub fn region(raw: &str) -> Option<String> {
         let s = raw.trim().replace('"', "");
         (!s.is_empty()).then_some(s)

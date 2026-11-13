@@ -1,6 +1,7 @@
 // Демо-реализация команд для запуска вне Tauri: браузер, тесты и снимки экрана.
 // Данные выдуманные; в собранное приложение эта часть не загружается (динамический импорт).
 
+import { IN_TEST } from "./wsMock";
 import catalog from "../../src-tauri/data/osm_catalog.json";
 import type {
   AccountPrefs, BootInfo, DevicePrefs, DrivesState, Exclusion, ExclusionKind, Lead, OsmCategory, SearchSettings, SearchStatus, SessionInfo, Snapshot, SourceReport,
@@ -122,13 +123,13 @@ const baseDevice: DevicePrefs = {
   accent: null, theme: "system", language: "system", uiScale: 1, navWidth: 260, navOpen: true, navHidden: false, inspectorWidth: 400, inspectorShown: true, compactRows: false, animations: true,
   sidebarHidden: [], sidebarHiddenSources: [], sidebarOrder: [], sidebarSourceOrder: [], sidebarCounts: true, sidebarSources: true, sidebarHover: true, sidebarCollapsed: [],
   lightModeAuto: true, lightModeThreshold: 20, checkUpdates: true, updateCheckHours: 24, lastUpdateCheck: ago(3), backgroundDownload: true,
-  lastSeenVersion: "1.1.0", closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: true, rememberedUser: null, lastSection: "home",
+  lastSeenVersion: "1.1.0", closeToTray: true, startMinimized: false, launchAtLogin: false, trayHintShown: true, lastSection: "home",
   listSort: "score", listSortDescending: true, reportsOfferAfterCrash: true, reportsLogErrors: true, reportsIncludeLog: true, reportsLastSeen: null, legacyImported: true,
 };
 let device: DevicePrefs = { ...baseDevice };
 
 let account: AccountPrefs = {
-  autoSearchMinutes: 120, newLeadsSearches: 1, signature: "", backupDirectory: "~/Documents/Customers Backups/anna", autoBackup: true, keepBackups: 14, dataPath: null,
+  autoSearchMinutes: 120, newLeadsSearches: 1, signature: "", backupDirectory: "~/Documents/Customers Backups", autoBackup: true, keepBackups: 14, dataPath: null,
   notifyNewLeads: true, notifyErrors: true, notifySync: false, notifyMessages: true, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1, callApp: "system",
   welcomeDone: !demo.has("welcome"), exportLastTab: "file",
 };
@@ -176,12 +177,14 @@ let search: SearchStatus = {
   },
 };
 
-let signedIn = demo.has("auth") ? false : !demo.has("local");
-let cloud = demo.has("cloud");
+// Живое демо начинается со страницы входа и всегда облачное; тесты по-прежнему стартуют с открытой сессией.
+let signedIn = demo.has("auth") ? false : IN_TEST ? !demo.has("local") : false;
+let cloud = IN_TEST ? demo.has("cloud") : true;
 let profile: { name: string | null; avatar: string | null } = { name: null, avatar: null };
+let signedEmail = "alex@example.ru";
 const session = (): SessionInfo => ({
-  id: cloud ? "cloud-1" : "anna", displayName: profile.name ?? (cloud ? "anna@example.ru" : "anna"), avatar: profile.avatar, isCloud: cloud,
-  cloudUser: cloud ? { id: "1", email: "anna@example.ru", newEmail: null, confirmed: true } : null, databasePath: "/Users/anna/Library/Application Support/Lead Generator/anna/leads.db",
+  id: cloud ? "cloud-1" : "alex", displayName: profile.name ?? (cloud ? signedEmail : "alex"), avatar: profile.avatar,
+  cloudUser: cloud ? { id: "1", email: signedEmail, newEmail: null, confirmed: true } : null, databasePath: "/Users/demo/Library/Application Support/Customers/demo/leads.db",
 });
 
 let update: UpdateInfo = {
@@ -218,7 +221,7 @@ const drives: DrivesState = {
   drives: [
     { service: "googleDrive", title: "Google Диск", subtitle: "Копии в папке приложения", kind: "oauth", provider: "google", connected: false, connectedAt: null, available: false, defaultUrl: "", passwordPage: null, passwordOptional: false, webdavUrl: null, login: null },
     { service: "dropbox", title: "Dropbox", subtitle: "Копии в папке приложения", kind: "oauth", provider: "dropbox", connected: false, connectedAt: null, available: false, defaultUrl: "", passwordPage: null, passwordOptional: false, webdavUrl: null, login: null },
-    { service: "yandexDisk", title: "Яндекс Диск", subtitle: "По WebDAV с паролем приложения", kind: "webdav", provider: null, connected: true, connectedAt: ago(100), available: true, defaultUrl: "https://webdav.yandex.ru", passwordPage: "https://id.yandex.ru/security/app-passwords", passwordOptional: false, webdavUrl: "https://webdav.yandex.ru/", login: "anna" },
+    { service: "yandexDisk", title: "Яндекс Диск", subtitle: "По WebDAV с паролем приложения", kind: "webdav", provider: null, connected: true, connectedAt: ago(100), available: true, defaultUrl: "https://webdav.yandex.ru", passwordPage: "https://id.yandex.ru/security/app-passwords", passwordOptional: false, webdavUrl: "https://webdav.yandex.ru/", login: "alex" },
     { service: "webdav", title: "WebDAV", subtitle: "Nextcloud, ownCloud и другие", kind: "webdav", provider: null, connected: false, connectedAt: null, available: true, defaultUrl: "", passwordPage: null, passwordOptional: true, webdavUrl: null, login: null },
   ],
 };
@@ -290,18 +293,11 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
   switch (cmd) {
     case "boot_info":
       return {
-        version: "1.1.0", platform: demo.get("platform") === "windows" ? "windows" : "macos", cloudAvailable: true, hasUsers: true, existingInstall: true,
+        version: "1.1.0", platform: demo.get("platform") === "windows" ? "windows" : "macos", cloudAvailable: true,
         session: signedIn ? session() : null, device, error: null,
       } satisfies BootInfo;
-    case "local_accounts":
-      return ["anna", "boris"];
-    case "register":
-    case "login":
-      signedIn = true;
-      cloud = false;
-      emit("session-changed", session());
-      return null;
     case "cloud_sign_in":
+      if (String(args.email)) signedEmail = String(args.email);
       if (String(args.password) === "wrong") throw { code: "", message: "Неверный адрес почты или пароль." };
       signedIn = true;
       cloud = true;
@@ -336,8 +332,6 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
       signedIn = false;
       emit("session-ended", { reason: "" });
       return null;
-    case "is_remembered":
-      return !!device.rememberedUser;
     case "snapshot":
       return snapshot();
     case "lead_events":
@@ -504,7 +498,7 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
           ] }
         : { show: false };
     case "paths_info":
-      return { root: "/Users/anna/Library/Application Support/Lead Generator", logs: "/Users/anna/Library/Logs/LeadGenerator", documents: "/Users/anna/Documents", errorLog: "/Users/anna/Library/Logs/LeadGenerator/errors.log" };
+      return { root: "/Users/demo/Library/Application Support/Lead Generator", logs: "/Users/demo/Library/Logs/LeadGenerator", documents: "/Users/demo/Documents", errorLog: "/Users/demo/Library/Logs/LeadGenerator/errors.log" };
     case "error_log":
       return ["2026-11-05 12:01:10 Канал freetasks: превышено время ожидания"];
     case "crash_reports":

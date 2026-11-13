@@ -5,6 +5,7 @@ import { api } from "../api";
 import { on } from "../api/backend";
 import type { ChatConversation, ChatPoll, TeamMember } from "../api/types";
 import { loadPrefs, shouldToast } from "../lib/notifyPrefs";
+import { HIDDEN_SLOWDOWN, isHidden } from "../lib/visibility";
 import { attempt, getState, openCollection, openRecord, setState, toast, useStore } from "./store";
 
 export const POLL_EVERY = 15_000;
@@ -50,7 +51,7 @@ export async function pollChat(): Promise<ChatPoll | null> {
 function announce(chat: ChatPoll) {
   const st = getState();
   if (!st.account?.notifyMessages || typeof document === "undefined" || !document.hasFocus()) return;
-  const viewing = st.section === "chat" ? st.chatOpen : null;
+  const viewing = st.chatPopup ? st.chatOpen : null;
   const prefs = loadPrefs();
   for (const m of chat.fresh.filter((f) => f.conversation_id !== viewing && shouldToast("message", prefs)).slice(0, 2)) {
     const where = m.kind === "group" ? ` в «${m.title ?? "обсуждении"}»` : "";
@@ -77,7 +78,7 @@ export function useChatPolling() {
       timer = setTimeout(() => {
         void pollChat().finally(loop);
         if (++tick % TEAM_EVERY === 0) void refreshTeam();
-      }, getState().chat?.live ? LIVE_POLL_EVERY : POLL_EVERY);
+      }, (getState().chat?.live ? LIVE_POLL_EVERY : POLL_EVERY) * (isHidden() ? HIDDEN_SLOWDOWN : 1));
     };
     void pollChat().finally(loop);
     // Realtime: сервер сообщает только «что-то изменилось», содержимое забирается обычным запросом.
@@ -106,7 +107,7 @@ export function openCrmCard(type: string, id: string) {
 }
 
 export function openChat(id: string | null) {
-  setState({ section: "chat", chatOpen: id, collectionId: null, record: null, selection: [], anchor: null, navPeek: false });
+  setState({ chatPopup: true, chatOpen: id });
 }
 
 /** «Написать сообщение»: личный диалог с сотрудником. */

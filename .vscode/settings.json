@@ -1,0 +1,37 @@
+{
+  // Живой просмотр: Vite обновляет страницу при каждом сохранении файла.
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 500,
+
+  // TypeScript из проекта (версия 7), подсказки и ошибки прямо в редакторе.
+  "typescript.tsdk": "desktop/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.preferences.importModuleSpecifier": "relative",
+  "editor.inlayHints.enabled": "on",
+  "typescript.inlayHints.parameterNames.enabled": "literals",
+  "typescript.inlayHints.variableTypes.enabled": true,
+  "typescript.inlayHints.functionLikeReturnTypes.enabled": true,
+  "editor.quickSuggestions": { "strings": "on" },
+
+  // «Золотые» тесты и тесты интерфейса: расширение Vitest берёт настройки из vite.config.ts.
+  "vitest.rootConfig": "desktop/vite.config.ts",
+  "vitest.workspaceConfig": "desktop/vite.config.ts",
+  "vitest.nodeExecutable": "node",
+  "vitest.enable": true,
+  "vitest.shellType": "child_process",
+  "testing.automaticallyOpenTestResults": "openOnTestFailure",
+  "testing.showAllMessages": true,
+  "testing.gutterEnabled": true,
+  "testing.defaultGutterClickAction": "run",
+  "testing.openTesting": "openOnTestStart",
+
+  // Rust-ядро.
+  "rust-analyzer.linkedProjects": ["desktop/src-tauri/Cargo.toml"],
+
+  // Python-тесты репозитория.
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+
+  "files.exclude": { "**/node_modules": true },
+  "search.exclude": { "**/node_modules": true, "desktop/dist": true, "desktop/src-tauri/target": true }
+}

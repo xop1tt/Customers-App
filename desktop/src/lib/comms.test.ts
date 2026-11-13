@@ -14,7 +14,7 @@ describe("куда звонить и писать", () => {
       { value: "8 800 000-00-00", owner: "Иван Петров" },
     ]);
     expect(contactPoints([company, person], "emails").map((x) => x.value)).toEqual(["Info@romashka.ru", "ivan@romashka.ru"]);
-    expect(contactPoints([rec({ first_name: "Анна", emails: "не список" })], "emails")).toEqual([]);
+    expect(contactPoints([rec({ first_name: "Алексей", emails: "не список" })], "emails")).toEqual([]);
   });
 
   it("проверяет адрес", () => {
@@ -37,7 +37,7 @@ describe("шаблоны писем", () => {
     expect(r.subject).toBe("Итоги встречи");
     expect(r.body.startsWith("Здравствуйте!\n\n")).toBe(true);
     expect(fillTemplate(tpl("follow_up"), { name: "", company: "", deal: "", signature: "" }).subject).toBe("Напоминаю о");
-    expect(fillTemplate(tpl("blank"), { name: "Анна", company: "", deal: "", signature: "" })).toEqual({ subject: "", body: "Здравствуйте, Анна!" });
+    expect(fillTemplate(tpl("blank"), { name: "Алексей", company: "", deal: "", signature: "" })).toEqual({ subject: "", body: "Здравствуйте, Алексей!" });
   });
 });
 
