@@ -391,6 +391,11 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Окно: закрытие в трей, запуск свёрнутым при автозапуске.
+    // Системная рамка не нужна: у окна свой заголовок (TitleBar.tsx). Выключаем её и в коде, чтобы на macOS
+    // не появлялся второй ряд кнопок «светофора», даже если настройка окна из tauri.conf.json не применилась.
+    if let Some(w) = app.get_webview_window(MAIN) {
+        let _ = w.set_decorations(false);
+    }
     let minimized_launch = std::env::args().any(|a| a == "--minimized") && env.device_prefs().start_minimized;
     if let Some(window) = app.get_webview_window(MAIN) {
         let (h, c) = (handle.clone(), core.clone());
