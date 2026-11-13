@@ -298,6 +298,12 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
       } satisfies BootInfo;
     case "local_accounts":
       return [];
+    case "register":
+    case "login":
+      signedIn = true;
+      cloud = false;
+      emit("session-changed", session());
+      return null;
     case "cloud_sign_in":
       if (String(args.email)) signedEmail = String(args.email);
       if (String(args.password) === "wrong") throw { code: "", message: "Неверный адрес почты или пароль." };

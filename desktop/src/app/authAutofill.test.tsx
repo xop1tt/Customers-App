@@ -39,6 +39,17 @@ describe("автозаполнение на экране входа", () => {
     expect(screen.getByRole("heading", { name: "Восстановление пароля" })).toBeInTheDocument();
   });
 
+  it("сборка без облака: запасной локальный вход (приёмочные проверки), вкладок режимов нет", async () => {
+    window.history.pushState({}, "", "/?auth");
+    const { AuthScreen } = await import("./Auth");
+    const { setState } = await import("../state/store");
+    setState({ phase: "auth", boot: { version: "1", platform: "macos", cloudAvailable: false, hasUsers: false, existingInstall: false, session: null, device: { rememberedUser: null } } as never });
+    const { container } = render(<AuthScreen />);
+    expect(await screen.findByLabelText("Имя аккаунта")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(container.querySelectorAll("form")).toHaveLength(1);
+  });
+
   it("локального входа нет: только облачная форма, без вкладки «На этом компьютере»", async () => {
     const { container } = await show("/?auth&cloud");
     expect(screen.queryByRole("tab", { name: "На этом компьютере" })).toBeNull();
