@@ -80,7 +80,7 @@ export function AuthScreen() {
     }
   };
 
-  const title = localOnly ? (localMode === "login" ? "Вход" : "Регистрация") : { signIn: "Вход", signUp: "Регистрация", confirm: "Подтверждение почты", forgot: "Восстановление пароля", reset: "Новый пароль", newPassword: "Новый пароль" }[stage];
+  const title = localOnly ? (localMode === "login" ? "Вход на этом компьютере" : "Новый локальный аккаунт") : { signIn: "Вход", signUp: "Регистрация", confirm: "Подтверждение почты", forgot: "Восстановление пароля", reset: "Новый пароль", newPassword: "Новый пароль" }[stage];
 
   const canSubmit = localOnly ? user.trim() !== "" && password !== "" && (localMode === "login" || confirm !== "") : { signIn: emailOk && password !== "", signUp: emailOk && username.trim() !== "" && password !== "" && confirm !== "", confirm: code.trim().length >= 4, forgot: emailOk, reset: code.trim().length >= 4 && password !== "" && confirm !== "", newPassword: password !== "" && confirm !== "" }[stage];
 
