@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Живой просмотр в Chrome (с точками останова)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:1420/",
+      "webRoot": "${workspaceFolder}/desktop",
+      "preLaunchTask": "Живой просмотр (Vite)"
+    },
+    {
+      "name": "Живой просмотр в Edge (с точками останова)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:1420/",
+      "webRoot": "${workspaceFolder}/desktop",
+      "preLaunchTask": "Живой просмотр (Vite)"
+    }
+  ]
+}

@@ -47,11 +47,11 @@ describe("мастер первого запуска", () => {
     click("Позже");
 
     await screen.findByRole("heading", { name: "Звонки и письма" });
-    fireEvent.change(screen.getByLabelText("Подпись в письмах"), { target: { value: "Анна, Студия «Пиксель»" } });
+    fireEvent.change(screen.getByLabelText("Подпись в письмах"), { target: { value: "Алексей, Студия «Пиксель»" } });
     click("Начать работу");
     await waitFor(() => expect(getState().phase).toBe("ready"));
     expect(getState().account?.welcomeDone).toBe(true);
-    expect(getState().account?.signature).toBe("Анна, Студия «Пиксель»");
+    expect(getState().account?.signature).toBe("Алексей, Студия «Пиксель»");
     expect(getState().section).toBe("today");
   });
 

@@ -40,9 +40,11 @@ import { JournalPage } from "./crm/JournalPage";
 import { TrashPage } from "./crm/TrashPage";
 import { ProfilePage } from "./team/ProfilePage";
 import { PeoplePage } from "./team/PeoplePage";
-import { ChatPage } from "./team/ChatPage";
-import { NotificationsPage } from "./team/NotificationsPage";
+import { ChatWindow } from "./team/ChatWindow";
 import { useChatPolling } from "../state/team";
+import { useConnectionWatch } from "../state/connection";
+import { ReconnectToast } from "./Reconnect";
+import { OrgChartPage } from "./team/OrgChart";
 
 
 const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
@@ -133,6 +135,8 @@ export function App() {
       <ConfirmHost />
       <TooltipHost />
       <Toasts />
+      {phase === "ready" && <ChatWindow />}
+      <ReconnectToast />
     </>
   );
 }
@@ -205,9 +209,6 @@ function Shell() {
   // Видимая ширина левой панели: при перетаскивании — живое значение, иначе сохранённое (0 — свёрнута).
   const navVis = navLive ?? (device.navOpen ? device.navWidth : 0);
   const navW = navVis || device.navWidth;
-  // В чате панели разделов нет: слева сразу список обсуждений (с учётной записью внизу), справа окно чата.
-  const chatCloud = useStore((s) => (s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.remote ?? false) && !s.chat?.missing);
-  const noNav = section === "chat" && chatCloud;
   const inspW = inspLive && inspLive > 0 ? inspLive : device.inspectorWidth;
 
   useEffect(() => {
@@ -218,7 +219,7 @@ function Shell() {
   const width = useViewportWidth();
   const narrow = width < 900;
   // Рабочая область не должна становиться уже MIN_CENTER: иначе панель сведений наезжает на кнопки верхней панели.
-  const navTaken = RAIL_W + (narrow || noNav ? 0 : navVis);
+  const navTaken = RAIL_W + (narrow ? 0 : navVis);
   const room = width - navTaken - MIN_CENTER;
   const floatInsp = room < INSP_MIN;
   const inspDock = clamp(inspW, INSP_MIN, Math.max(INSP_MIN, Math.min(INSP_MAX, room)));
@@ -228,6 +229,7 @@ function Shell() {
   const collectionId = useStore((st) => st.collectionId);
   const profileId = useStore((st) => st.profileId);
   useChatPolling();
+  useConnectionWatch();
   useMarketInstalled();
   useHubSync();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
@@ -256,9 +258,9 @@ function Shell() {
   const inspLabel = crm ? "Карточка записи" : "Сведения о лиде";
 
   return (
-    <div className="shell" style={{ ["--rail-w" as string]: `${RAIL_W}px`, ["--nav-w" as string]: `${navW}px`, ["--nav-vis" as string]: `${narrow || noNav ? 0 : navVis}px`, ["--insp-w" as string]: `${floatInsp ? Math.min(inspW, 460) : inspDock}px` }}>
+    <div className="shell" style={{ ["--rail-w" as string]: `${RAIL_W}px`, ["--nav-w" as string]: `${navW}px`, ["--nav-vis" as string]: `${narrow ? 0 : navVis}px`, ["--insp-w" as string]: `${floatInsp ? Math.min(inspW, 460) : inspDock}px` }}>
       <ModuleRail />
-      {noNav ? null : narrow ? (
+      {narrow ? (
         <>
           {!peek && <div className="hover-edge" onPointerEnter={() => setState({ navPeek: true })} onPointerDown={() => setState({ navPeek: true })} />}
           {peek && (
@@ -290,8 +292,7 @@ function Shell() {
           {section === "journal" && <JournalPage />}
           {section === "profile" && <ProfilePage />}
           {section === "people" && <PeoplePage />}
-          {section === "chat" && <ChatPage />}
-          {section === "notifications" && <NotificationsPage />}
+          {section === "structure" && <OrgChartPage />}
         </div>
       </main>
       {showInsp && floatInsp && (

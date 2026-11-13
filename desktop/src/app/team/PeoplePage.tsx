@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TeamMember } from "../../api/types";
 import { shortRelative } from "../../lib/format";
-import { buildTree, presenceText, type TreeNode } from "../../lib/team";
-import { Avatar, EmptyState, IconButton, Notice, Segmented, Spinner, Tag, TextInput } from "../../ui/kit";
-import { openProfile, useStore } from "../../state/store";
+import { presenceText } from "../../lib/team";
+import { Avatar, Button, EmptyState, Notice, Segmented, Spinner, Tag, TextInput } from "../../ui/kit";
+import { openProfile, toast, useStore } from "../../state/store";
+import { copyText } from "../../lib/platform";
+import { showMenu, type MenuItem } from "../../ui/overlay";
 import { messageMember, refreshTeam } from "../../state/team";
 import { Departments } from "./Departments";
 
@@ -22,7 +24,7 @@ export function PeoplePage() {
   const team = useStore((s) => s.team);
   const ws = useStore((s) => s.ws);
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"list" | "tree" | "deps">("list");
+  const [view, setView] = useState<"list" | "deps">("list");
   const [loaded, setLoaded] = useState(false);
   useEffect(() => { void refreshTeam().then(() => setLoaded(true)); }, [ws?.active]);
   const cloud = ws?.workspaces.find((w) => w.id === ws.active)?.remote ?? false;
@@ -37,13 +39,10 @@ export function PeoplePage() {
   return (
     <div className="page scroll">
       <div className="people">
-        {!cloud && (
-          <Notice>Это локальное рабочее пространство: в нём только вы. Сотрудники, их статус и сообщения появятся в облачном рабочем пространстве — пригласите коллег в «Рабочем пространстве».</Notice>
-        )}
         {team.some((m) => m.offline) && <Notice tone="warn">Нет связи с облаком: показан сохранённый список без карточек и статуса.</Notice>}
         <div className="people-bar">
           <TextInput value={query} onChange={setQuery} icon="search" placeholder="Имя, должность, отдел или почта" aria-label="Поиск сотрудников" wrapClass="grow" onClear={query ? () => setQuery("") : undefined} />
-          <Segmented small value={view} onChange={setView} options={[{ value: "list", label: "Список" }, { value: "tree", label: "Структура" }, { value: "deps", label: "Отделы" }]} />
+          <Segmented small value={view} onChange={setView} options={[{ value: "list", label: "Список" }, { value: "deps", label: "Отделы" }]} />
         </div>
         <div className="faint people-sum">
           Сотрудников: {team.length}{cloud ? ` · в сети: ${online}` : ""}{departments.length ? ` · отделы: ${departments.join(", ")}` : ""}
@@ -52,13 +51,9 @@ export function PeoplePage() {
           <Departments team={team} />
         ) : shown.length === 0 ? (
           <EmptyState icon="users" title="Никого не нашлось">Измените запрос поиска.</EmptyState>
-        ) : view === "list" || q ? (
+        ) : (
           <ul className="people-list cards" aria-label="Сотрудники">
             {shown.map((m) => <PersonRow key={m.user_id} m={m} depth={0} card />)}
-          </ul>
-        ) : (
-          <ul className="people-list" aria-label="Структура">
-            {buildTree(shown).map((n) => <TreeRows key={n.member.user_id} node={n} depth={0} />)}
           </ul>
         )}
       </div>
@@ -66,13 +61,16 @@ export function PeoplePage() {
   );
 }
 
-function TreeRows({ node, depth }: { node: TreeNode; depth: number }) {
-  return (
-    <>
-      <PersonRow m={node.member} depth={depth} reports={node.children.length} />
-      {node.children.map((c) => <TreeRows key={c.member.user_id} node={c} depth={depth + 1} />)}
-    </>
-  );
+/** Контекстное меню сотрудника: правый клик по карточке или строке. */
+export function personMenu(m: TeamMember, me: string | undefined, cloud: boolean): MenuItem[] {
+  const self = m.user_id === me;
+  return [
+    { label: "Открыть профиль", icon: "user", onSelect: () => openProfile(self ? null : m.user_id) },
+    ...(cloud && !self ? [{ label: "Открыть чат", icon: "chat", onSelect: () => void messageMember(m.user_id) } as MenuItem] : []),
+    { separator: true },
+    { label: "Скопировать имя", icon: "copy", onSelect: () => { void copyText(m.display_name); toast("Имя скопировано"); } },
+    ...(m.email ? [{ label: "Скопировать почту", icon: "mail", onSelect: () => { void copyText(m.email!); toast("Почта скопирована"); } } as MenuItem] : []),
+  ];
 }
 
 export function PersonRow({ m, depth, reports, card }: { m: TeamMember; depth: number; reports?: number; card?: boolean }) {
@@ -80,17 +78,20 @@ export function PersonRow({ m, depth, reports, card }: { m: TeamMember; depth: n
   const cloud = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.remote ?? false);
   const sub = [m.title, m.department].filter(Boolean).join(" · ");
   return (
-    <li className={`person-row${card ? " card" : ""}`} style={card ? undefined : { paddingLeft: 10 + depth * 22 }}>
+    <li className={`person-row${card ? " card" : ""}`} style={card ? undefined : { paddingLeft: 10 + depth * 22 }}
+      onContextMenu={(e) => { e.preventDefault(); showMenu(personMenu(m, me, cloud), { x: e.clientX, y: e.clientY }); }}>
       <button type="button" className="person-main" onClick={() => openProfile(m.user_id === me ? null : m.user_id)}>
-        <PersonAvatar m={m} size={card ? 48 : 32} />
-        <span className="col grow" style={{ gap: 1, minWidth: 0 }}>
+        <PersonAvatar m={m} size={card ? 64 : 32} />
+        <span className="col grow" style={{ gap: card ? 3 : 1, minWidth: 0 }}>
           <span className="ellipsis person-name">{m.display_name}{m.user_id === me && <span className="faint"> · вы</span>}</span>
           <span className="ellipsis faint person-sub">{sub || presenceText(m, shortRelative)}</span>
+          {card && m.email && <span className="ellipsis faint person-sub">{m.email}</span>}
+          {card && <span className="ellipsis faint person-sub">{presenceText(m, shortRelative)}</span>}
         </span>
         {reports ? <span className="faint person-reports">подчинённых: {reports}</span> : null}
         <Tag>{m.role_name}</Tag>
       </button>
-      {cloud && m.user_id !== me && <IconButton icon="chat" tip="Написать сообщение" onClick={() => void messageMember(m.user_id)} />}
+      {cloud && m.user_id !== me && <Button small icon="chat" className="person-chat" aria-label={`Открыть чат: ${m.display_name}`} onClick={() => void messageMember(m.user_id)}>Открыть чат</Button>}
     </li>
   );
 }

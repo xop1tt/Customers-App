@@ -33,10 +33,25 @@ describe("рейка модулей", () => {
     await waitFor(() => expect(getState().section).toBe("deals"));
     fireEvent.click(mod(/^Команда/));
     await waitFor(() => expect(getState().section).toBe("people"));
-    // «Сообщения» — отдельный модуль рейки со своей панелью.
-    fireEvent.click(mod(/^Сообщения/));
-    await waitFor(() => expect(getState().section).toBe("chat"));
-    expect(mod(/^Сообщения/)).toHaveAttribute("aria-current", "page");
+    // «Чат» — не модуль, а кнопка у низа рейки над «Ai»: всплывающее окно, повторный клик сворачивает.
+    const chat = mod(/^Чат/);
+    expect(getState().section).toBe("people");
+    fireEvent.click(chat);
+    expect(await screen.findByRole("dialog", { name: "Чат" })).toBeInTheDocument();
+    expect(getState().section).toBe("people");
+    expect(chat).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(chat);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Чат" })).toBeNull());
+    expect(chat).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("кнопка «Чат» стоит в рейке внизу, прямо над «Ai»", async () => {
+    render(<App />);
+    await screen.findByLabelText("Навигация");
+    const names = within(rail()).getAllByRole("button").map((b) => b.getAttribute("aria-label"));
+    const chat = names.findIndex((n) => /^Чат/.test(n ?? ""));
+    expect(chat).toBeGreaterThan(names.findIndex((n) => /^Команда/.test(n ?? "")));
+    expect(names[chat + 1]).toBe("Ai");
   });
 
   it("в рейке нет «Настроек»: внизу кнопка «Ai», а настройки открываются из меню аккаунта", async () => {
@@ -74,8 +89,8 @@ describe("панель разделов", () => {
     fireEvent.click(within(nav).getByRole("button", { name: "Готово" }));
 
     // У «Сообщений» и «Команды» настраивать нечего: кнопки нет.
-    fireEvent.click(mod(/^Сообщения/));
-    await waitFor(() => expect(getState().section).toBe("chat"));
+    fireEvent.click(mod(/^Команда/));
+    await waitFor(() => expect(getState().section).toBe("people"));
     expect(within(nav).queryByRole("button", { name: "Настроить панель" })).toBeNull();
   });
 

@@ -94,24 +94,36 @@ function seed(id: string, demo: boolean): Map<string, Row[]> {
 }
 
 const demoParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+/** Тесты сохраняют прежние флаги (`?team`); живое демо и превью всегда облачные: локального пространства больше нет. */
+export const IN_TEST = !!import.meta.env.VITEST;
+const TEAM = IN_TEST ? demoParams.has("team") : true;
 const workspaces: Ws[] = [];
+/** Без связи: изменения применяются локально и ждут в очереди до первой удачной синхронизации (как в ядре). */
+let forcedOffline = false;
+let queued = 0;
+const isOffline = () => forcedOffline || (typeof navigator !== "undefined" && navigator.onLine === false);
+const QUEUED_WHEN_OFFLINE = new Set(["ws_save", "ws_delete", "ws_restore", "ws_convert_lead", "ws_merge", "ws_attach_add", "ws_import_run"]);
+/** Тесты и демо: принудительно «нет интернета». */
+export function setMockOffline(v: boolean) { forcedOffline = v; }
+export const mockQueued = () => queued;
 /** Почта демо-учётной записи: приглашение на этот адрес приходит во «входящие» (ADR-082). */
-export const DEMO_EMAIL = "anna@customers.demo";
+export const DEMO_EMAIL = "alex@customers.demo";
 const incoming: { id: string; workspaceName: string; role: string; roleName: string; invitedByName: string; createdAt: string; expiresAt: string }[] = [];
 let active: string | null = null;
 
 function ensure(): Ws {
   if (!workspaces.length) {
     const personal = "ws-personal";
-    workspaces.push({ info: info(personal, "Моё рабочее пространство", "owner", true, 1), members: [member(ME, "Анна", "owner")], tables: seed(personal, true), prefs: new Map(), conflicts: [] });
-    if (demoParams.has("team")) {
+    if (IN_TEST) workspaces.push({ info: info(personal, "Моё рабочее пространство", "owner", true, 1), members: [member(ME, "Алексей", "owner")], tables: seed(personal, true), prefs: new Map(), conflicts: [] });
+    if (TEAM) {
       const team = "ws-team";
-      const members = [member(ME, "Анна", "manager"), member("00000000-0000-4000-8000-000000000002", "Борис Петров", "owner"), member("00000000-0000-4000-8000-000000000003", "Вера Ким", "employee"),
-        member("00000000-0000-4000-8000-000000000004", "Глеб Орлов", "employee"), member("00000000-0000-4000-8000-000000000005", "Дина Лис", "viewer"), member("00000000-0000-4000-8000-000000000006", "Егор Сом", "employee")];
+      const members = [member(ME, "Алексей", "manager"), member("00000000-0000-4000-8000-000000000002", "Борис Петров", "owner"), member("00000000-0000-4000-8000-000000000003", "Вера Ким", "employee"),
+        member("00000000-0000-4000-8000-000000000004", "Глеб Орлов", "employee"), member("00000000-0000-4000-8000-000000000005", "Дина Лис", "viewer"), member("00000000-0000-4000-8000-000000000006", "Егор Сом", "employee"),
+        ...(IN_TEST ? [] : [member("00000000-0000-4000-8000-000000000007", "Зоя Мартынова", "manager"), member("00000000-0000-4000-8000-000000000008", "Илья Рябов", "employee"), member("00000000-0000-4000-8000-000000000009", "Карина Белова", "employee"), member("00000000-0000-4000-8000-000000000010", "Лев Тарасов", "viewer")])];
       workspaces.push({ info: { ...info(team, "Отдел продаж", "manager", false, members.length), remote: true }, members, tables: seed(team, true), prefs: new Map(), conflicts: [] });
       active = team;
     }
-    active ??= personal;
+    active ??= workspaces[0]?.info.id ?? null;
   }
   return workspaces.find((w) => w.info.id === active) ?? workspaces[0]!;
 }
@@ -125,6 +137,8 @@ export function resetWsMock() {
   lastMerge = null;
   active = null;
   imports.length = 0;
+  queued = 0;
+  forcedOffline = false;
 }
 
 /** Сменить свою роль в активном Workspace (тесты): например, чтобы стать владельцем. */
@@ -146,8 +160,8 @@ export function addWsMockMember(name: string, role = "employee"): string {
 function state(): WsState {
   const ws = ensure();
   return {
-    isCloud: demoParams.has("team"), me: ME, workspaces: workspaces.map((w) => w.info), active, permissions: ws.info.permissions, members: ws.members,
-    pending: 0, rejected: 0, conflicts: ws.conflicts.length, syncing: false, lastSync: null, error: null,
+    isCloud: TEAM, me: ME, workspaces: workspaces.map((w) => w.info), active, permissions: ws.info.permissions, members: ws.members,
+    pending: queued, rejected: 0, conflicts: ws.conflicts.length, syncing: false, lastSync: null, error: null,
   };
 }
 
@@ -448,8 +462,13 @@ async function remoteOnly(): Promise<never> {
 export async function wsCall(cmd: string, args: Record<string, unknown>, leads: () => Lead[]): Promise<unknown> {
   const ws = ensure();
   const s = (k: string) => args[k] as string;
+  if (QUEUED_WHEN_OFFLINE.has(cmd) && isOffline()) queued++;
   switch (cmd) {
-    case "ws_state": case "ws_refresh": case "ws_sync_now": return state();
+    case "ws_state": case "ws_refresh": return state();
+    case "ws_sync_now":
+      if (isOffline()) fail("Нет связи с облаком. Изменения сохранены и уйдут при подключении.");
+      queued = 0;
+      return state();
     case "ws_switch":
       if (!workspaces.some((w) => w.info.id === s("id"))) fail("Такого рабочего пространства нет в списке.");
       active = s("id");
@@ -458,7 +477,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       const name = s("name").trim();
       if (!name || name.length > 120) fail("Название — от 1 до 120 символов.");
       const id = `ws-${uid()}`;
-      workspaces.push({ info: info(id, name, "owner", false, 1), members: [member(ME, "Анна", "owner")], tables: seed(id, false), prefs: new Map(), conflicts: [] });
+      workspaces.push({ info: info(id, name, "owner", false, 1), members: [member(ME, "Алексей", "owner")], tables: seed(id, false), prefs: new Map(), conflicts: [] });
       active = id;
       return state();
     }
@@ -520,27 +539,27 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
     case "ws_attach_save": return table(ws, "attachments").find((a) => a.id === s("id"))?.name ?? fail("Вложение не найдено.");
     case "ws_presence": {
       // Демо: Борис всегда онлайн, Вера смотрит ту же карточку, что и вы.
-      if (!demoParams.has("team")) return [];
+      if (!TEAM) return [];
       const others = ws.members.filter((m) => m.userId !== ME).slice(0, 2);
       return others.map((m, i) => ({ user_id: m.userId, entity_type: i === 1 ? (args.entityType as string | null) : null, entity_id: i === 1 ? (args.entityId as string | null) : null, seen_at: now() }));
     }
     case "ws_upload_local": {
-      if (!demoParams.has("team")) fail("Загрузка доступна в облачной учётной записи.");
+      if (!TEAM) fail("Загрузка доступна в облачной учётной записи.");
       const id = `ws-${uid()}`;
       const tables = new Map([...ws.tables].map(([k, rows]) => [k, rows.filter((r) => !r.deleted_at).map((r) => ({ ...r, workspace_id: id }))]));
-      workspaces.push({ info: info(id, ws.info.name, "owner", false, 1), members: [member(ME, "Анна", "owner")], tables, prefs: new Map(), conflicts: [] });
+      workspaces.push({ info: info(id, ws.info.name, "owner", false, 1), members: [member(ME, "Алексей", "owner")], tables, prefs: new Map(), conflicts: [] });
       active = id;
       const copied = [...tables.values()].reduce((n, rows) => n + rows.length, 0);
       return { workspace: id, copied, skipped: 0, state: state() };
     }
     case "ws_roles": {
-      if (!demoParams.has("team")) return { roles: [], catalog: [] };
+      if (!TEAM) return { roles: [], catalog: [] };
       const sys = Object.keys(ROLE_PERMS).map((key) => ({ key, name: ROLE_NAME[key], rank: RANK[key], system: true, permissions: ROLE_PERMS[key] }));
       const own = (customRoles.get(ws.info.id) ?? []).map((r) => ({ ...r, system: false }));
       return { roles: [...sys, ...own].sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0)), catalog: ALL_PERMS.map((key) => ({ key, description: PERM_TEXT[key] })) };
     }
     case "ws_save_role": {
-      if (!demoParams.has("team")) return remoteOnly();
+      if (!TEAM) return remoteOnly();
       if (!has(ws, "roles.manage")) fail("Нет прав на роли.");
       const key = s("key");
       if (key in ROLE_PERMS) fail("Ключи системных ролей зарезервированы.");
@@ -556,7 +575,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       return wsCall("ws_roles", {}, leads);
     }
     case "ws_delete_role": {
-      if (!demoParams.has("team")) return remoteOnly();
+      if (!TEAM) return remoteOnly();
       if (!has(ws, "roles.manage")) fail("Нет прав на роли.");
       if (ws.members.some((m) => m.role === s("key"))) fail("Роль используется участниками.");
       customRoles.set(ws.info.id, (customRoles.get(ws.info.id) ?? []).filter((r) => r.key !== s("key")));
@@ -575,7 +594,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
     case "ws_resolve_conflict": ws.conflicts = ws.conflicts.filter((c) => c.id !== s("id")); return null;
     case "ws_dismiss_rejected": return 0;
     case "ws_invite": {
-      if (!demoParams.has("team")) return remoteOnly();
+      if (!TEAM) return remoteOnly();
       if (!has(ws, "invitations.manage")) fail("Нет прав на приглашения.");
       const token = `demo${uid().slice(-12)}`;
       const email = s("email").toLowerCase();
@@ -587,7 +606,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       return { id: inv.id, email, role: inv.role, expiresAt: inv.expiresAt, token, link: `customers://invite?token=${token}` };
     }
     case "ws_invitations": {
-      if (!demoParams.has("team")) return [];
+      if (!TEAM) return [];
       if (!has(ws, "invitations.manage")) fail("Нет прав на приглашения.");
       return (invitations.get(ws.info.id) ?? []).map(({ token: _t, ...i }) => i);
     }
@@ -605,7 +624,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       return { id: inv.id, email: inv.email, role: inv.role, expiresAt: inv.expiresAt, token: inv.token, link: `customers://invite?token=${inv.token}` };
     }
     case "ws_audit": {
-      if (!demoParams.has("team")) return { items: [], more: false };
+      if (!TEAM) return { items: [], more: false };
       if (!has(ws, "audit.view")) fail("Нет прав на журнал действий.");
       seedAudit(ws.info.id);
       const f = (auditLog.get(ws.info.id) ?? []).filter((i) => (!args.actor || i.actor_id === args.actor) && (!args.action || i.action === args.action) && (!args.entityId || i.entity_id === args.entityId));
@@ -613,7 +632,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       return { items: f.slice(off, off + 100), more: f.length > off + 100 };
     }
     case "ws_set_member_role": {
-      if (!demoParams.has("team")) return remoteOnly();
+      if (!TEAM) return remoteOnly();
       if (!has(ws, "members.manage")) fail("Нет прав на изменение ролей.");
       const m = ws.members.find((x) => x.userId === s("user")) ?? fail("Участник не найден.");
       Object.assign(m, member(m.userId, m.displayName, s("role"), ws.info.id));
@@ -621,7 +640,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       return state();
     }
     case "ws_transfer_ownership": {
-      if (!demoParams.has("team")) return remoteOnly();
+      if (!TEAM) return remoteOnly();
       if (!has(ws, "ownership.transfer")) fail("Передать владение может только владелец.");
       const target = ws.members.find((x) => x.userId === s("user") && x.userId !== ME) ?? fail("Владельцем можно сделать только другого участника.");
       Object.assign(target, member(target.userId, target.displayName, "owner", ws.info.id));
@@ -632,7 +651,7 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       return state();
     }
     case "ws_delete_workspace": {
-      if (!demoParams.has("team")) return remoteOnly();
+      if (!TEAM) return remoteOnly();
       if (!has(ws, "workspace.delete")) fail("Удалить рабочее пространство может только владелец.");
       if (ws.info.personal) fail("Личное рабочее пространство удалить нельзя.");
       if (s("confirmName").trim() !== ws.info.name) fail("Название не совпадает.");
@@ -642,18 +661,18 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       return state();
     }
     case "ws_remove_member":
-      if (!demoParams.has("team")) return remoteOnly();
+      if (!TEAM) return remoteOnly();
       if (!has(ws, "members.manage")) fail("Нет прав на удаление участников.");
       ws.members = ws.members.filter((x) => x.userId !== s("user"));
       audit(ws.info.id, ME, "member_removed", "member", s("user"));
       return state();
-    case "ws_incoming": return demoParams.has("team") ? incoming.map(({ role: _r, ...i }) => i) : [];
+    case "ws_incoming": return TEAM ? incoming.map(({ role: _r, ...i }) => i) : [];
     case "ws_accept_incoming": {
       const at = incoming.findIndex((i) => i.id === s("id"));
       if (at < 0) fail("Приглашение не найдено или срок истёк.");
       const [inv] = incoming.splice(at, 1);
       const id = `ws-${uid()}`;
-      const members = [member(ME, "Анна", inv!.role)];
+      const members = [member(ME, "Алексей", inv!.role)];
       workspaces.push({ info: { ...info(id, inv!.workspaceName, inv!.role, false, members.length), remote: true }, members, tables: seed(id, false), prefs: new Map(), conflicts: [] });
       active = id;
       return state();

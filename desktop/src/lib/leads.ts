@@ -3,7 +3,7 @@
 import type { Lead, LeadKind } from "../api/types";
 import { money } from "./format";
 
-export type SectionId = "home" | "all" | "new" | "favorites" | "archive" | "excluded" | "sources" | "runs" | "collection" | "profile" | "people" | "chat" | "notifications" | "today" | "calendar" | "deals" | "reports" | "trash" | "journal";
+export type SectionId = "home" | "all" | "new" | "favorites" | "archive" | "excluded" | "sources" | "runs" | "collection" | "profile" | "people" | "structure" | "today" | "calendar" | "deals" | "reports" | "trash" | "journal";
 
 /** `emoji` — крупная иконка раздела в заголовке верхней панели (docs/CRM_ARCHITECTURE.md §8.2). */
 export const SECTIONS: Record<SectionId, { title: string; icon: string; emoji: string }> = {
@@ -18,8 +18,7 @@ export const SECTIONS: Record<SectionId, { title: string; icon: string; emoji: s
   collection: { title: "Коллекция", icon: "list", emoji: "🗂️" },
   profile: { title: "Профиль", icon: "user", emoji: "👤" },
   people: { title: "Сотрудники", icon: "users", emoji: "👥" },
-  chat: { title: "Сообщения", icon: "chat", emoji: "💬" },
-  notifications: { title: "Входящие", icon: "bell", emoji: "🔔" },
+  structure: { title: "Структура организации", icon: "tree", emoji: "🌳" },
   today: { title: "Сегодня", icon: "check", emoji: "☀️" },
   calendar: { title: "Календарь", icon: "calendar", emoji: "📅" },
   deals: { title: "Сделки", icon: "chart", emoji: "📊" },

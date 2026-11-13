@@ -16,6 +16,12 @@ export type ToastKind = "info" | "error" | "success";
 export interface Toast { id: number; kind: ToastKind; text: string }
 
 export interface AppState {
+  /** Связь с облаком: нет сети — «Переподключение», затем «Подключено». */
+  conn: "online" | "reconnecting" | "restored";
+  /** Чат — всплывающее окно над рейкой, а не раздел. */
+  chatPopup: boolean;
+  /** Окно уведомлений у колокольчика. */
+  bellOpen: boolean;
   phase: Phase;
   error: string | null;
   boot: BootInfo | null;
@@ -85,7 +91,7 @@ export const DEFAULT_DEVICE: DevicePrefs = {
 const EMPTY_SNAP: Snapshot = { leads: [], sources: [], pipelineErrors: [], exclusions: [], syncLog: [], lastSearchAt: null, databaseSize: 0 };
 
 const initial: AppState = {
-  phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
+  conn: "online", chatPopup: false, bellOpen: false, phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
   search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
   section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, quickOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, aiOpen: false,
   ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, incoming: [], collectionEdit: null, wsVersion: 0, profileId: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [],
@@ -97,7 +103,9 @@ const subs = new Set<() => void>();
 export const getState = () => state;
 export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<AppState>)) {
   const p = typeof patch === "function" ? patch(state) : patch;
-  state = { ...state, ...p };
+  // Панель управления рабочим пространством закрывается при переходе в другой раздел.
+  const closeWs = p.section !== undefined && p.section !== state.section && state.workspaceOpen && p.workspaceOpen === undefined;
+  state = { ...state, ...p, ...(closeWs ? { workspaceOpen: false } : {}) };
   subs.forEach((f) => f());
 }
 /** Пустой массив с постоянной ссылкой: селектор `s.ws?.x ?? []` без Workspace иначе возвращал бы новый массив при каждом вызове (бесконечная перерисовка, React #185). */
@@ -349,3 +357,6 @@ export async function updateSettings(mutate: (s: import("../api/types").SearchSe
     await refreshOverview();
   }
 }
+
+/** Кнопка «Чат» в рейке: открывает всплывающее окно чата, повторное нажатие сворачивает его. */
+export const toggleChat = () => setState((s) => ({ chatPopup: !s.chatPopup }));

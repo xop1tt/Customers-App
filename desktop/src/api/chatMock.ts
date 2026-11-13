@@ -36,7 +36,7 @@ function nameOf(ctx: TeamCtx, id: string | null): string {
   return ctx.members.find((m) => m.userId === id)?.displayName ?? "Участник";
 }
 const LOGINS: Record<string, string> = { "2": "boris", "3": "vera", "4": "gleb", "5": "dina", "6": "egor" };
-const emailOf = (ctx: TeamCtx, id: string) => (id === ctx.me ? "anna@example.com" : `${LOGINS[String(Number(id.slice(-4)))] ?? `user${id.slice(-4)}`}@example.com`);
+const emailOf = (ctx: TeamCtx, id: string) => (id === ctx.me ? "alex@example.com" : `${LOGINS[String(Number(id.slice(-4)))] ?? `user${id.slice(-4)}`}@example.com`);
 
 function seed(ctx: TeamCtx) {
   if (seeded === ctx.wsId) return;
@@ -47,8 +47,8 @@ function seed(ctx: TeamCtx) {
   profiles.set(V, { title: "Менеджер по продажам", department: "Продажи", manager_id: ctx.me, hired_on: year("2023") });
   profiles.set(G, { title: "Менеджер по продажам", department: "Продажи", manager_id: ctx.me, hired_on: year("2024") });
   const direct = conv(ctx, "direct", null, [ctx.me, B], B, 90);
-  post(direct, B, "Анна, привет! Как дела со сделкой «Северный ветер»?", 60);
-  post(direct, ctx.me, "Отправила предложение, жду ответа.", 50);
+  post(direct, B, "Алексей, привет! Как дела со сделкой «Северный ветер»?", 60);
+  post(direct, ctx.me, "Отправил предложение, жду ответа.", 50);
   post(direct, B, "Отлично, держи в курсе.", 5);
   const group = conv(ctx, "group", "Отдел продаж", [ctx.me, B, V, G], B, 300);
   group.parts.get(ctx.me)!.role = "admin";
@@ -229,15 +229,20 @@ export function teamCall(cmd: string, args: Record<string, unknown>, ctx: TeamCt
       const { conversation_id: _c, ...m } = post(c, ctx.me, body, 0, mentions);
       return m;
     }
+    case "chat_capabilities": return { files: true };
+    case "chat_file_save": return String(a.path ?? "");
     case "chat_post": {
       const c = mine(ctx, a.conversation);
       const body = String(a.body ?? "").trim();
       const cards = (a.attachments as ChatAttachment[] | undefined) ?? [];
-      if (body.length > 4000 || (!body && !cards.length)) fail("Сообщение — от 1 до 4000 символов.");
+      const files = ((a.files as { name: string; size: number; mime: string }[] | undefined) ?? []).map((f, i) => ({ id: `f${Date.now()}${i}`, name: f.name, size: f.size, mime: f.mime }));
+      if (body.length > 4000 || (!body && !cards.length && !files.length)) fail("Сообщение — от 1 до 4000 символов.");
+      if (files.length > 5) fail("В сообщение можно добавить до 5 файлов.");
       if (cards.length > 10) fail("В сообщение можно добавить до 10 карточек.");
       const mentions = [...new Set([...((a.mentions as string[]) ?? []), ...mentionedIn(body, people())])].filter((u) => u !== ctx.me && c.parts.has(u));
       const m = post(c, ctx.me, body, 0, mentions);
       m.attachments = cards;
+      if (files.length) m.files = files;
       const { conversation_id: _c, ...out } = m;
       return out;
     }

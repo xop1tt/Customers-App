@@ -76,7 +76,7 @@ export function MailPanel() {
             <Field label="Почтовый сервис">
               <Select value={acc.provider} options={providers.map((p) => ({ value: p.id, label: p.title }))} onChange={pickProvider} />
             </Field>
-            <Field label="Ваша почта"><TextInput value={email} onChange={setEmail} placeholder="name@example.ru" /></Field>
+            <Field label="Ваша почта"><TextInput value={email} onChange={setEmail} placeholder="name@example.com" /></Field>
             <Field label="Имя отправителя"><TextInput value={acc.fromName} onChange={(v) => setAcc({ ...acc, fromName: v })} placeholder="Как вас подписать" /></Field>
             <Field label={state.hasPassword ? "Пароль (оставьте пустым, чтобы не менять)" : "Пароль приложения"}><PasswordInput value={password} onChange={setPassword} /></Field>
             <Field label="Сервер SMTP"><TextInput value={acc.host} onChange={(v) => setAcc({ ...acc, host: v })} placeholder="smtp.example.ru" /></Field>

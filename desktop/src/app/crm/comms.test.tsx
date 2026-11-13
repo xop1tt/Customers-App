@@ -33,7 +33,7 @@ describe("коммуникации в карточке", () => {
 
   it("без телефона кнопка звонка недоступна; у компании есть телефоны её контактов", async () => {
     const co = await api.wsSave("companies", null, { name: "Ромашка" });
-    await api.wsSave("contacts", null, { first_name: "Анна", company_id: co.id, phones: ["+79990000001"] });
+    await api.wsSave("contacts", null, { first_name: "Алексей", company_id: co.id, phones: ["+79990000001"] });
     const empty = await api.wsSave("contacts", null, { first_name: "Без телефона" });
     openRecord("contacts", empty.id);
     const { unmount } = card();

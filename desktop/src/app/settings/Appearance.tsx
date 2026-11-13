@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { SeeAlso } from "./SeeAlso";
 import { ACCENTS, DEFAULT_ACCENT, isHex } from "../../lib/theme";
 import { clampThreshold, explanation } from "../../lib/powerPolicy";
 import { Button, Group, Notice, NumberInput, Select, SettingRow, Switch, TextInput } from "../../ui/kit";
 import { getState, patchDevice, setState, useStore } from "../../state/store";
 import { moduleOf } from "../../lib/modules";
+import { GLOBAL_SEARCH_LIMITS, saveGlobalSearch, useGlobalSearchPrefs } from "../../lib/globalSearch";
 
 const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2].map((v) => ({ value: v, label: `${Math.round(v * 100)}%` }));
 
@@ -45,12 +47,14 @@ export function Appearance() {
         </SettingRow>
         <SettingRow title="Компактные строки" hint="Больше лидов на экране: строки списка ниже, без второй строки."><Switch checked={d.compactRows} onChange={(v) => void patchDevice({ compactRows: v })} /></SettingRow>
         <SettingRow title="Анимации" hint="Плавные переходы и появление окон."><Switch checked={d.animations} onChange={(v) => void patchDevice({ animations: v })} /></SettingRow>
+      <SeeAlso items={[{ section: "system", sub: "power", label: "Система — экономия энергии (анимации)" }]} />
       </Group>
 
       <Group title="Боковая панель" sub="sidebar">
         <SettingRow title="Числа у разделов"><Switch checked={d.sidebarCounts} onChange={(v) => void patchDevice({ sidebarCounts: v })} /></SettingRow>
         <SettingRow title="Список источников"><Switch checked={d.sidebarSources} onChange={(v) => void patchDevice({ sidebarSources: v })} /></SettingRow>
         <SettingRow title="Порядок и видимость разделов"><Button onClick={() => { const m = moduleOf(getState().section); setState({ settings: null, customizeNav: true, ...(m === "search" || m === "crm" ? {} : { section: "home" as const }) }); }}>Настроить панель</Button></SettingRow>
+      <SeeAlso items={[{ section: "system", sub: "gsearch", label: "Система — поиск в шапке" }]} />
       </Group>
 
     </>
@@ -66,6 +70,7 @@ export function SystemSection() {
         <SettingRow title="Запускать при входе в систему"><Switch checked={d.launchAtLogin} onChange={(v) => void patchDevice({ launchAtLogin: v })} /></SettingRow>
         <SettingRow title="Запускать свёрнутым" hint="Окно не показывается при запуске, приложение работает в фоне и в значке в трее."><Switch checked={d.startMinimized} onChange={(v) => void patchDevice({ startMinimized: v })} /></SettingRow>
         <SettingRow title="Закрытие окна сворачивает в трей" hint="Автопоиск и синхронизация продолжают работать. Выйти полностью можно из меню значка."><Switch checked={d.closeToTray} onChange={(v) => void patchDevice({ closeToTray: v })} /></SettingRow>
+      <SeeAlso items={[{ section: "notifications", label: "Уведомления" }, { section: "updates", sub: "version", label: "Обновления" }]} />
       </Group>
       <Group title="Экономия энергии" sub="power">
         <SettingRow title="Облегчённый режим автоматически" hint="Отключает анимации, когда включено энергосбережение или заряд батареи низкий.">
@@ -77,8 +82,41 @@ export function SystemSection() {
           </SettingRow>
         )}
         {light && <Notice tone="info">{explanation(light)}</Notice>}
+      <SeeAlso items={[{ section: "appearance", sub: "look", label: "Оформление — анимации" }, { section: "search", label: "Автопоиск" }]} />
       </Group>
+      <GlobalSearchGroup />
 
     </>
+  );
+}
+
+const GSEARCH_ROWS: { key: "leads" | "company" | "contact" | "deal" | "task" | "crm_lead" | "actions"; title: string; hint: string }[] = [
+  { key: "leads", title: "Лиды", hint: "Найденные поиском клиентов." },
+  { key: "company", title: "Компании", hint: "Записи CRM." },
+  { key: "contact", title: "Контакты", hint: "Записи CRM." },
+  { key: "deal", title: "Сделки", hint: "Записи CRM." },
+  { key: "task", title: "Задачи", hint: "Записи CRM." },
+  { key: "crm_lead", title: "Заявки", hint: "Записи CRM." },
+  { key: "actions", title: "Действия", hint: "«Новая компания», «Перейти: Календарь» и подобные." },
+];
+
+/** Подраздел «Поиск»: что предлагает поле глобального поиска в шапке. Настройки хранятся на этом устройстве. */
+function GlobalSearchGroup() {
+  const p = useGlobalSearchPrefs();
+  return (
+    <Group title="Поиск" sub="gsearch" note="Поле поиска в шапке приложения: результаты появляются в выпадающем списке по мере ввода.">
+      <SettingRow title="Поле поиска в шапке"><Switch checked={p.enabled} onChange={(v) => saveGlobalSearch({ enabled: v })} /></SettingRow>
+      {p.enabled && (
+        <>
+          <SettingRow title="Результатов в группе" hint="Сколько записей показывать в каждой группе списка.">
+            <Select value={String(p.limit)} width={110} onChange={(v) => saveGlobalSearch({ limit: Number(v) })} options={GLOBAL_SEARCH_LIMITS.map((n) => ({ value: String(n), label: String(n) }))} />
+          </SettingRow>
+          {GSEARCH_ROWS.map((r) => (
+            <SettingRow key={r.key} title={r.title} hint={r.hint}><Switch checked={p[r.key]} onChange={(v) => saveGlobalSearch({ [r.key]: v })} /></SettingRow>
+          ))}
+        </>
+      )}
+    <SeeAlso items={[{ section: "search", label: "Автопоиск" }, { section: "exclusions", label: "Исключения из поиска" }]} />
+      </Group>
   );
 }

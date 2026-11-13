@@ -664,7 +664,11 @@ export interface ChatMessage {
   deleted: boolean;
   /** Карточки CRM в сообщении; название и подпись — только при праве просмотра. */
   attachments?: ChatAttachment[];
+  /** Файлы в сообщении (только если сервер чата их поддерживает). */
+  files?: ChatFile[];
 }
+
+export interface ChatFile { id: string; name: string; size: number; mime: string }
 
 export type ChatCardType = "company" | "contact" | "crm_lead" | "deal";
 export interface ChatCardRef { type: ChatCardType; id: string }

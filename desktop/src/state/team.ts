@@ -50,7 +50,7 @@ export async function pollChat(): Promise<ChatPoll | null> {
 function announce(chat: ChatPoll) {
   const st = getState();
   if (!st.account?.notifyMessages || typeof document === "undefined" || !document.hasFocus()) return;
-  const viewing = st.section === "chat" ? st.chatOpen : null;
+  const viewing = st.chatPopup ? st.chatOpen : null;
   const prefs = loadPrefs();
   for (const m of chat.fresh.filter((f) => f.conversation_id !== viewing && shouldToast("message", prefs)).slice(0, 2)) {
     const where = m.kind === "group" ? ` в «${m.title ?? "обсуждении"}»` : "";
@@ -106,7 +106,7 @@ export function openCrmCard(type: string, id: string) {
 }
 
 export function openChat(id: string | null) {
-  setState({ section: "chat", chatOpen: id, collectionId: null, record: null, selection: [], anchor: null, navPeek: false });
+  setState({ chatPopup: true, chatOpen: id });
 }
 
 /** «Написать сообщение»: личный диалог с сотрудником. */

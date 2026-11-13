@@ -39,9 +39,10 @@ describe("приглашения", () => {
     setState({ ws, workspaceOpen: true });
     await api.wsInvite("kolya@firma.ru", "employee");
     render(<WorkspaceDialog />);
+    expect(screen.getByRole("button", { name: /Журнал действий/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Приглашения/ }));
     expect(await screen.findByText("kolya@firma.ru")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Отправить ещё раз" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Открыть журнал" })).toBeTruthy();
   });
 });
 
@@ -79,8 +80,8 @@ describe("журнал действий", () => {
   it("подписи действий и смены ответственного", () => {
     expect(actionText("owner_change")).toBe("сменил(а) ответственного");
     expect(actionText("new.thing")).toBe("new.thing");
-    const members = [{ userId: "a", displayName: "Анна", role: "owner", roleName: "В", rank: 1, avatarPath: null, email: null }];
+    const members = [{ userId: "a", displayName: "Алексей", role: "owner", roleName: "В", rank: 1, avatarPath: null, email: null }];
     const i = { id: 1, actor_id: "a", action: "owner_change", entity_type: "deals", entity_id: "x", at: "", details: { from: "a", to: null } };
-    expect(detailText(i, members)).toBe("Анна → никого");
+    expect(detailText(i, members)).toBe("Алексей → никого");
   });
 });

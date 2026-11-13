@@ -65,6 +65,6 @@ describe("экран «Отчёты»", () => {
     expect(within(screen.getByRole("region", { name: "Источники клиентов" })).getByText("Импорт из таблиц")).toBeTruthy();
     const staff = screen.getByRole("region", { name: "По ответственным" });
     expect(within(staff).getByRole("columnheader", { name: "Задачи" })).toBeTruthy();
-    expect(within(staff).getByText("Анна").closest("tr")!.textContent).toMatch(/1/);
+    expect(within(staff).getByText("Алексей").closest("tr")!.textContent).toMatch(/1/);
   });
 });

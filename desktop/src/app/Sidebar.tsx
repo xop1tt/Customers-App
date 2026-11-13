@@ -1,4 +1,5 @@
 import { can } from "../lib/crm";
+import { NotificationsPopover } from "./team/Notifications";
 import { useEffect, useRef, useState } from "react";
 import { count, type SectionId, SECTIONS } from "../lib/leads";
 import { useNewSince } from "../state/hooks";
@@ -15,7 +16,7 @@ import { attempt, toast, leaveSession, openCollection, openProfile, openScore, o
 import { CollectionsGroup } from "./crm/Collections";
 import { openLink } from "../state/actions";
 import { GroupTitle, useCollapsed } from "./SideGroup";
-import { pollChat, unreadNotifications, unreadTotal } from "../state/team";
+import { pollChat, unreadNotifications } from "../state/team";
 import { isMuted, loadPrefs, setMute } from "../lib/notifyPrefs";
 import { openMarket } from "../state/market";
 
@@ -73,9 +74,9 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const scoresShut = useCollapsed("scores");
   const workShut = useCollapsed("work");
   const teamShut = useCollapsed("team");
-  const chat = useStore((s) => s.chat);
   const hasWs = useStore((s) => !!s.ws?.active);
   const perms = useStore((s) => s.ws?.permissions);
+  const wsOpen = useStore((s) => s.workspaceOpen);
   const wsName = useStore((s) => s.ws?.workspaces.find((w) => w.id === s.ws?.active)?.name ?? null);
   // Панель разделов показывает группы открытого модуля рейки; в режиме настройки — все настраиваемые группы.
   const mod = moduleOf(section);
@@ -84,7 +85,7 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const customize = customizeFlag && canCustomize;
   const showSearch = mod === "search";
   const showCrm = mod === "crm";
-  const showTeam = !customize && (mod === "team" || mod === "messages");
+  const showTeam = !customize && mod === "team";
 
   const countOf = (id: SectionId) => (device.sidebarCounts && id !== "home" && id !== "sources" && id !== "runs" ? count(leads, id, true, since) : undefined);
   const visible = (id: string) => customize || !device.sidebarHidden.includes(id);
@@ -147,13 +148,13 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
 
       {mod === "crm" && !customize && wsName && (
         <div className="side-ws">
-          <button type="button" className="ws-switch grow" onClick={() => setState({ workspaceOpen: true })} aria-haspopup="dialog" aria-label={`Рабочее пространство: ${wsName}`} data-tip="Управление рабочим пространством">
+          <button type="button" className="ws-switch grow" onClick={() => setState({ workspaceOpen: !wsOpen })} aria-haspopup="dialog" aria-expanded={wsOpen} aria-label={`Рабочее пространство: ${wsName}`} data-tip="Управление рабочим пространством">
             <Avatar name={wsName} size={26} />
             <span className="col grow" style={{ gap: 0, minWidth: 0, textAlign: "left" }}>
               <span className="ellipsis ws-switch-name">{wsName}</span>
               <span className="ellipsis faint ws-switch-sub">Рабочее пространство</span>
             </span>
-            <Icon name="chevronLeft" size={14} className="faint" />
+            <Icon name={wsOpen ? "chevronLeft" : "chevronRight"} size={14} className="faint" />
           </button>
         </div>
       )}
@@ -206,14 +207,12 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
         {showTeam && (
           <div className="nav-group">
             {mod === "team" && <GroupTitle id="team" title="Команда" />}
-            {((mod === "messages" ? ["chat"] : ["people"]) as ("chat" | "people")[]).filter((id) => mod === "messages" || !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
-              const n = id === "chat" ? unreadTotal(chat) : 0;
+            {(["people", "structure"] as ("people" | "structure")[]).filter((id) => !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
               const active = section === id || (id === "people" && section === "profile");
               return (
                 <button key={id} type="button" className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => setSection(id)}>
                   <Icon name={SECTIONS[id].icon} size={16} />
                   <span className="ellipsis grow">{SECTIONS[id].title}</span>
-                  {n > 0 && <span className="nav-count accent num" aria-label={`Непрочитанных: ${n}`}>{integer(n)}</span>}
                 </button>
               );
             })}
@@ -259,6 +258,9 @@ export function AccountBar({ withUpdate = true }: { withUpdate?: boolean } = {})
   const incoming = useStore((s) => s.incoming.length);
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
+  const bellOpen = useStore((s) => s.bellOpen);
+  const [bellRect, setBellRect] = useState<DOMRect | null>(null);
+  const bellWrap = useRef<HTMLSpanElement>(null);
   const [, setTick] = useState(0);
   useEffect(() => {
     const bump = () => setTick((n) => n + 1);
@@ -309,14 +311,15 @@ export function AccountBar({ withUpdate = true }: { withUpdate?: boolean } = {})
             </span>
           </button>
           {(session?.isCloud || chat?.available) && (
-            <span className="avatar-wrap">
-              <IconButton icon={muted ? "bellOff" : "bell"} tip={muted ? "Уведомления отключены" : "Уведомления"} aria-label={notes > 0 ? `Уведомления, новых: ${notes}` : muted ? "Уведомления отключены" : "Уведомления"} onClick={() => setSection("notifications")}
+            <span className="avatar-wrap" ref={bellWrap}>
+              <IconButton icon={muted ? "bellOff" : "bell"} tip={muted ? "Уведомления отключены" : "Уведомления"} aria-label={notes > 0 ? `Уведомления, новых: ${notes}` : muted ? "Уведомления отключены" : "Уведомления"} onClick={(e: React.MouseEvent<HTMLElement>) => { setState({ bellOpen: !bellOpen }); setBellRect(e.currentTarget.getBoundingClientRect()); }}
                 onContextMenu={(e: React.MouseEvent<HTMLElement>) => { e.preventDefault(); showMenu(bellMenu(e.currentTarget.getBoundingClientRect()), e.currentTarget.getBoundingClientRect(), "top-start"); }} />
               {notes > 0 && <span className="red-badge" aria-hidden="true">{notes > 99 ? "99+" : integer(notes)}</span>}
             </span>
           )}
           <IconButton icon="help" tip="Справка" onClick={(e) => showMenu(helpItems(), e.currentTarget.getBoundingClientRect(), "top-start")} />
         </div>
+      {bellOpen && bellRect && <NotificationsPopover anchor={bellRect} ignore={bellWrap.current} />}
       {accountRect && (
         <Popover anchor={accountRect} onClose={() => setAccountRect(null)} ignore={accountBtn.current} minWidth={Math.max(accountRect.width, 220)} className="popover-menu" placement="top-start">
           <ul className="menu">

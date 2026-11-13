@@ -1,0 +1,69 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Живой просмотр (Vite)",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/desktop" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^$" },
+        "background": { "activeOnStart": true, "beginsPattern": "VITE", "endsPattern": "Local:" }
+      },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "group": "live" },
+      "runOptions": { "runOn": "folderOpen" }
+    },
+    {
+      "label": "Подсказки типов (tsc --watch)",
+      "type": "shell",
+      "command": "npx tsc --noEmit --watch --preserveWatchOutput",
+      "options": { "cwd": "${workspaceFolder}/desktop" },
+      "isBackground": true,
+      "problemMatcher": "$tsc-watch",
+      "presentation": { "reveal": "never", "panel": "dedicated", "group": "live" },
+      "runOptions": { "runOn": "folderOpen" }
+    },
+    {
+      "label": "Живой просмотр + подсказки",
+      "dependsOn": ["Живой просмотр (Vite)", "Подсказки типов (tsc --watch)"],
+      "dependsOrder": "parallel",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Золотые тесты: запустить",
+      "type": "shell",
+      "command": "npm run golden",
+      "options": { "cwd": "${workspaceFolder}/desktop" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Золотые тесты: следить за изменениями",
+      "type": "shell",
+      "command": "npx vitest src/golden",
+      "options": { "cwd": "${workspaceFolder}/desktop" },
+      "isBackground": true,
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Золотые тесты: принять новые снимки",
+      "type": "shell",
+      "command": "npm run golden:update",
+      "options": { "cwd": "${workspaceFolder}/desktop" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Все тесты интерфейса",
+      "type": "shell",
+      "command": "npm test",
+      "options": { "cwd": "${workspaceFolder}/desktop" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -54,12 +54,21 @@ describe("вкладка «Отделы»", () => {
     fireEvent.click(await within(n).findByRole("button", { name: /Сотрудники/ }));
     fireEvent.click(await screen.findByRole("tab", { name: "Отделы" }));
     const sec = await screen.findByLabelText("Отделы");
-    expect(within(sec).getByText("Продажи")).toBeInTheDocument();
+    // Сначала большие карточки отделов, потом сотрудники выбранного.
+    const cards = within(sec).getByRole("list", { name: "Выбор отдела" });
+    expect(within(cards).getByText("Продажи")).toBeInTheDocument();
+    expect(within(sec).queryByRole("list", { name: /Сотрудники отдела/ })).toBeNull();
+    fireEvent.click(within(cards).getByText("Продажи"));
+    expect(await within(sec).findByRole("list", { name: "Сотрудники отдела Продажи" })).toBeInTheDocument();
     fireEvent.click(within(sec).getAllByRole("button", { name: "Переименовать…" })[0]!);
     const input = await screen.findByLabelText("Название отдела");
     fireEvent.change(input, { target: { value: "Коммерция" } });
     fireEvent.click(screen.getByRole("button", { name: "Переименовать" }));
-    await waitFor(() => expect(within(screen.getByLabelText("Отделы")).getByText("Коммерция")).toBeInTheDocument());
+    // Назад к выбору отделов: там уже новое название.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const back = screen.queryByRole("button", { name: "Ко всем отделам" });
+    if (back) fireEvent.click(back);
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "Выбор отдела" })).getByText("Коммерция")).toBeInTheDocument());
   });
 });
 
@@ -93,7 +102,7 @@ describe("«Обсудить» в карточке", () => {
     const dlg = await screen.findByRole("dialog");
     fireEvent.click(within(dlg).getAllByRole("checkbox")[0]!);
     fireEvent.click(within(dlg).getByRole("button", { name: "Начать обсуждение" }));
-    await waitFor(() => expect(getState().section).toBe("chat"));
+    await waitFor(() => expect(getState().chatPopup).toBe(true));
     expect(getState().chatOpen).toBeTruthy();
   });
 });
@@ -105,6 +114,7 @@ describe("«Мои права»", () => {
     render(<App />);
     await waitFor(() => expect(getState().ws?.isCloud).toBe(true));
     setState({ workspaceOpen: true });
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Рабочее пространство" })).getByRole("button", { name: /Сотрудники/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Что мне разрешено" }));
     expect(await screen.findByLabelText("Разрешено")).toBeInTheDocument();
     expect(screen.getByLabelText("Недоступно").children.length).toBeGreaterThan(0);

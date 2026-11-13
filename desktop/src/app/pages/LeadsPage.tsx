@@ -106,12 +106,12 @@ export function LeadsPage() {
   const menuFor = (l: Lead, e: React.MouseEvent) => {
     e.preventDefault();
     const ids = selected.has(l.id) ? selection : [l.id];
-    if (!selected.has(l.id)) select([l.id], l.id);
     const targets = leads.filter((x) => ids.includes(x.id));
     const allFav = targets.every((x) => x.favorite);
     const allArch = targets.every((x) => x.archived);
     const single = ids.length === 1;
     const items: MenuItem[] = [
+      ...(single ? [{ label: "Подробная информация", icon: "info", onSelect: () => select([l.id], l.id) } as MenuItem, { separator: true } as MenuItem] : []),
       { label: allFav ? "Убрать из избранного" : "В избранное", icon: "star", onSelect: () => void setFavorite(ids, !allFav) },
       { label: allArch ? "Вернуть из архива" : "В архив", icon: "archive", onSelect: () => void setArchived(ids, !allArch) },
       ...(targets.some((x) => !x.seen) ? [{ label: "Отметить прочитанным", icon: "eye", onSelect: () => void markSeen(ids) } as MenuItem] : []),

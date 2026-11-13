@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SeeAlso } from "./SeeAlso";
 import { loadPrefs, savePrefs, type NotifyPrefs } from "../../lib/notifyPrefs";
 import { intervalTitle } from "../../lib/format";
 import { Button, Group, Notice, Select, SettingRow, Switch } from "../../ui/kit";
@@ -25,6 +26,7 @@ export function SearchSection() {
         <SettingRow title="Источники" hint={`Включено источников: ${enabled} из 4`}>
           <Button onClick={() => openSettings("sources")}>Настроить источники</Button>
         </SettingRow>
+      <SeeAlso items={[{ section: "sources", label: "Источники" }, { section: "exclusions", label: "Исключения из поиска" }, { section: "notifications", label: "Уведомления о новых лидах" }, { section: "system", sub: "startup", label: "Работа в фоне" }]} />
       </Group>
       {enabled === 0 && <Notice tone="warn">Все источники выключены, поиск ничего не найдёт.</Notice>}
     </>
@@ -41,6 +43,7 @@ export function NotificationsSection() {
         <SettingRow title="Об ошибках поиска"><Switch checked={a.notifyErrors} onChange={(v) => void patchAccount({ notifyErrors: v })} /></SettingRow>
         <SettingRow title="О синхронизации"><Switch checked={a.notifySync} onChange={(v) => void patchAccount({ notifySync: v })} /></SettingRow>
         <SettingRow title="О сообщениях и упоминаниях" hint="Личные сообщения, @упоминания в обсуждениях, заметках и комментариях, добавление в обсуждение."><Switch checked={a.notifyMessages} onChange={(v) => void patchAccount({ notifyMessages: v })} /></SettingRow>
+      <SeeAlso items={[{ section: "system", sub: "startup", label: "Система — запуск и фон" }, { section: "search", label: "Автопоиск" }]} />
       </Group>
       <InAppNotifications />
     </>
@@ -67,6 +70,7 @@ function InAppNotifications() {
           )}
         </div>
       </SettingRow>
-    </Group>
+    <SeeAlso items={[{ section: "appearance", label: "Оформление" }]} />
+      </Group>
   );
 }

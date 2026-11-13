@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "vitest.explorer",
+    "ms-vscode.vscode-typescript-next",
+    "rust-lang.rust-analyzer",
+    "tauri-apps.tauri-vscode",
+    "ms-python.python",
+    "ms-playwright.playwright"
+  ]
+}

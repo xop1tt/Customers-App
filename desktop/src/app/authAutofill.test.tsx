@@ -26,10 +26,22 @@ describe("автозаполнение на экране входа", () => {
     expect(attrs(container)).toEqual([[null, "nickname", "nickname"], ["email", "email", "email"], ["password", "password", "new-password"], ["password", "confirm-password", "new-password"]]);
   });
 
-  it("локальный аккаунт: вход — current-password, регистрация — new-password", async () => {
+  it("заголовок по центру над формой, логотип вне формы", async () => {
     const { container } = await show("/?auth&cloud");
-    fireEvent.click(screen.getByRole("tab", { name: "На этом компьютере" }));
-    expect(attrs(container).at(0)).toEqual([null, "username", "username"]);
-    expect(attrs(container).at(1)).toEqual(["password", "password", "current-password"]);
+    const title = screen.getByRole("heading", { name: "Вход" });
+    expect(title.className).toContain("auth-title");
+    expect(container.querySelector("form img")).toBeNull();
+    expect(container.querySelector(".auth-stack > img.auth-logo-img")).not.toBeNull();
+    fireEvent.click(screen.getByText("Создать аккаунт"));
+    expect(screen.getByRole("heading", { name: "Регистрация" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("← Ко входу"));
+    fireEvent.click(screen.getByText("Забыли пароль?"));
+    expect(screen.getByRole("heading", { name: "Восстановление пароля" })).toBeInTheDocument();
+  });
+
+  it("локального входа нет: только облачная форма, без вкладки «На этом компьютере»", async () => {
+    const { container } = await show("/?auth&cloud");
+    expect(screen.queryByRole("tab", { name: "На этом компьютере" })).toBeNull();
+    expect(container.querySelectorAll("form")).toHaveLength(1);
   });
 });

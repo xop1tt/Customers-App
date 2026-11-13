@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SeeAlso } from "./SeeAlso";
 import { api } from "../../api";
 import type { CrashReport, PathsInfo, ReleaseSummary } from "../../api/types";
 import { dateOnly, bytes, fullRu } from "../../lib/format";
@@ -134,6 +135,7 @@ export function UpdatesSection() {
         <SettingRow title="Проверять обновления автоматически"><Switch checked={d.checkUpdates} onChange={(v) => void patchDevice({ checkUpdates: v })} /></SettingRow>
         <SettingRow title="Как часто проверять"><Select width={180} disabled={!d.checkUpdates} value={d.updateCheckHours} options={(intervals.length ? intervals : [{ hours: d.updateCheckHours, title: `${d.updateCheckHours} ч` }]).map((i) => ({ value: i.hours, label: i.title }))} onChange={(v) => void patchDevice({ updateCheckHours: v })} /></SettingRow>
         <SettingRow title="Скачивать в фоне" hint="Загрузка начинается сразу, установка только по вашей команде."><Switch checked={d.backgroundDownload} disabled={!d.checkUpdates} onChange={(v) => void patchDevice({ backgroundDownload: v })} /></SettingRow>
+      <SeeAlso items={[{ section: "system", sub: "startup", label: "Система — запуск и фон" }]} />
       </Group>
 
       <Group title="История версий" sub="history">

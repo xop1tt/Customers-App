@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "../../ui/icons";
 import { IconButton, SubContext } from "../../ui/kit";
 import { subsectionsOf } from "./subsections";
+import { markSettingsSeen, sectionIsNew, subIsNew, useUnseenSettings } from "../../lib/newSettings";
 import { type SettingsSection, openSettings, setState, useStore } from "../../state/store";
 import { Appearance, SystemSection } from "./Appearance";
 import { NotificationsSection, SearchSection } from "./SearchSection";
@@ -19,11 +20,11 @@ interface Item { id: SettingsSection; title: string; icon: string }
 export const CATEGORIES: { title: string; items: Item[] }[] = [
   { title: "Личное", items: [
     { id: "account", title: "Аккаунт", icon: "user" },
-    { id: "appearance", title: "Оформление", icon: "palette" },
-    { id: "notifications", title: "Уведомления", icon: "bell" },
   ] },
   { title: "Приложение", items: [
     { id: "system", title: "Система", icon: "settings" },
+    { id: "appearance", title: "Оформление", icon: "palette" },
+    { id: "notifications", title: "Уведомления", icon: "bell" },
     { id: "updates", title: "Обновления", icon: "download" },
   ] },
   { title: "Поиск клиентов", items: [
@@ -55,6 +56,7 @@ export function Settings() {
   const cloud = useStore((s) => !!s.session?.isCloud);
   const appVersion = useStore((s) => s.boot?.version ?? s.update?.current ?? "");
   const admin = useStore((s) => canAdminister(s.ws?.active ? s.ws.permissions : undefined));
+  const fresh = useUnseenSettings();
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !document.querySelector(".popover, .scrim")) openSettings(null);
@@ -62,10 +64,12 @@ export function Settings() {
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
   }, []);
-  if (!section) return null;
   const current = ALL.find((s) => s.id === section) ?? (ALL[0] as Item);
   const subs = subsectionsOf(current.id, cloud);
   const activeSub = subs.find((x) => x.id === sub)?.id ?? subs[0]?.id ?? null;
+  // Открытый раздел или подраздел перестаёт считаться новым.
+  useEffect(() => { if (section) markSettingsSeen(current.id, subs.length > 1 ? activeSub : null); }, [section, current.id, activeSub, subs.length]);
+  if (!section) return null;
   const hasUpdate = update && ["available", "ready", "downloading"].includes(update.phase);
   return createPortal(
     <div className="settings-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) openSettings(null); }}>
@@ -80,6 +84,7 @@ export function Settings() {
                   <button type="button" className={`nav-item${s.id === current.id ? " active" : ""}`} onClick={() => openSettings(s.id)} aria-current={s.id === current.id ? "page" : undefined} aria-expanded={s.id === current.id && subs.length > 1 ? true : undefined}>
                     <Icon name={s.icon} size={16} />
                     <span className="grow ellipsis" style={{ textAlign: "left" }}>{s.title}</span>
+                    {sectionIsNew(fresh, s.id) && s.id !== current.id && <span className="new-badge">Новое</span>}
                     {s.id === "updates" && hasUpdate && <span className="dot-badge" aria-label="Есть обновление" />}
                   </button>
                   {s.id === current.id && subs.length > 1 && (
@@ -87,6 +92,7 @@ export function Settings() {
                       {subs.map((x) => (
                         <button key={x.id} type="button" className={`nav-sub${x.id === activeSub ? " active" : ""}`} onClick={() => openSettings(s.id, x.id)} aria-current={x.id === activeSub ? "true" : undefined}>
                           <span className="ellipsis">{x.title}</span>
+                          {subIsNew(fresh, s.id, x.id) && x.id !== activeSub && <span className="new-badge">Новое</span>}
                         </button>
                       ))}
                     </div>

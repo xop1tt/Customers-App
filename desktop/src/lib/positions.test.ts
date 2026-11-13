@@ -68,13 +68,13 @@ describe("кто что может", () => {
     expect(nameLocked(hr)).toBe(true);
     expect(nameLocked(owner)).toBe(false);
     expect(nameLocked(deputy)).toBe(false);
-    expect(nameError(" ", "Анна")).not.toBeNull();
-    expect(nameError("Анна", "Анна ")).not.toBeNull();
-    expect(nameError("Анна Ким", "Анна")).toBeNull();
+    expect(nameError(" ", "Алексей")).not.toBeNull();
+    expect(nameError("Алексей", "Алексей ")).not.toBeNull();
+    expect(nameError("Алексей Ким", "Алексей")).toBeNull();
   });
   it("тексты запросов", () => {
-    expect(requestText({ kind: "hire", author: "H", email: "a@b.ru", name: "Анна Ким", position: "Менеджер", reason: "новый отдел" })).toBe(
-      "Запрос на оформление: прошу создать учётную запись для a@b.ru, имя профиля «Анна Ким», должность «Менеджер». Причина: новый отдел");
+    expect(requestText({ kind: "hire", author: "H", email: "a@b.ru", name: "Алексей Ким", position: "Менеджер", reason: "новый отдел" })).toBe(
+      "Запрос на оформление: прошу создать учётную запись для a@b.ru, имя профиля «Алексей Ким», должность «Менеджер». Причина: новый отдел");
     expect(requestText({ kind: "access", author: "H", target: "Вера" })).toBe("Запрос на закрытие доступа: Вера.");
     expect(requestText({ kind: "name", author: "W", name: "Вера Ким" })).toContain("«Вера Ким»");
   });

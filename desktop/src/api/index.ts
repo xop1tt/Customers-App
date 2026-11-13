@@ -16,8 +16,6 @@ export const api = {
   // запуск и сессия
   bootInfo: () => call<BootInfo>("boot_info"),
   localAccounts: () => call<string[]>("local_accounts"),
-  register: (username: string, password: string, confirm: string, remember: boolean) => call<string | null>("register", { username, password, confirm, remember }),
-  login: (username: string, password: string, remember: boolean) => call("login", { username, password, remember }),
   logout: () => call("logout"),
   setRemembered: (on: boolean) => call("set_remembered", { on }),
   isRemembered: () => call<boolean>("is_remembered"),
