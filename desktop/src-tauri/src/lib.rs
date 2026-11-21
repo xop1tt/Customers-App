@@ -20,6 +20,7 @@ pub mod search;
 pub mod secrets;
 pub mod shell;
 pub mod store;
+pub mod time;
 pub mod tray_text;
 pub mod updates;
 pub mod util;

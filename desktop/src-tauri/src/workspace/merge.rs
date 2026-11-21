@@ -11,7 +11,6 @@
 use super::schema;
 use super::store::{deal_contact_id, new_id, stamp, WorkspaceStore};
 use crate::error::{AppError, AppResult};
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
@@ -85,7 +84,7 @@ fn touch(store: &WorkspaceStore, log: &mut Vec<UndoRow>, table: &str, id: &str, 
     let current = store.get(table, id)?;
     let before: Map<String, Value> = match &current {
         Some(cur) => fields.keys().filter(|k| cur[k.as_str()] != fields[k.as_str()]).map(|k| (k.clone(), cur[k.as_str()].clone())).collect(),
-        None => [("deleted_at".to_string(), json!(stamp(Utc::now())))].into_iter().collect(),
+        None => [("deleted_at".to_string(), json!(stamp(crate::time::now())))].into_iter().collect(),
     };
     if current.is_some() && before.is_empty() {
         return Ok(current.unwrap_or(Value::Null));
@@ -174,7 +173,7 @@ pub fn merge(store: &WorkspaceStore, req: &MergeRequest) -> AppResult<Merged> {
                     touch(store, &mut log, "deal_contacts", &target, f)?;
                     moved += 1;
                 }
-                touch(store, &mut log, "deal_contacts", &link, one("deleted_at", json!(stamp(Utc::now()))))?;
+                touch(store, &mut log, "deal_contacts", &link, one("deleted_at", json!(stamp(crate::time::now()))))?;
             }
         }
         // Задачи, события, заметки, комментарии, вложения.
@@ -194,7 +193,7 @@ pub fn merge(store: &WorkspaceStore, req: &MergeRequest) -> AppResult<Merged> {
             let row = store.get("custom_field_values", &id)?.unwrap_or(Value::Null);
             let field = row["field_id"].as_str().unwrap_or_default().to_string();
             if kept_fields.contains(&field) || row["value"].is_null() {
-                touch(store, &mut log, "custom_field_values", &id, one("deleted_at", json!(stamp(Utc::now()))))?;
+                touch(store, &mut log, "custom_field_values", &id, one("deleted_at", json!(stamp(crate::time::now()))))?;
             } else {
                 // Пустое значение оставшейся записи уходит, его место занимает значение дубликата.
                 for empty in ids(
@@ -202,17 +201,17 @@ pub fn merge(store: &WorkspaceStore, req: &MergeRequest) -> AppResult<Merged> {
                     "SELECT id FROM custom_field_values WHERE entity_type=?1 AND entity_id=?2 AND field_id=?3 AND deleted_at IS NULL",
                     &[kind, &req.keep, &field],
                 )? {
-                    touch(store, &mut log, "custom_field_values", &empty, one("deleted_at", json!(stamp(Utc::now()))))?;
+                    touch(store, &mut log, "custom_field_values", &empty, one("deleted_at", json!(stamp(crate::time::now()))))?;
                 }
                 touch(store, &mut log, "custom_field_values", &id, one("entity_id", json!(req.keep)))?;
                 moved += 1;
             }
         }
-        touch(store, &mut log, table, &req.remove, one("deleted_at", json!(stamp(Utc::now()))))?;
+        touch(store, &mut log, table, &req.remove, one("deleted_at", json!(stamp(crate::time::now()))))?;
         // Отметка в ленте оставшейся записи.
         let mut a = Map::new();
         a.insert("type".into(), json!("system"));
-        a.insert("occurred_at".into(), json!(stamp(Utc::now())));
+        a.insert("occurred_at".into(), json!(stamp(crate::time::now())));
         a.insert("summary".into(), json!(format!("Объединено с «{}»", title(table, &remove))));
         a.insert("payload".into(), json!({"event": "merged", "merged_id": req.remove}));
         a.insert("entity_type".into(), json!(kind));
@@ -225,8 +224,13 @@ pub fn merge(store: &WorkspaceStore, req: &MergeRequest) -> AppResult<Merged> {
         let _ = revert(store, &log);
         return Err(e);
     }
-    let info =
-        UndoInfo { entity: table.into(), keep: req.keep.clone(), remove: req.remove.clone(), removed_title: title(table, &remove), at: stamp(Utc::now()) };
+    let info = UndoInfo {
+        entity: table.into(),
+        keep: req.keep.clone(),
+        remove: req.remove.clone(),
+        removed_title: title(table, &remove),
+        at: stamp(crate::time::now()),
+    };
     store.set_meta(UNDO_KEY, &serde_json::to_string(&Stored { info, rows: log })?)?;
     let kept = store.get(table, &req.keep)?.unwrap_or(keep);
     Ok(Merged { kept, moved })

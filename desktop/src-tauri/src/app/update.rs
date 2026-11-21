@@ -2,10 +2,10 @@
 
 use super::session::Core;
 use super::{CmdError, CmdResult};
+use crate::time::Timestamp;
 use crate::updates::{self, AvailableUpdate, Platform, ReleaseInfo, StagedRecord};
 use crate::util::{parse_date, AppVersion};
 use crate::whatsnew::{self, Decision, InstalledNotes};
-use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -32,9 +32,9 @@ pub struct UpdateState {
     pub phase: Phase,
     pub available: Option<AvailableUpdate>,
     pub staged: Option<StagedRecord>,
-    pub last_attempt: Option<DateTime<Utc>>,
-    pub releases: Option<(DateTime<Utc>, Vec<ReleaseInfo>)>,
-    pub releases_failed_at: Option<DateTime<Utc>>,
+    pub last_attempt: Option<Timestamp>,
+    pub releases: Option<(Timestamp, Vec<ReleaseInfo>)>,
+    pub releases_failed_at: Option<Timestamp>,
     pub notes_request: Option<ReleaseInfo>,
 }
 
@@ -121,12 +121,12 @@ impl Core {
             return Ok(self.update_info());
         }
         let was = self.updates.lock().unwrap().phase.clone();
-        self.updates.lock().unwrap().last_attempt = Some(Utc::now());
+        self.updates.lock().unwrap().last_attempt = Some(crate::time::now());
         self.set_phase(Phase::Checking);
         let result = updates::check(self.env.transport.as_ref(), &self.env.version, platform()).await;
         match result {
             Ok(found) => {
-                self.env.patch_device(&json!({"lastUpdateCheck": updates::stamp(&Utc::now())}));
+                self.env.patch_device(&json!({"lastUpdateCheck": updates::stamp(&crate::time::now())}));
                 let has = found.is_some();
                 let staged_same = {
                     let mut st = self.updates.lock().unwrap();
@@ -255,7 +255,13 @@ impl Core {
         let prefs = self.env.device_prefs();
         let last = prefs.last_update_check.as_deref().and_then(parse_date);
         let attempt = self.updates.lock().unwrap().last_attempt;
-        if updates::should_check(prefs.check_updates, updates::normalized_interval(Some(i64::from(prefs.update_check_hours))), last, attempt, Utc::now()) {
+        if updates::should_check(
+            prefs.check_updates,
+            updates::normalized_interval(Some(i64::from(prefs.update_check_hours))),
+            last,
+            attempt,
+            crate::time::now(),
+        ) {
             let _ = self.check_updates(false).await;
         }
     }
@@ -276,12 +282,12 @@ impl Core {
 
     /// Три последних релиза для экрана «Обновления»; результат запоминается.
     pub async fn recent_releases(self: &Arc<Self>) -> CmdResult<Value> {
-        let now = Utc::now();
+        let now = crate::time::now();
         let cached = {
             let st = self.updates.lock().unwrap();
             match (&st.releases, st.releases_failed_at) {
-                (Some((at, list)), _) if now - *at < Duration::seconds(RELEASES_TTL_OK) => Some(list.clone()),
-                (_, Some(failed)) if now - failed < Duration::seconds(RELEASES_TTL_FAIL) => {
+                (Some((at, list)), _) if now.duration_since(*at) < crate::time::secs(RELEASES_TTL_OK) => Some(list.clone()),
+                (_, Some(failed)) if now.duration_since(failed) < crate::time::secs(RELEASES_TTL_FAIL) => {
                     return Err(CmdError::msg("Не удалось загрузить список версий. Повторите позже."))
                 }
                 _ => None,

@@ -8,8 +8,8 @@ use crate::search::settings::{self as cfg, SearchSecrets, SearchSettings};
 use crate::search::sources::{self, Candidate, FetchResult, SearchMemory};
 use crate::search::text::{fingerprint, lead_id};
 use crate::store::LeadStore;
+use crate::time::Timestamp;
 use crate::util::{self, source_title};
-use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 /// Куда поиск складывает результаты.
 pub trait SearchRepository: SearchMemory {
     fn source_cursor(&self, source: &str) -> Option<String>;
-    fn last_success(&self, source: &str) -> Option<DateTime<Utc>>;
+    fn last_success(&self, source: &str) -> Option<Timestamp>;
     fn mark_attempt(&self, source: &str);
     fn finish_source(&self, source: &str, ok: bool, partial: bool, error: Option<&str>, cursor: Option<&str>);
     fn save(&self, lead: &LeadData, id: &str, fingerprint: &str) -> AppResult<SaveOutcome>;
@@ -38,7 +38,7 @@ impl StoreRepo {
 }
 
 impl SearchMemory for StoreRepo {
-    fn query_last_run(&self, hash: &str) -> Option<DateTime<Utc>> {
+    fn query_last_run(&self, hash: &str) -> Option<Timestamp> {
         self.with(|s| s.query_last_run(hash))
     }
     fn record_query(&self, hash: &str, source: &str, label: &str, results: i64) {
@@ -47,7 +47,7 @@ impl SearchMemory for StoreRepo {
     fn forget_query(&self, hash: &str) {
         self.with(|s| s.forget_query(hash))
     }
-    fn object_checked_at(&self, source: &str, object_id: &str) -> Option<DateTime<Utc>> {
+    fn object_checked_at(&self, source: &str, object_id: &str) -> Option<Timestamp> {
         self.with(|s| s.object_checked_at(source, object_id))
     }
     fn mark_object_checked(&self, source: &str, object_id: &str) {
@@ -59,7 +59,7 @@ impl SearchRepository for StoreRepo {
     fn source_cursor(&self, source: &str) -> Option<String> {
         self.with(|s| s.source_cursor(source))
     }
-    fn last_success(&self, source: &str) -> Option<DateTime<Utc>> {
+    fn last_success(&self, source: &str) -> Option<Timestamp> {
         self.with(|s| s.last_success(source))
     }
     fn mark_attempt(&self, source: &str) {
@@ -156,7 +156,7 @@ pub struct SearchEngine {
     pub repo: Arc<dyn SearchRepository>,
     pub scorer: Scorer,
     pub sleeper: Sleeper,
-    pub now: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
+    pub now: Arc<dyn Fn() -> Timestamp + Send + Sync>,
     pub cancel: CancellationToken,
 }
 
@@ -168,7 +168,7 @@ impl SearchEngine {
         repo: Arc<dyn SearchRepository>,
         cancel: CancellationToken,
     ) -> Self {
-        Self { settings, secrets, transport, repo, scorer: Scorer::default(), sleeper: real_sleeper(), now: Arc::new(Utc::now), cancel }
+        Self { settings, secrets, transport, repo, scorer: Scorer::default(), sleeper: real_sleeper(), now: Arc::new(crate::time::now), cancel }
     }
 
     fn http(&self, name: &str, min_interval: f64, max_requests: usize, max_attempts: usize, timeout: f64) -> SourceHttp {
@@ -204,7 +204,7 @@ impl SearchEngine {
             }
             if !options.force {
                 if let Some(last) = self.repo.last_success(key) {
-                    if ((self.now)() - last).num_milliseconds() as f64 / 1000.0 < self.settings.interval_hours(key) * 3600.0 {
+                    if (self.now)().duration_since(last).as_millis() as f64 / 1000.0 < self.settings.interval_hours(key) * 3600.0 {
                         continue; // ещё рано
                     }
                 }

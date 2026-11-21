@@ -210,7 +210,7 @@ pub async fn upload_backup_to_drive(core: C<'_>, service: String) -> CmdResult<S
 pub async fn upload_portable_to_drive(core: C<'_>, service: String) -> CmdResult<String> {
     let c = core.inner().clone();
     let (data, _) = c.portable_bytes()?;
-    let name = format!("customers-{}.customers", chrono::Local::now().format("%Y-%m-%d_%H-%M"));
+    let name = format!("customers-{}.customers", crate::time::local_format(crate::time::now(), "%Y-%m-%d_%H-%M"));
     c.upload_data_to_drive(&service, &name, &data).await
 }
 

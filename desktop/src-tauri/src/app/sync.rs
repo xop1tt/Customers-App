@@ -7,8 +7,8 @@
 use super::session::{Core, Session};
 use crate::cloud::error::CloudError;
 use crate::cloud::sync::SyncEngine;
+use crate::time::Timestamp;
 use crate::util::{format_date, parse_date};
-use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ pub enum SyncKind {
 pub struct SyncState {
     pub kind: SyncKind,
     pub message: Option<String>,
-    pub last_sync: Option<DateTime<Utc>>,
+    pub last_sync: Option<Timestamp>,
     pub pending: i64,
     /// Итоги последней удачной синхронизации: сколько изменений отправлено и получено.
     pub last_pushed: usize,
@@ -189,7 +189,7 @@ impl Core {
                 Ok(r) => {
                     st.kind = SyncKind::Idle;
                     st.message = None;
-                    st.last_sync = Some(Utc::now());
+                    st.last_sync = Some(crate::time::now());
                     pulled = r.pulled;
                     st.last_pushed = r.pushed;
                     st.last_pulled = r.pulled;

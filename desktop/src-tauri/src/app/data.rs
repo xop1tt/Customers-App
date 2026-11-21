@@ -6,7 +6,6 @@ use super::{CmdError, CmdResult};
 use crate::export::{self, ExportField, ExportFormat};
 use crate::models::{lead_to_ui, ExclusionKind};
 use crate::util::{format_date, parse_date};
-use chrono::{Duration, Local, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -146,7 +145,7 @@ impl Core {
                         let name = e.file_name().to_string_lossy().into_owned();
                         (name.starts_with("leadgen-") && name.ends_with(".db")).then(|| {
                             let meta = e.metadata().ok();
-                            let at = meta.as_ref().and_then(|m| m.modified().ok()).map(|t| format_date(&chrono::DateTime::<Utc>::from(t)));
+                            let at = meta.as_ref().and_then(|m| m.modified().ok()).and_then(crate::time::from_system).map(|t| format_date(&t));
                             (e.path(), name, meta.map(|m| m.len()).unwrap_or(0), at)
                         })
                     })
@@ -163,7 +162,7 @@ impl Core {
     pub fn backup_now(&self, s: &Session) -> CmdResult<PathBuf> {
         let dir = self.backup_directory(s);
         let prefs = s.account_prefs();
-        let path = dir.join(format!("leadgen-{}.db", Local::now().format("%Y-%m-%d_%H-%M-%S")));
+        let path = dir.join(format!("leadgen-{}.db", crate::time::local_format(crate::time::now(), "%Y-%m-%d_%H-%M-%S")));
         std::fs::create_dir_all(&dir).map_err(|e| CmdError::msg(format!("Резервная копия не создана: {e}")))?;
         s.with_store(|st| st.backup(&path)).map_err(|e| {
             self.env.log_error(&format!("Резервная копия: {e}"));
@@ -196,7 +195,7 @@ impl Core {
             return;
         }
         let last = s.with_store(|st| st.value("last_backup_at")).as_deref().and_then(parse_date);
-        if last.map(|l| Utc::now() - l > Duration::hours(i64::from(prefs.backup_due_hours()))).unwrap_or(true) {
+        if last.map(|l| crate::time::now().duration_since(l) > crate::time::hours(i64::from(prefs.backup_due_hours()))).unwrap_or(true) {
             let _ = self.backup_now(s);
         }
     }
@@ -385,7 +384,7 @@ mod tests {
         assert_eq!(core.list_backups().unwrap().len(), 1, "прошло меньше 20 часов");
         // Частота из настроек: раз в неделю — копия суточной давности ещё свежая, каждые 6 часов — уже нет.
         core.patch_account_prefs(&json!({"backupHours": 168})).unwrap();
-        s.with_store(|st| st.set_value("last_backup_at", &crate::util::format_date(&(Utc::now() - Duration::hours(30))))).unwrap();
+        s.with_store(|st| st.set_value("last_backup_at", &format_date(&(crate::time::now() - crate::time::hours(30))))).unwrap();
         core.daily_backup_if_needed(&s);
         assert_eq!(core.list_backups().unwrap().len(), 1, "раз в неделю: 30 часов — рано");
         core.patch_account_prefs(&json!({"backupHours": 24})).unwrap();
