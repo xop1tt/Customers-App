@@ -710,6 +710,8 @@ export interface ChatPoll {
 // ---------------------------------------------------------------- локальная модель (OpenAI-совместимый ответ)
 
 export interface AiToolCall { id?: string; type?: string; function: { name: string; arguments: string | Record<string, unknown> } }
+/** Что модель принимает кроме текста; null — неизвестно (файл отправляется, ответ сервера покажет, принят ли он). */
+export interface AiCaps { vision: boolean | null; audio: boolean | null }
 export interface AiChatReply { choices: { message: { role: string; content: string | null; tool_calls?: AiToolCall[] }; finish_reason?: string }[] }
 
 // ---------------------------------------------------------------- маркетплейс

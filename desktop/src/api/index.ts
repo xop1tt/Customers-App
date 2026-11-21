@@ -7,7 +7,7 @@ import type {
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
   CrmRecord, WsAuditItem, WsAuditQuery, WsCard, WsCollection, WsConflict, WsConverted, WsInvitation, WsIncoming, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll,
-  AiChatReply, ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
+  AiCaps, AiChatReply, ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -172,6 +172,7 @@ export const api = {
   hubLoad: () => call<unknown>("hub_load"),
   hubSave: (value: unknown) => call("hub_save", { value }),
   aiModels: (baseUrl: string, apiKey?: string) => call<string[]>("ai_models", { baseUrl, apiKey: apiKey ?? null }),
+  aiCapabilities: (baseUrl: string, apiKey: string | undefined, model: string) => call<AiCaps>("ai_capabilities", { baseUrl, apiKey: apiKey ?? null, model }),
   aiNotify: (title: string, body: string) => call<void>("ai_notify", { title, body }),
   aiChat: (baseUrl: string, apiKey: string | undefined, body: unknown) => call<AiChatReply>("ai_chat", { baseUrl, apiKey: apiKey ?? null, body }),
   wsMarket: <T = unknown>(action: string, args: Record<string, unknown> = {}) => call<T>("ws_market", { action, args }),

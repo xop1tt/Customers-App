@@ -109,15 +109,20 @@ describe("вложения", () => {
     expect(screen.queryByRole("list", { name: "Вложения" })).toBeNull();
   });
 
-  it("картинка не прикладывается, пока в настройках не указано, что модель их понимает; потом уходит как image_url", async () => {
+  it("картинка отклоняется, если сервер сообщил, что модель не понимает изображения; у модели со зрением уходит как image_url", async () => {
+    hubDemo.caps = { vision: false, audio: false };
     await connect();
     await ready();
     openAi();
     await screen.findByLabelText("Сообщение помощнику");
+    await waitFor(() => expect(screen.getByLabelText("Выбрать файлы").getAttribute("accept")).not.toContain(".png"));
     attach(file("схема.png", "image/png", new Uint8Array([137, 80, 78, 71])));
-    expect(await screen.findByText(/не отмечена как понимающая изображения/)).toBeInTheDocument();
+    expect(await screen.findByText(/выбранная модель не понимает изображения/)).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Вложения" })).toBeNull();
-    await act(async () => { await saveAi({ vision: true }); });
+    // Другая модель: сервер сообщает, что она видит картинки. Переключателей нет — только выбор модели.
+    hubDemo.caps = { vision: true, audio: false };
+    await act(async () => { await saveAi({ model: "llama3.1" }); });
+    await waitFor(() => expect(screen.getByLabelText("Выбрать файлы").getAttribute("accept")).toContain(".png"));
     let seen: Body | null = null;
     hubDemo.reply = (b: Body) => { seen = b; return { choices: [{ message: { role: "assistant", content: "Вижу схему." } }] }; };
     attach(file("схема.png", "image/png", new Uint8Array([137, 80, 78, 71])));
@@ -128,8 +133,30 @@ describe("вложения", () => {
     expect(parts.find((p) => p.type === "image_url")?.image_url?.url).toMatch(/^data:image\/png;base64,/);
   });
 
+  it("звук: модель не понимает — отказ; неизвестно — файл уходит на пробу как input_audio", async () => {
+    hubDemo.caps = { vision: true, audio: false };
+    await connect();
+    await ready();
+    openAi();
+    await screen.findByLabelText("Сообщение помощнику");
+    await waitFor(() => expect(screen.getByLabelText("Выбрать файлы").getAttribute("accept")).not.toContain(".mp3"));
+    attach(file("звонок.mp3", "audio/mpeg", new Uint8Array([73, 68, 51])));
+    expect(await screen.findByText(/выбранная модель не понимает звук/)).toBeInTheDocument();
+    hubDemo.caps = { vision: null, audio: null };
+    await act(async () => { await saveAi({ model: "llama3.1" }); });
+    await waitFor(() => expect(screen.getByLabelText("Выбрать файлы").getAttribute("accept")).toContain(".mp3"));
+    let seen: Body | null = null;
+    hubDemo.reply = (b: Body) => { seen = b; return { choices: [{ message: { role: "assistant", content: "Слышу звонок." } }] }; };
+    attach(file("звонок.mp3", "audio/mpeg", new Uint8Array([73, 68, 51])));
+    expect(await screen.findByRole("list", { name: "Вложения" })).toHaveTextContent("звонок.mp3");
+    send("О чём звонок?");
+    expect(await screen.findByText("Слышу звонок.")).toBeInTheDocument();
+    const parts = seen!.messages.find((m) => m.role === "user")!.content as { type: string; input_audio?: { format: string } }[];
+    expect(parts.find((p) => p.type === "input_audio")?.input_audio?.format).toBe("mp3");
+  });
+
   it("неподдерживаемый формат отклоняется с понятным объяснением", async () => {
-    await connect({ vision: true });
+    await connect();
     await ready();
     openAi();
     await screen.findByLabelText("Сообщение помощнику");

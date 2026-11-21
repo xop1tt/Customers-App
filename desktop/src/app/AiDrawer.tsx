@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 
 import { Button, EmptyState, IconButton, Notice, Tag } from "../ui/kit";
 import { Icon } from "../ui/icons";
 import { type ViewItem, answerAction, askAi, clearChat, stopChat, useAi } from "../state/ai";
-import { useHub } from "../state/hub";
+import { useAiCaps, useHub } from "../state/hub";
 import { openSettings, toast, toggleAi, useStore } from "../state/store";
 import { AI_PROVIDERS } from "../lib/hub";
 import type { AiRisk } from "../lib/aiTools";
@@ -84,6 +84,7 @@ export function AiDrawer() {
 
 function AiChat() {
   const { ai } = useHub();
+  const caps = useAiCaps();
   const { view, busy } = useAi();
   const [text, setText] = useState("");
   const [files, setFiles] = useState<AiAttachment[]>([]);
@@ -106,7 +107,7 @@ function AiChat() {
     let room = MAX_FILES - files.length;
     const got: AiAttachment[] = [];
     for (const f of incoming) {
-      const why = refusal(f.name, f.type, f.size, ai.vision, ai.audio);
+      const why = refusal(f.name, f.type, f.size, caps);
       if (why) { toast(why, "error"); continue; }
       if (room <= 0) { toast(`Не больше ${MAX_FILES} файлов в одном сообщении.`, "error"); break; }
       try { got.push(await readAttachment(f)); room--; } catch (e) { toast((e as Error).message, "error"); }
@@ -140,7 +141,7 @@ function AiChat() {
           <div className="ai-log" role="log" aria-label="Разговор с помощником" aria-live="polite">
             {view.length === 0 && (
               <div className="ai-hint faint">
-                <p>Попросите что-нибудь сделать в приложении{ai.vision ? ", можно приложить картинку или файл" : " или приложите файл"}:</p>
+                <p>Попросите что-нибудь сделать в приложении{caps.vision ? ", можно приложить картинку или файл" : " или приложите файл"}:</p>
                 <ul>
                   {["Сколько новых лидов и когда был последний поиск?", "Перенеси завтрашнюю встречу на пятницу, 15:00", "Назначь Анну ответственной за сделку «Поставка»", "Создай задачу «Позвонить клиенту» на завтра"].map((x) => (
                     <li key={x}><button type="button" className="link-btn" onClick={() => setText(x)}>{x}</button></li>
@@ -165,7 +166,7 @@ function AiChat() {
             </ul>
           )}
           <form className="ai-input" onSubmit={(e) => { e.preventDefault(); send(); }}>
-            <input ref={pick} type="file" multiple hidden aria-label="Выбрать файлы" accept={acceptList(ai.vision, ai.audio)}
+            <input ref={pick} type="file" multiple hidden aria-label="Выбрать файлы" accept={acceptList(caps)}
               onChange={(e) => { if (e.target.files) void add(e.target.files); e.target.value = ""; }} />
             <IconButton icon="paperclip" tip="Приложить файл" disabled={busy || files.length >= MAX_FILES} onClick={() => pick.current?.click()} />
             <textarea aria-label="Сообщение помощнику" value={text} rows={2} placeholder="Что сделать? Enter — отправить, Shift+Enter — новая строка"

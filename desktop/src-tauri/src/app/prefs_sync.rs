@@ -16,7 +16,8 @@ pub const INTERFACE_KEY: &str = "interface.prefs";
 pub const SIGNATURE_KEY: &str = "draft.signature";
 
 /// Поля `AccountPrefs`, которые синхронизируются (автопоиск и подпись ходят под своими ключами).
-pub const ACCOUNT_FIELDS: [&str; 9] = ["notifyNewLeads", "notifyErrors", "notifySync", "confirmCalls", "callApp", "autoBackup", "backupHours", "keepBackups", "welcomeDone"];
+pub const ACCOUNT_FIELDS: [&str; 9] =
+    ["notifyNewLeads", "notifyErrors", "notifySync", "confirmCalls", "callApp", "autoBackup", "backupHours", "keepBackups", "welcomeDone"];
 
 /// Поля `DevicePrefs`, которые синхронизируются: оформление и боковая панель.
 pub const INTERFACE_FIELDS: [&str; 14] = [
