@@ -1218,7 +1218,7 @@ impl Core {
     pub async fn ws_market(self: &Arc<Self>, action: &str, args: Map<String, Value>) -> CmdResult<Value> {
         // Действия, которым нужен активный облачный Workspace (подставляется сам).
         const WITH_WORKSPACE: [&str; 4] = ["market_installed", "market_install", "market_uninstall", "market_set_enabled"];
-        const OTHERS: [&str; 11] = [
+        const OTHERS: [&str; 18] = [
             "market_catalog",
             "market_my_apps",
             "market_submit",
@@ -1226,11 +1226,20 @@ impl Core {
             "market_review_queue",
             "market_review",
             "market_suspend",
-            // Проверка компаний-разработчиков (ADR-083): функции сервера ещё не созданы, пока приложение показывает понятное сообщение.
+            // Проверка компаний-разработчиков (ADR-083, сервер — ADR-095). На сервере без миграции 20261121140000
+            // приложение показывает понятное сообщение.
             "market_company",
             "market_company_save",
             "market_company_queue",
             "market_company_review",
+            // Модерация (ADR-095): снятые с каталога, журнал решений, список модераторов, уведомления разработчику.
+            "market_suspended",
+            "market_audit_log",
+            "market_moderators",
+            "market_moderator_add",
+            "market_moderator_remove",
+            "market_notices",
+            "market_notices_read",
         ];
         let with_ws = WITH_WORKSPACE.contains(&action);
         if !with_ws && !OTHERS.contains(&action) {
@@ -1263,6 +1272,15 @@ impl Core {
             Ok(v) => Ok(v),
             Err(CloudError::Server(m)) if m.contains("market_company") && (m.contains("schema cache") || m.contains("Could not find")) => {
                 Err(CmdError::new("companyMissing", "Проверка компаний появится после обновления сервера: пока коннекторы можно только устанавливать."))
+            }
+            Err(CloudError::Server(m))
+                if ["market_suspended", "market_audit_log", "market_moderator", "market_notices"].iter().any(|f| m.contains(f))
+                    && (m.contains("schema cache") || m.contains("Could not find")) =>
+            {
+                Err(CmdError::new(
+                    "moderationMissing",
+                    "Журнал модерации и уведомления появятся после обновления сервера: владельцу проекта Supabase нужно применить миграцию 20261121140000_market_moderation.sql.",
+                ))
             }
             Err(CloudError::Server(m)) if m.contains("market_") && (m.contains("schema cache") || m.contains("Could not find")) => Err(CmdError::new(
                 "marketMissing",

@@ -6,11 +6,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../api";
-import type { MarketApp, MarketCategory, MarketCompany, MarketCompanyReview, MarketManifest, MarketReview, MarketSubmission } from "../../api/types";
+import type { MarketApp, MarketAuditAction, MarketAuditEntry, MarketCategory, MarketCompany, MarketCompanyReview, MarketManifest, MarketModerator, MarketNotices, MarketReview, MarketSubmission, MarketVersion } from "../../api/types";
 import { type Check, checkCompany, checkConnector, failedChecks } from "../../lib/connectors";
-import { dateOnly } from "../../lib/format";
+import { dateOnly, fullRu } from "../../lib/format";
 import { ENTITIES } from "../../lib/crm";
-import { Button, EmptyState, Field, IconButton, Notice, Select, Spinner, Switch, Tag, TextArea, TextInput } from "../../ui/kit";
+import { Button, EmptyState, Field, IconButton, Notice, Select, Spinner, Switch, Tabs, Tag, TextArea, TextInput } from "../../ui/kit";
 import { Icon } from "../../ui/icons";
 import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, toast, useStore, NONE } from "../../state/store";
@@ -26,9 +26,15 @@ export function Marketplace() {
   const [category, setCategory] = useState<MarketCategory | null>(null);
   const [openApp, setOpenApp] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [unread, setUnread] = useState(0);
   useEffect(() => {
     if (!page || !cloud) return;
     void api.wsMarket<boolean>("market_is_moderator").then(setModerator, () => setModerator(false));
+  }, [page, cloud]);
+  // Непрочитанные решения модераторов по моим коннекторам и компании (ADR-095). Старый сервер — без счётчика.
+  useEffect(() => {
+    if (!cloud || page === null) return;
+    void api.wsMarket<MarketNotices>("market_notices").then((n) => setUnread(n.unread), () => setUnread(0));
   }, [page, cloud]);
   useEffect(() => {
     if (!page) return;
@@ -56,6 +62,7 @@ export function Marketplace() {
               <div key={x.id} className="settings-item">
                 <button type="button" className={`nav-item${page === x.id && !(x.id === "catalog" && category) ? " active" : ""}`} aria-current={page === x.id ? "page" : undefined} onClick={() => go(x.id)}>
                   <Icon name={x.icon} size={16} /><span className="grow ellipsis" style={{ textAlign: "left" }}>{titles[x.id]}</span>
+                  {x.id === "review" && unread > 0 && <span className="nav-count accent" aria-hidden title={`Новых решений: ${unread}`}>{unread}</span>}
                 </button>
                 {x.id === "catalog" && page === "catalog" && (
                   <div className="settings-subs" role="group" aria-label="Категории">
@@ -85,7 +92,7 @@ export function Marketplace() {
               ) : page === "installed" ? (
                 <Installed key={`i-${version}`} onOpen={setOpenApp} />
               ) : page === "review" ? (
-                <Review moderator={moderator} onGoDeveloper={() => go("developer")} />
+                <Review moderator={moderator} onGoDeveloper={() => go("developer")} onSeen={() => setUnread(0)} />
               ) : (
                 <Developer onGoReview={() => go("review")} />
               )}
@@ -542,7 +549,45 @@ export function SubmitDialog({ app, company, draft, onClose, onDone }: { app: Ma
 
 // ---------------------------------------------------------------- на проверке
 
-function Review({ moderator, onGoDeveloper }: { moderator: boolean; onGoDeveloper: () => void }) {
+/** Отчёт автопроверки версии: сохранённый сервером при подаче (ADR-095), у прежних версий — правила приложения. */
+const versionChecks = (a: MarketApp, v: MarketVersion): Check[] => (v.checks?.length ? v.checks : checksOf(a, v.manifest, v.version));
+
+const NOTICE_TONE: Record<MarketNotices["items"][number]["kind"], "green" | "red"> = {
+  version_approved: "green", app_restored: "green", company_verified: "green", version_rejected: "red", app_suspended: "red", company_rejected: "red",
+};
+
+/** Решения модераторов по моим коннекторам и компании. Показ отмечает их прочитанными. */
+function Decisions({ onSeen }: { onSeen: () => void }) {
+  const [n, setN] = useState<MarketNotices | null>(null);
+  useEffect(() => {
+    void api.wsMarket<MarketNotices>("market_notices").then((x) => {
+      setN(x);
+      if (x.unread > 0) void api.wsMarket("market_notices_read").then(onSeen, () => undefined);
+    }, () => setN(null));
+  }, []);
+  if (!n || n.items.length === 0) return null;
+  return (
+    <>
+      <h3>Решения модераторов</h3>
+      <ul className="market-list" aria-label="Решения модераторов">
+        {n.items.slice(0, 10).map((x) => (
+          <li key={x.id} className="market-row">
+            <span className="col grow" style={{ gap: 2, minWidth: 0 }}>
+              <span className="row" style={{ gap: 6 }}>
+                <Tag tone={NOTICE_TONE[x.kind]} icon={NOTICE_TONE[x.kind] === "green" ? "check" : "x"}>{x.title}</Tag>
+                {!x.read && <span className="new-badge">Новое</span>}
+              </span>
+              {x.note && <span>Модератор: {x.note}</span>}
+              <span className="faint">{fullRu(x.created_at)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function Review({ moderator, onGoDeveloper, onSeen }: { moderator: boolean; onGoDeveloper: () => void; onSeen: () => void }) {
   const { company } = useCompany();
   const [mine, setMine] = useState<MarketApp[] | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>(loadDrafts);
@@ -558,6 +603,7 @@ function Review({ moderator, onGoDeveloper }: { moderator: boolean; onGoDevelope
           <span className="faint">Состояния заявки: черновик → отправлена → одобрена или отклонена. Одобренные версии попадают в каталог.</span>
         </div>
       </div>
+      <Decisions onSeen={onSeen} />
       {company && company.status !== "verified" && (
         <Notice tone={company.status === "rejected" ? "warn" : "info"}>
           Компания: {COMPANY_TEXT[company.status].text.toLowerCase()}. {company.status === "submitted" ? "Коннекторы можно отправить после проверки." : <button type="button" className="link-btn" onClick={onGoDeveloper}>Перейти к проверке компании</button>}
@@ -584,7 +630,7 @@ function Review({ moderator, onGoDeveloper }: { moderator: boolean; onGoDevelope
               <div className="row" style={{ gap: 10, alignItems: "flex-start" }}>
                 <span className="market-icon" aria-hidden>{a.icon}</span>
                 <div className="col grow" style={{ gap: 3, minWidth: 0 }}>
-                  <span className="row" style={{ gap: 6 }}><span className="market-name">{a.name}</span><Tag tone={STATUS_TEXT[v.status]!.tone}>{v.version}: {STATUS_TEXT[v.status]!.text}</Tag><ChecksSummary checks={checksOf(a, v.manifest, v.version)} /></span>
+                  <span className="row" style={{ gap: 6 }}><span className="market-name">{a.name}</span><Tag tone={STATUS_TEXT[v.status]!.tone}>{v.version}: {STATUS_TEXT[v.status]!.text}</Tag><ChecksSummary checks={versionChecks(a, v)} /></span>
                   <span className="faint">Подана {dateOnly(v.created_at)}</span>
                   {v.review_note && <span>Модератор: {v.review_note}</span>}
                 </div>
@@ -599,7 +645,26 @@ function Review({ moderator, onGoDeveloper }: { moderator: boolean; onGoDevelope
   );
 }
 
+type ModTab = "queues" | "suspended" | "journal" | "moderators";
+
+/** Модерация (только модераторам платформы; права проверяет сервер, ADR-095): очереди, снятые с каталога, журнал, модераторы. */
 function ModerationQueues() {
+  const [tab, setTab] = useState<ModTab>("queues");
+  return (
+    <section className="col" style={{ gap: 16, alignItems: "stretch" }} aria-label="Модерация">
+      <h3>Модерация</h3>
+      <Tabs value={tab} onChange={setTab} tabs={[
+        { id: "queues", label: "Заявки", icon: "shield" },
+        { id: "suspended", label: "Снятые с каталога", icon: "ban" },
+        { id: "journal", label: "Журнал решений", icon: "history" },
+        { id: "moderators", label: "Модераторы", icon: "users" },
+      ]} />
+      {tab === "queues" ? <Queues /> : tab === "suspended" ? <Suspended /> : tab === "journal" ? <Journal /> : <Moderators />}
+    </section>
+  );
+}
+
+function Queues() {
   const [queue, setQueue] = useState<MarketReview[] | null>(null);
   const [companies, setCompanies] = useState<MarketCompanyReview[] | null>(null);
   const [rejecting, setRejecting] = useState<MarketReview | null>(null);
@@ -612,7 +677,7 @@ function ModerationQueues() {
   };
   useEffect(load, []);
   const approve = async (r: MarketReview) => {
-    if (!(await confirmDialog({ title: `Опубликовать «${r.app.name}» ${r.version}?`, message: "Версия появится в каталоге. Уже установленные копии обновят владельцы рабочего пространства.", confirm: "Опубликовать" }))) return;
+    if (!(await confirmDialog({ title: `Опубликовать «${r.app.name}» ${r.version}?`, message: "Версия появится в каталоге. Уже установленные копии обновят владельцы рабочего пространства. Решение попадёт в журнал, разработчик получит уведомление.", confirm: "Опубликовать" }))) return;
     if ((await attempt(() => api.wsMarket("market_review", { version: r.version_id, approve: true }))) !== undefined) { load(); reload(); }
   };
   const approveCompany = async (r: MarketCompanyReview) => {
@@ -631,6 +696,7 @@ function ModerationQueues() {
                   <span className="market-name">{r.company.legal_name}</span>
                   <span className="faint">{r.company.country} · № {r.company.reg_number} · {r.company.contact_name}, {r.company.contact_email}</span>
                   <span className="faint">{r.company.website} · {r.company.privacy_url}</span>
+                  {r.account_email && <span className="faint">Учётная запись: {r.account_email}</span>}
                 </div>
                 <Button small icon="x" onClick={() => setRejectingCompany(r)}>Отклонить</Button>
                 <Button small variant="primary" icon="check" aria-label={`Подтвердить компанию ${r.company.legal_name}`} onClick={() => void approveCompany(r)}>Подтвердить</Button>
@@ -644,25 +710,28 @@ function ModerationQueues() {
       {queue === null ? <Spinner /> : queue.length === 0 ? <div className="faint">Заявок нет.</div> : (
         <ul className="market-list" aria-label="Заявки">
           {queue.map((r) => {
-            const checks = checksOf(r.app, r.manifest, r.version);
-            const blocked = failedChecks(checks).length > 0;
+            const checks = reviewChecks(r);
+            const companyBad = r.company !== undefined && r.company?.status !== "verified";
+            const blocked = failedChecks(checks).length > 0 || companyBad;
             return (
               <li key={r.version_id} className="market-review">
                 <div className="row" style={{ gap: 10, alignItems: "flex-start" }}>
                   <span className="market-icon" aria-hidden>{r.app.icon}</span>
                   <div className="col grow" style={{ gap: 3, minWidth: 0 }}>
-                    <span className="market-name">{r.app.name} <span className="faint">· {r.version}{r.live_manifest ? " (обновление)" : " (новая)"}</span></span>
+                    <span className="market-name">{r.app.name} <span className="faint">· {r.version}{r.live_manifest ? ` (обновление${r.live_version ? ` с ${r.live_version}` : ""})` : " (новая)"}</span></span>
                     <span className="faint">{r.app.developer_name}{r.developer_email ? ` · ${r.developer_email}` : ""} · {CATEGORY_TEXT[r.app.category]} · подана {dateOnly(r.created_at)}</span>
                     <span>{r.app.tagline}</span>
                   </div>
                   <Button small icon="x" onClick={() => setRejecting(r)}>Отклонить</Button>
                   <Button small variant="primary" icon="check" disabled={blocked} onClick={() => void approve(r)}>Опубликовать</Button>
                 </div>
+                {blocked && <Notice tone="warn">{companyBad ? "Компания разработчика не проверена: опубликовать нельзя, только отклонить с причиной." : "Есть замечания автопроверки: опубликовать нельзя, только отклонить с причиной."}</Notice>}
                 <div className="market-facts compact"><ManifestFacts m={r.manifest} /></div>
                 <CheckList checks={checks} />
                 {r.live_manifest && JSON.stringify(r.live_manifest.scopes ?? []) !== JSON.stringify(r.manifest.scopes ?? []) && (
                   <Notice tone="warn">Права меняются: было «{(r.live_manifest.scopes ?? []).join(", ") || "нет"}», станет «{(r.manifest.scopes ?? []).join(", ") || "нет"}».</Notice>
                 )}
+                <ReviewDetails r={r} />
               </li>
             );
           })}
@@ -674,7 +743,7 @@ function ModerationQueues() {
           {apps.map((a) => (
             <li key={a.id} className="market-row">
               <span className="market-icon" aria-hidden>{a.icon}</span>
-              <span className="col grow" style={{ gap: 2, minWidth: 0 }}><span className="market-name">{a.name}</span><span className="faint">{a.developer_name} · установок: {a.installs}</span></span>
+              <span className="col grow" style={{ gap: 2, minWidth: 0 }}><span className="market-name">{a.name}</span><span className="faint">{a.developer_name} · {a.version} · установок: {a.installs}</span></span>
               <Button small icon="ban" onClick={() => setSuspend(a)}>Снять с каталога</Button>
             </li>
           ))}
@@ -684,8 +753,188 @@ function ModerationQueues() {
         onSubmit={async (note) => { if ((await attempt(() => api.wsMarket("market_review", { version: rejecting.version_id, approve: false, note }))) !== undefined) { setRejecting(null); load(); } }} />}
       {rejectingCompany && <ReasonDialog title={`Отклонить компанию «${rejectingCompany.company.legal_name}»`} action="Отклонить" onClose={() => setRejectingCompany(null)}
         onSubmit={async (note) => { if ((await attempt(() => api.wsMarket("market_company_review", { user: rejectingCompany.user_id, approve: false, note }))) !== undefined) { setRejectingCompany(null); load(); } }} />}
-      {suspend && <ReasonDialog title={`Снять «${suspend.name}» с каталога`} action="Снять" hint="Коннектор пропадёт из каталога, его кнопки и события остановятся во всех рабочих пространствах." onClose={() => setSuspend(null)}
+      {suspend && <ReasonDialog title={`Снять «${suspend.name}» с каталога`} action="Снять" hint="Коннектор пропадёт из каталога, его кнопки и события остановятся во всех рабочих пространствах. Разработчик увидит причину." onClose={() => setSuspend(null)}
         onSubmit={async (note) => { if ((await attempt(() => api.wsMarket("market_suspend", { app: suspend.id, suspend: true, note }))) !== undefined) { setSuspend(null); reload(); } }} />}
+    </div>
+  );
+}
+
+/** Замечания по заявке: серверная проверка (ADR-095), если сервер её прислал, иначе те же правила в приложении. */
+function reviewChecks(r: MarketReview): Check[] {
+  const local = checksOf(r.app, r.manifest, r.version);
+  if (!r.server_checks) return local;
+  const server = new Map(r.server_checks.map((c) => [c.id, c]));
+  return [...local.map((c) => server.get(c.id) ?? c), ...r.server_checks.filter((c) => !local.some((x) => x.id === c.id))];
+}
+
+const AUDIT_TEXT: Record<MarketAuditAction, string> = {
+  version_approved: "Версия одобрена",
+  version_rejected: "Версия отклонена",
+  app_suspended: "Снят с каталога",
+  app_restored: "Возвращён в каталог",
+  company_verified: "Компания подтверждена",
+  company_rejected: "Компания отклонена",
+  moderator_added: "Добавлен модератор",
+  moderator_removed: "Убран модератор",
+};
+
+/** Всё для аудита заявки: описание, контакты, компания, каждый адрес манифеста, прошлые решения и сам манифест. */
+function ReviewDetails({ r }: { r: MarketReview }) {
+  const m = r.manifest;
+  const urls: { what: string; url: string }[] = [
+    ...(m.webhooks ? [{ what: `События (${m.webhooks.events.map((e) => EVENT_TEXT[e] ?? e).join(", ")})`, url: m.webhooks.url }] : []),
+    ...(m.actions ?? []).map((a) => ({ what: `Кнопка «${a.label}» · ${ENTITIES[a.entity].one.toLowerCase()}`, url: a.url })),
+    ...(m.window ? [{ what: "Окно плагина", url: m.window.url }] : []),
+  ];
+  return (
+    <details className="market-details">
+      <summary>Подробности для проверки</summary>
+      <div className="col" style={{ gap: 12, alignItems: "stretch", marginTop: 10 }}>
+        <section className="market-fact">
+          <h4>Описание</h4>
+          <div style={{ whiteSpace: "pre-wrap" }}>{r.app.description || <span className="faint">Нет описания</span>}</div>
+        </section>
+        <section className="market-fact">
+          <h4>Разработчик</h4>
+          <div>Сайт: {r.app.website ?? "—"} · поддержка: {r.app.support_email ?? "—"}</div>
+          {r.developer_email && <div>Учётная запись: {r.developer_email}</div>}
+          {r.company === undefined ? null : r.company ? (
+            <div>Компания: {r.company.legal_name}, {r.company.country}, № {r.company.reg_number} · <Tag tone={COMPANY_TEXT[r.company.status].tone}>{COMPANY_TEXT[r.company.status].text}</Tag></div>
+          ) : <div><Tag tone="red">Компания не проходила проверку</Tag></div>}
+        </section>
+        <section className="market-fact">
+          <h4>Куда коннектор отправляет данные и ведёт пользователей</h4>
+          {urls.length ? (
+            <ul className="market-urls" aria-label="Адреса манифеста">
+              {urls.map((u) => <li key={u.what + u.url}><span className="faint">{u.what}</span><code>{u.url}</code></li>)}
+            </ul>
+          ) : <div className="faint">Адресов нет</div>}
+        </section>
+        {r.history && r.history.length > 0 && (
+          <section className="market-fact">
+            <h4>Прошлые решения</h4>
+            {r.history.map((h, i) => <div key={i}>{dateOnly(h.created_at)} · {AUDIT_TEXT[h.action]}{h.version ? ` ${h.version}` : ""}{h.note ? `: ${h.note}` : ""}</div>)}
+          </section>
+        )}
+        <section className="market-fact">
+          <h4>Манифест (JSON)</h4>
+          <pre className="mono market-json">{JSON.stringify(m, null, 2)}</pre>
+        </section>
+      </div>
+    </details>
+  );
+}
+
+function Suspended() {
+  const [apps, setApps] = useState<MarketApp[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = () => void api.wsMarket<MarketApp[]>("market_suspended").then((a) => { setApps(a); setError(null); }, (e: { message?: string }) => { setApps([]); setError(e?.message ?? "Список не загрузился."); });
+  useEffect(load, []);
+  const restore = async (a: MarketApp) => {
+    if (!(await confirmDialog({ title: `Вернуть «${a.name}» в каталог?`, message: "Кнопки и события снова заработают там, где коннектор установлен и включён.", confirm: "Вернуть" }))) return;
+    if ((await attempt(() => api.wsMarket("market_suspend", { app: a.id, suspend: false }))) !== undefined) load();
+  };
+  if (error) return <Notice tone="warn">{error}</Notice>;
+  if (apps === null) return <Spinner />;
+  if (apps.length === 0) return <div className="faint">Снятых с каталога коннекторов нет.</div>;
+  return (
+    <ul className="market-list" aria-label="Снятые с каталога">
+      {apps.map((a) => (
+        <li key={a.id} className="market-row">
+          <span className="market-icon" aria-hidden>{a.icon}</span>
+          <span className="col grow" style={{ gap: 2, minWidth: 0 }}>
+            <span className="market-name">{a.name}</span>
+            <span className="faint">{a.developer_name} · установок: {a.installs}</span>
+            {a.status_note && <span className="faint">Причина: {a.status_note}</span>}
+          </span>
+          <Button small icon="check" aria-label={`Вернуть ${a.name} в каталог`} onClick={() => void restore(a)}>Вернуть в каталог</Button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function auditSubject(e: MarketAuditEntry): string {
+  const d = e.details;
+  if (e.action.startsWith("company_")) return d.legal_name ?? e.subject_email ?? "";
+  if (e.action.startsWith("moderator_")) return d.email ?? e.subject_email ?? "";
+  return [d.app_name, d.version].filter(Boolean).join(" ") + (d.developer_name ? ` · ${d.developer_name}` : "");
+}
+
+function Journal() {
+  const [items, setItems] = useState<MarketAuditEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
+  const PAGE = 50;
+  const load = (before?: number) => void api.wsMarket<MarketAuditEntry[]>("market_audit_log", { limit: PAGE, before: before ?? null }).then(
+    (page) => { setItems((x) => (before ? [...(x ?? []), ...page] : page)); setMore(page.length === PAGE); setError(null); },
+    (e: { message?: string }) => { setItems([]); setError(e?.message ?? "Журнал не загрузился."); });
+  useEffect(() => load(), []);
+  if (error) return <Notice tone="warn">{error}</Notice>;
+  if (items === null) return <Spinner />;
+  if (items.length === 0) return <div className="faint">Решений пока нет. Каждое одобрение, отказ и снятие с каталога записывается сюда, изменить запись нельзя.</div>;
+  return (
+    <div className="col" style={{ gap: 10, alignItems: "stretch" }}>
+      <ul className="market-list" aria-label="Журнал решений">
+        {items.map((e) => (
+          <li key={e.id} className="market-row">
+            <span className="col grow" style={{ gap: 2, minWidth: 0 }}>
+              <span className="row" style={{ gap: 6 }}>
+                <Tag tone={/approved|verified|restored|added/.test(e.action) ? "green" : "red"}>{AUDIT_TEXT[e.action]}</Tag>
+                <span className="market-name ellipsis">{auditSubject(e)}</span>
+              </span>
+              {e.note && <span>Причина: {e.note}</span>}
+              {e.details.checks && failedChecks(e.details.checks).length + e.details.checks.filter((c) => c.level === "warn").length > 0 && (
+                <span className="faint">Автопроверка: {e.details.checks.map((c) => c.label).join(", ")}</span>
+              )}
+              <span className="faint">{fullRu(e.created_at)} · {e.actor_email ?? "удалённая учётная запись"}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {more && <div><Button small variant="ghost" onClick={() => load(items[items.length - 1]!.id)}>Показать ещё</Button></div>}
+    </div>
+  );
+}
+
+function Moderators() {
+  const [mods, setMods] = useState<MarketModerator[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = () => void api.wsMarket<MarketModerator[]>("market_moderators").then((m) => { setMods(m); setError(null); }, (e: { message?: string }) => { setMods([]); setError(e?.message ?? "Список не загрузился."); });
+  useEffect(load, []);
+  const add = async () => {
+    setBusy(true);
+    const r = await attempt(() => api.wsMarket("market_moderator_add", { email: email.trim() }));
+    setBusy(false);
+    if (r !== undefined) { setEmail(""); toast("Модератор добавлен.", "success"); load(); }
+  };
+  const remove = async (m: MarketModerator) => {
+    if (!(await confirmDialog({ title: m.me ? "Перестать быть модератором?" : `Убрать модератора ${m.email ?? ""}?`, message: "Модерация коннекторов и журнал станут недоступны этой учётной записи. Последнего модератора убрать нельзя.", confirm: "Убрать", danger: true }))) return;
+    if ((await attempt(() => api.wsMarket("market_moderator_remove", { user: m.user_id }))) !== undefined) load();
+  };
+  if (error) return <Notice tone="warn">{error}</Notice>;
+  return (
+    <div className="col" style={{ gap: 12, alignItems: "stretch" }}>
+      <span className="faint">Модераторы проверяют компании и коннекторы, публикуют их в каталог и снимают с него. Добавить можно учётную запись Customers с подтверждённой почтой.</span>
+      <div className="row" style={{ gap: 8 }}>
+        <TextInput aria-label="Почта нового модератора" value={email} onChange={setEmail} placeholder="name@example.com" wrapClass="grow" onKeyDown={(e) => { if (e.key === "Enter" && email.trim()) void add(); }} />
+        <Button icon="plus" busy={busy} disabled={!email.trim()} onClick={() => void add()}>Добавить</Button>
+      </div>
+      {mods === null ? <Spinner /> : (
+        <ul className="market-list" aria-label="Модераторы">
+          {mods.map((m) => (
+            <li key={m.user_id} className="market-row">
+              <span className="col grow" style={{ gap: 2, minWidth: 0 }}>
+                <span className="market-name">{m.email ?? "Удалённая учётная запись"}{m.me && <span className="faint"> · это вы</span>}</span>
+                <span className="faint">С {dateOnly(m.added_at)}{m.added_by_email ? ` · добавил ${m.added_by_email}` : ""}</span>
+              </span>
+              <Button small variant="ghost" icon="trash" aria-label={`Убрать модератора ${m.email ?? ""}`} disabled={mods.length <= 1} onClick={() => void remove(m)}>Убрать</Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

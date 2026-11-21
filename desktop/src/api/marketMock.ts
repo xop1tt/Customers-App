@@ -1,8 +1,10 @@
 // Демо-маркетплейс (ws_market) для браузера и тестов. Повторяет правила сервера (миграция 20261111100000_marketplace.sql),
 // которые видны в интерфейсе: каталог только из одобренных версий, установка — право workspace.manage,
 // установленная версия не меняется сама, подача ждёт модерации, модератор одобряет или отклоняет с причиной.
+// Модерация (20261121140000_market_moderation.sql, ADR-095): журнал решений, уведомления разработчику, список модераторов,
+// одобрение только без замечаний автопроверки и только у проверенной компании.
 
-import type { MarketApp, MarketCategory, MarketCompany, MarketCompanyReview, MarketInstalled, MarketManifest, MarketReview, MarketVersion } from "./types";
+import type { MarketApp, MarketAuditAction, MarketAuditEntry, MarketCategory, MarketCompany, MarketCompanyReview, MarketInstalled, MarketManifest, MarketModerator, MarketNotice, MarketReview, MarketVersion } from "./types";
 import { checkCompany, checkConnector, firstFailure } from "../lib/connectors";
 
 export interface MarketCtx { cloud: boolean; me: string; wsId: string | null; perms: string[]; moderator: boolean }
@@ -15,6 +17,10 @@ let apps: App[] = [];
 let versions: Ver[] = [];
 let installs: Install[] = [];
 let companies: Record<string, MarketCompany> = {};
+let audit: MarketAuditEntry[] = [];
+let notices: (MarketNotice & { user: string })[] = [];
+/** Модераторы демо: текущий пользователь (ctx.moderator) и ещё один. */
+let extraMods: MarketModerator[] = [];
 let n = 0;
 const nid = () => `00000000-0000-4000-9000-${String(++n).padStart(12, "0")}`;
 const iso = (daysAgo = 0) => new Date(Date.now() - daysAgo * 86_400_000).toISOString();
@@ -33,7 +39,8 @@ function seedApp(a: Partial<App> & Pick<App, "slug" | "name" | "icon" | "categor
 }
 
 export function resetMarketMock() {
-  apps = []; versions = []; installs = []; companies = {}; n = 0;
+  apps = []; versions = []; installs = []; companies = {}; audit = []; notices = []; n = 0;
+  extraMods = [{ user_id: "mod-2", email: "moderator@example.com", added_at: iso(40), added_by_email: null, me: false }];
   companies["dev-partner"] = { legal_name: "ООО «Партнёр»", country: "Россия", reg_number: "7700000000", website: "https://example.com", contact_name: "Иван Партнёров", contact_email: "dev@example.com", privacy_url: "https://example.com/privacy", status: "verified", note: null, submitted_at: iso(30) };
   seedApp({ slug: "zvonilka", name: "Звонилка", icon: "📞", category: "telephony", tagline: "Звонки клиентам из карточки и запись разговоров",
     description: "Кнопка «Позвонить» в карточках компаний и контактов. История звонков приходит в CRM.\n\nНужен аккаунт Звонилки." },
@@ -65,6 +72,15 @@ function json(a: App, ws: string | null): MarketApp {
 }
 
 const EMPTY_COMPANY: MarketCompany = { legal_name: "", country: "", reg_number: "", website: "", contact_name: "", contact_email: "", privacy_url: "", status: "none", note: null, submitted_at: null };
+
+function log(ctx: MarketCtx, action: MarketAuditAction, e: Partial<MarketAuditEntry>) {
+  audit.unshift({ id: audit.length + 1, created_at: iso(), action, actor_email: `${ctx.me}@example.com`, subject_email: null, app_id: null, version_id: null, note: null, details: {}, ...e });
+}
+function notify(user: string, kind: MarketNotice["kind"], title: string, note: string | null, app_id: string | null = null) {
+  notices.unshift({ id: notices.length + 1, user, kind, app_id, title, note, created_at: iso(), read: false });
+}
+const checksOfVersion = (app: App, v: Ver) => checkConnector({ slug: app.slug, name: app.name, tagline: app.tagline, description: app.description, icon: app.icon,
+  website: app.website ?? "", support_email: app.support_email ?? "", version: v.version }, v.manifest).filter((c) => c.level !== "ok");
 
 export function marketCall(action: string, a: Record<string, unknown>, ctx: MarketCtx): unknown {
   if (!ctx.cloud) fail("Маркетплейс доступен в облачной учётной записи.", "cloudOnly");
@@ -127,7 +143,7 @@ export function marketCall(action: string, a: Record<string, unknown>, ctx: Mark
       if (!found) {
         if (apps.some((x) => x.slug === p.slug)) fail("Такой адрес коннектора уже занят.");
         if (!p.developer_name?.trim()) fail("Укажите название компании-разработчика.");
-        app = { id: nid(), slug: p.slug!, developer_id: ctx.me, developer_name: p.developer_name!, name: p.name!, tagline: p.tagline ?? "", description: p.description ?? "",
+        app = { id: nid(), slug: p.slug!, developer_id: ctx.me, developer_name: companies[ctx.me]!.legal_name, name: p.name!, tagline: p.tagline ?? "", description: p.description ?? "",
           category: (p.category as MarketCategory) ?? "other", icon: p.icon || "🧩", website: p.website || null, support_email: p.support_email || null,
           status: "draft", status_note: null, updated_at: iso(), live: null };
         apps.push(app);
@@ -139,7 +155,9 @@ export function marketCall(action: string, a: Record<string, unknown>, ctx: Mark
           website: p.website || null, support_email: p.support_email || null, updated_at: iso() });
       }
       versions.forEach((v) => { if (v.app_id === app.id && v.status === "pending") v.status = "superseded"; });
-      versions.push({ id: nid(), app_id: app.id, version, manifest: p.manifest, status: "pending", review_note: null, created_at: iso() });
+      const ver: Ver = { id: nid(), app_id: app.id, version, manifest: p.manifest, status: "pending", review_note: null, created_at: iso() };
+      ver.checks = checksOfVersion(app, ver);
+      versions.push(ver);
       return json(app, null);
     }
     case "market_company":
@@ -156,7 +174,7 @@ export function marketCall(action: string, a: Record<string, unknown>, ctx: Mark
     }
     case "market_company_queue": {
       mod();
-      return Object.entries(companies).filter(([, c]) => c.status === "submitted").map(([user_id, company]): MarketCompanyReview => ({ user_id, company }));
+      return Object.entries(companies).filter(([, c]) => c.status === "submitted").map(([user_id, company]): MarketCompanyReview => ({ user_id, account_email: `${user_id}@example.com`, company }));
     }
     case "market_company_review": {
       mod();
@@ -165,6 +183,9 @@ export function marketCall(action: string, a: Record<string, unknown>, ctx: Mark
       if (!a.approve && !String(a.note ?? "").trim()) fail("Напишите, почему компания не прошла проверку.");
       c.status = a.approve ? "verified" : "rejected";
       c.note = String(a.note ?? "").trim() || null;
+      log(ctx, a.approve ? "company_verified" : "company_rejected", { note: c.note, subject_email: `${String(a.user)}@example.com`, details: { legal_name: c.legal_name } });
+      notify(String(a.user), a.approve ? "company_verified" : "company_rejected",
+        a.approve ? `Компания «${c.legal_name}» проверена: можно отправлять коннекторы` : `Компания «${c.legal_name}» не прошла проверку`, c.note);
       return null;
     }
     case "market_is_moderator":
@@ -173,31 +194,81 @@ export function marketCall(action: string, a: Record<string, unknown>, ctx: Mark
       mod();
       return versions.filter((v) => v.status === "pending").map((v): MarketReview => {
         const app = apps.find((x) => x.id === v.app_id)!;
+        const live = versions.find((x) => x.id === app.live);
         return { version_id: v.id, version: v.version, manifest: v.manifest, created_at: v.created_at,
-          live_manifest: versions.find((x) => x.id === app.live)?.manifest ?? null, developer_email: "dev@example.com", app: { ...json(app, null), status_note: app.status_note } };
+          live_manifest: live?.manifest ?? null, live_version: live?.version ?? null, developer_email: "dev@example.com", app: { ...json(app, null), status_note: app.status_note },
+          checks: v.checks ?? [], server_checks: checksOfVersion(app, v), company: companies[app.developer_id] ?? null,
+          history: audit.filter((e) => e.app_id === app.id).slice(0, 10).map((e) => ({ action: e.action, note: e.note, created_at: e.created_at, version: e.details.version ?? null })) };
       });
     }
     case "market_review": {
       mod();
       const v = versions.find((x) => x.id === a.version && x.status === "pending") ?? fail("Версия уже рассмотрена.");
       if (!a.approve && !String(a.note ?? "").trim()) fail("Напишите, почему версия отклонена.");
+      const app = apps.find((x) => x.id === v.app_id)!;
+      const checks = checksOfVersion(app, v);
+      if (a.approve) {
+        const bad = checks.find((c) => c.level === "fail");
+        if (bad) fail(`Автопроверка не пройдена: ${bad.detail} Отклоните версию с причиной.`);
+        if (companies[app.developer_id]?.status !== "verified") fail("Компания разработчика не проверена: сначала подтвердите компанию или отклоните версию.");
+      }
       v.status = a.approve ? "approved" : "rejected";
       v.review_note = String(a.note ?? "").trim() || null;
       if (a.approve) {
         versions.forEach((x) => { if (x.app_id === v.app_id && x.id !== v.id && x.status === "approved") x.status = "superseded"; });
-        const app = apps.find((x) => x.id === v.app_id)!;
         app.live = v.id;
         if (app.status !== "suspended") app.status = "listed";
       }
+      log(ctx, a.approve ? "version_approved" : "version_rejected", { app_id: app.id, version_id: v.id, note: v.review_note, subject_email: "dev@example.com",
+        details: { app_name: app.name, version: v.version, developer_name: app.developer_name, developer_email: "dev@example.com", scopes: v.manifest.scopes ?? [], checks } });
+      notify(app.developer_id, a.approve ? "version_approved" : "version_rejected",
+        a.approve ? `«${app.name}» ${v.version} одобрен и опубликован в каталоге` : `«${app.name}» ${v.version} отклонён модератором`, v.review_note, app.id);
       return null;
     }
     case "market_suspend": {
       mod();
       const app = apps.find((x) => x.id === a.app) ?? fail("Коннектор не найден.");
+      if (a.suspend && !String(a.note ?? "").trim()) fail("Напишите, почему коннектор снимается с каталога.");
       app.status = a.suspend ? "suspended" : app.live ? "listed" : "draft";
       app.status_note = String(a.note ?? "").trim() || null;
+      log(ctx, a.suspend ? "app_suspended" : "app_restored", { app_id: app.id, note: app.status_note, details: { app_name: app.name, developer_name: app.developer_name } });
+      notify(app.developer_id, a.suspend ? "app_suspended" : "app_restored", a.suspend ? `«${app.name}» снят с каталога модератором` : `«${app.name}» снова в каталоге`, app.status_note, app.id);
       return null;
     }
+    case "market_suspended":
+      mod();
+      return apps.filter((x) => x.status === "suspended").map((x) => ({ ...json(x, null), status_note: x.status_note }));
+    case "market_audit_log":
+      mod();
+      return audit.slice(0, Number(a.limit ?? 100));
+    case "market_moderators":
+      mod();
+      return [{ user_id: ctx.me, email: `${ctx.me}@example.com`, added_at: iso(60), added_by_email: null, me: true }, ...extraMods];
+    case "market_moderator_add": {
+      mod();
+      const email = String(a.email ?? "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("Нет подтверждённой учётной записи с такой почтой.");
+      if (!extraMods.some((m) => m.email === email)) {
+        extraMods.push({ user_id: `mod-${extraMods.length + 2}`, email, added_at: iso(), added_by_email: `${ctx.me}@example.com`, me: false });
+        log(ctx, "moderator_added", { subject_email: email, details: { email } });
+      }
+      return null;
+    }
+    case "market_moderator_remove": {
+      mod();
+      if (a.user === ctx.me && extraMods.length === 0) fail("Нельзя убрать последнего модератора.");
+      const gone = extraMods.find((m) => m.user_id === a.user);
+      extraMods = extraMods.filter((m) => m.user_id !== a.user);
+      if (gone) log(ctx, "moderator_removed", { subject_email: gone.email, details: { email: gone.email ?? undefined } });
+      return null;
+    }
+    case "market_notices": {
+      const mine = notices.filter((x) => x.user === ctx.me);
+      return { unread: mine.filter((x) => !x.read).length, items: mine.slice(0, 50).map(({ user: _u, ...x }) => x) };
+    }
+    case "market_notices_read":
+      notices.forEach((x) => { if (x.user === ctx.me) x.read = true; });
+      return null;
     default:
       return fail("Неизвестное действие маркетплейса.");
   }

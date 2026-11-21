@@ -81,6 +81,18 @@ Storage: бакет `attachments` приватный; политика `storage.
 * Пока адрес `market-relay` не записан в `private.market_relay.url`, события не отправляются.
 * Защита от утёкших паролей Supabase (S5) доступна только на Pro; на бесплатном плане (ADR-035) не включается.
 
+## 4c. Модерация коннекторов (ADR-095)
+
+* Модератор — строка в `private.platform_admins`; проверка `private.require_moderator()` в каждой функции модерации
+  (`market_review*`, `market_suspend*`, `market_company_queue/review`, `market_audit_log`, `market_moderator*`).
+  Интерфейс только прячет блок «Модерация»; обращение к RPC без права даёт 42501 (`supabase/tests/test_market_moderation.py`).
+* Первого модератора назначает владелец проекта в SQL Editor (docs/MARKETPLACE.md); дальше модераторы управляют списком
+  сами. Последнего убрать нельзя (блокировка таблицы против одновременного удаления).
+* Подать коннектор может только проверенная компания; сервер повторяет автопроверку (`private.market_checks`) при подаче
+  и при одобрении, так что клиентскую проверку не обойти прямым вызовом RPC. Имя разработчика берётся из компании.
+* Журнал `private.market_audit` и уведомления `private.market_notices` закрыты для `anon` и `authenticated`; пишут их
+  только security definer функции, записи журнала не изменяются и не удаляются из приложения.
+
 ## 5. Угрозы и проверки (security-тесты этапа 3, `supabase/tests/test_workspace_security.py`)
 
 | Попытка | Ожидаемый результат |

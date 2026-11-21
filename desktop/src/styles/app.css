@@ -261,6 +261,12 @@ button.kpi:not(:disabled):hover { background: var(--bg-hover); }
 .market-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .market-row { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md, 10px); }
 .market-review { padding: 14px; border: 1px solid var(--line); border-radius: var(--r-md, 10px); }
+.market-review > .notice, .market-review > .check-list, .market-review > .market-details { margin-top: 10px; }
+.market-details summary { cursor: pointer; color: var(--accent); font-size: var(--fs-sm); }
+.market-urls { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.market-urls li { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.market-urls code, .market-json { font-family: var(--mono); font-size: var(--fs-xs); overflow-wrap: anywhere; color: var(--text); }
+.market-json { margin: 0; white-space: pre-wrap; max-height: 320px; overflow: auto; }
 .market-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
 .market-form .wide { grid-column: 1 / -1; }
 .market-form textarea.mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; }

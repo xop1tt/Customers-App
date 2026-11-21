@@ -183,6 +183,91 @@ describe("коннекторы", () => {
   });
 });
 
+describe("модерация коннекторов (ADR-095)", () => {
+  async function verifyMe() {
+    const { api } = await import("../../api");
+    await api.wsMarket("market_company_save", { company: { legal_name: "ООО Склад", country: "Россия", reg_number: "7712345678", website: "https://sklad.example.com",
+      contact_name: "Пётр Складов", contact_email: "petr@sklad.example.com", privacy_url: "https://sklad.example.com/privacy" } });
+    await api.wsMarket("market_company_review", { user: getState().ws!.me!, approve: true });
+    return api;
+  }
+
+  it("заявку без проверенной компании нельзя опубликовать, подробности показывают адреса и манифест", async () => {
+    const dlg = await openMarketFromMenu();
+    fireEvent.click(within(dlg).getByRole("button", { name: "На проверке" }));
+    const queue = await within(dlg).findByRole("list", { name: "Заявки" });
+    const row = within(queue).getByText(/Уведомления в Telegram/).closest("li") as HTMLElement;
+    expect(within(row).getByRole("button", { name: "Опубликовать" })).toBeDisabled();
+    expect(within(row).getByText(/Компания разработчика не проверена/)).toBeInTheDocument();
+    fireEvent.click(within(row).getByText("Подробности для проверки"));
+    const urls = within(row).getByRole("list", { name: "Адреса манифеста" });
+    expect(within(urls).getByText("https://tg.example.com/hook")).toBeInTheDocument();
+    expect(within(row).getByText(/"scopes"/)).toBeInTheDocument();
+  });
+
+  it("отказ с причиной попадает в журнал и в решения разработчика", async () => {
+    const api = await verifyMe();
+    await api.wsMarket("market_submit", { app: { slug: "sklad-online", name: "Склад онлайн", developer_name: "x", tagline: "Остатки товаров в сделке",
+      description: "Показывает остатки товаров на складе прямо в карточке сделки.", category: "other", icon: "📦", website: "https://sklad.example.com",
+      support_email: "help@sklad.example.com", version: "1.0.0", manifest: { schema: 1, actions: [{ id: "stock", label: "Остатки", entity: "deal", url: "https://sklad.example.com/{id}" }] } } });
+    const dlg = await openMarketFromMenu();
+    fireEvent.click(within(dlg).getByRole("button", { name: "На проверке" }));
+    const queue = await within(dlg).findByRole("list", { name: "Заявки" });
+    const row = within(queue).getByText(/Склад онлайн/).closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Отклонить" }));
+    const reason = await screen.findByRole("dialog", { name: /Отклонить «Склад онлайн»/ });
+    fireEvent.change(within(reason).getByLabelText("Причина"), { target: { value: "Нет политики конфиденциальности" } });
+    fireEvent.click(within(reason).getByRole("button", { name: "Отклонить" }));
+    await waitFor(() => expect(within(dlg).queryByRole("list", { name: "Заявки" })?.textContent ?? "").not.toContain("Склад онлайн"));
+
+    fireEvent.click(within(dlg).getByRole("tab", { name: "Журнал решений" }));
+    const journal = await within(dlg).findByRole("list", { name: "Журнал решений" });
+    expect(within(journal).getByText("Версия отклонена")).toBeInTheDocument();
+    expect(within(journal).getByText("Причина: Нет политики конфиденциальности")).toBeInTheDocument();
+
+    // Разработчик (в демо — тот же пользователь) видит решение при следующем открытии вкладки.
+    fireEvent.click(within(dlg).getByRole("button", { name: "Каталог" }));
+    fireEvent.click(within(dlg).getByRole("button", { name: "На проверке" }));
+    const decisions = await within(dlg).findByRole("list", { name: "Решения модераторов" });
+    expect(within(decisions).getByText("«Склад онлайн» 1.0.0 отклонён модератором")).toBeInTheDocument();
+    expect(within(decisions).getByText("Модератор: Нет политики конфиденциальности")).toBeInTheDocument();
+    const { api: again } = await import("../../api");
+    await waitFor(async () => expect((await again.wsMarket<{ unread: number }>("market_notices")).unread).toBe(0));
+  });
+
+  it("снятый с каталога коннектор возвращается из вкладки «Снятые с каталога»", async () => {
+    const dlg = await openMarketFromMenu();
+    fireEvent.click(within(dlg).getByRole("button", { name: "На проверке" }));
+    const published = await within(dlg).findByRole("list", { name: "Опубликованные коннекторы" });
+    await within(published).findByText("Звонилка");
+    const row = within(published).getByText("Звонилка").closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Снять с каталога" }));
+    const reason = await screen.findByRole("dialog", { name: /Снять «Звонилка»/ });
+    fireEvent.change(within(reason).getByLabelText("Причина"), { target: { value: "Жалобы" } });
+    fireEvent.click(within(reason).getByRole("button", { name: "Снять" }));
+    fireEvent.click(await within(dlg).findByRole("tab", { name: "Снятые с каталога" }));
+    const off = await within(dlg).findByRole("list", { name: "Снятые с каталога" });
+    expect(within(off).getByText("Причина: Жалобы")).toBeInTheDocument();
+    fireEvent.click(within(off).getByRole("button", { name: "Вернуть Звонилка в каталог" }));
+    await confirm("Вернуть");
+    await waitFor(() => expect(within(dlg).getByText("Снятых с каталога коннекторов нет.")).toBeInTheDocument());
+  });
+
+  it("модераторы добавляют коллегу по почте и убирают его", async () => {
+    const dlg = await openMarketFromMenu();
+    fireEvent.click(within(dlg).getByRole("button", { name: "На проверке" }));
+    fireEvent.click(await within(dlg).findByRole("tab", { name: "Модераторы" }));
+    const list = await within(dlg).findByRole("list", { name: "Модераторы" });
+    expect(within(list).getByText("moderator@example.com")).toBeInTheDocument();
+    fireEvent.change(within(dlg).getByLabelText("Почта нового модератора"), { target: { value: "new@example.com" } });
+    fireEvent.click(within(dlg).getByRole("button", { name: "Добавить" }));
+    expect(await within(list).findByText("new@example.com")).toBeInTheDocument();
+    fireEvent.click(within(list).getByRole("button", { name: "Убрать модератора new@example.com" }));
+    await confirm("Убрать");
+    await waitFor(() => expect(within(list).queryByText("new@example.com")).toBeNull());
+  });
+});
+
 describe("адрес кнопки интеграции", () => {
   it("значения кодируются, название записи — только с правом crm.read", async () => {
     const { actionUrl } = await import("../../state/market");

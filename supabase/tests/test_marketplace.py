@@ -31,7 +31,17 @@ def moderator() -> str:
     return u
 
 
+def verified_company(uid: str) -> None:
+    """Компания разработчика, уже подтверждённая модератором (ADR-095): без неё подать коннектор нельзя."""
+    with db() as c:
+        c.execute("""insert into private.market_companies (user_id, legal_name, country, reg_number, website, privacy_url,
+                                                            contact_name, contact_email, status)
+                     values (%s, 'ООО Звонки', 'Россия', '7712345678', 'https://example.com', 'https://example.com/privacy',
+                             'Иван Звонков', 'dev@example.com', 'verified') on conflict (user_id) do nothing""", (uid,))
+
+
 def submit(dev: str, **over) -> dict:
+    verified_company(dev)
     app = {"slug": f"app-{uuid.uuid4().hex[:8]}", "name": "Звонилка", "developer_name": "ООО Звонки", "tagline": "Звонки из карточки",
            "description": "Описание", "category": "telephony", "icon": "📞", "website": "https://example.com",
            "support_email": "help@example.com", "version": "1.0.0", "manifest": MANIFEST, **over}
@@ -71,7 +81,8 @@ def test_submitted_app_is_hidden_until_a_moderator_approves_it():
 def test_new_version_waits_for_review_and_rejection_needs_a_reason():
     dev, mod = users(1)[0], moderator()
     app = listed(dev, mod)
-    submit(dev, id=app["id"], version="1.1.0", tagline="Новое описание", manifest={"schema": 1, "actions": []})
+    submit(dev, id=app["id"], version="1.1.0", tagline="Новое описание",
+           manifest={"schema": 1, "webhooks": {"url": "https://hooks.example.com/v2", "events": ["record.created"]}})
     cat = next(x for x in rpc(dev, "market_catalog") if x["id"] == app["id"])
     assert cat["version"] == "1.0.0" and cat["tagline"] == "Новое описание", "описание сразу, манифест — после проверки"
     item = pending_of(mod, app["id"])
@@ -148,7 +159,8 @@ def test_installed_version_is_kept_until_the_owner_updates():
     ws = workspace_with(owner, {})
     app = listed(dev, mod)
     rpc(owner, "market_install", p_workspace=ws, p_app=app["id"])
-    submit(dev, id=app["id"], version="2.0.0", manifest={"schema": 1, "scopes": ["crm.read"], "actions": []})
+    submit(dev, id=app["id"], version="2.0.0", manifest={"schema": 1, "scopes": ["crm.read"], "actions": [],
+                                                         "webhooks": {"url": "https://hooks.example.com/v2", "events": ["record.created"]}})
     rpc(mod, "market_review", p_version=pending_of(mod, app["id"])["version_id"], p_approve=True)
     cat = next(x for x in rpc(owner, "market_catalog", p_workspace=ws) if x["id"] == app["id"])
     assert cat["version"] == "2.0.0" and cat["installed"]["version"] == "1.0.0" and cat["installed"]["update_available"] is True
