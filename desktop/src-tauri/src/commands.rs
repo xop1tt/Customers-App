@@ -597,6 +597,10 @@ pub async fn ai_models(core: C<'_>, base_url: String, api_key: Option<String>) -
     core.inner().ai_models(&base_url, api_key.as_deref().unwrap_or("")).await
 }
 #[tauri::command]
+pub async fn ai_capabilities(core: C<'_>, base_url: String, api_key: Option<String>, model: String) -> CmdResult<Value> {
+    to_value(core.inner().ai_capabilities(&base_url, api_key.as_deref().unwrap_or(""), &model).await?)
+}
+#[tauri::command]
 pub fn ai_notify(core: C<'_>, title: String, body: String) -> CmdResult<()> {
     core.inner().ai_notify(&title, &body)
 }

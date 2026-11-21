@@ -1,5 +1,8 @@
 // Вложения в чате Ai: какие файлы можно приложить и как они уходят модели (формат OpenAI-совместимого API).
-// Текстовые файлы читаются всегда; изображения и звук — только если в настройках Ai указано, что модель их понимает.
+// Текстовые файлы читаются всегда; изображения и звук — если модель их понимает. Это определяется автоматически
+// (`ai_capabilities` в ядре): отказ — только когда точно известно, что не понимает; «неизвестно» — пробуем отправить.
+
+import type { AiCaps } from "../api/types";
 
 export type AiFileKind = "image" | "audio" | "text";
 
@@ -37,16 +40,16 @@ export function fileKind(name: string, mime: string): AiFileKind | null {
 }
 
 /** Строка для атрибута accept у выбора файла. */
-export function acceptList(vision: boolean, audio: boolean): string {
-  return [...TEXT_EXT.map((e) => `.${e}`), ...(vision ? IMAGE_EXT.map((e) => `.${e}`) : []), ...(audio ? AUDIO_EXT.map((e) => `.${e}`) : [])].join(",");
+export function acceptList(caps: AiCaps): string {
+  return [...TEXT_EXT.map((e) => `.${e}`), ...(caps.vision !== false ? IMAGE_EXT.map((e) => `.${e}`) : []), ...(caps.audio !== false ? AUDIO_EXT.map((e) => `.${e}`) : [])].join(",");
 }
 
 /** Почему файл нельзя приложить; null — можно. */
-export function refusal(name: string, mime: string, size: number, vision: boolean, audio: boolean): string | null {
+export function refusal(name: string, mime: string, size: number, caps: AiCaps): string | null {
   const kind = fileKind(name, mime);
   if (!kind) return `«${name}»: такой формат модели не передать. Подойдут текст, таблицы CSV, JSON, а также изображения и звук, если модель их понимает.`;
-  if (kind === "image" && !vision) return `«${name}»: модель не отмечена как понимающая изображения. Включите это в «Настройки → Ai», если модель умеет их читать.`;
-  if (kind === "audio" && !audio) return `«${name}»: модель не отмечена как понимающая звук. Включите это в «Настройки → Ai», если модель умеет его слушать.`;
+  if (kind === "image" && caps.vision === false) return `«${name}»: выбранная модель не понимает изображения. Чтобы прикладывать картинки, выберите в «Настройки → Ai» модель с поддержкой изображений.`;
+  if (kind === "audio" && caps.audio === false) return `«${name}»: выбранная модель не понимает звук. Чтобы прикладывать аудио, выберите в «Настройки → Ai» модель с поддержкой звука.`;
   const max = kind === "image" ? MAX_IMAGE : kind === "audio" ? MAX_AUDIO : MAX_TEXT;
   if (size > max) return `«${name}»: файл больше ${Math.round(max / 1024 / 1024 * 10) / 10 || 0.5} МБ.`;
   return null;

@@ -129,7 +129,7 @@ const baseDevice: DevicePrefs = {
 let device: DevicePrefs = { ...baseDevice };
 
 let account: AccountPrefs = {
-  autoSearchMinutes: 120, newLeadsSearches: 1, signature: "", backupDirectory: "~/Documents/Customers Backups", autoBackup: true, keepBackups: 14, dataPath: null,
+  autoSearchMinutes: 120, newLeadsSearches: 1, signature: "", backupDirectory: "~/Documents/Customers Backups", autoBackup: true, backupHours: 24, keepBackups: 14, dataPath: null,
   notifyNewLeads: true, notifyErrors: true, notifySync: false, notifyMessages: true, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1, callApp: "system",
   welcomeDone: !demo.has("welcome"), exportLastTab: "file",
 };
@@ -236,9 +236,11 @@ export const hubDemo = {
   /** Уведомления от помощника, отправленные ядру. */
   notified: [] as { title: string; body: string }[],
   models: ["demo-model-7b", "llama3.1"],
+  /** Что «сервер» сообщает о модели; null — догадка по названию, как в ядре. */
+  caps: null as { vision: boolean | null; audio: boolean | null } | null,
   /** Ответ модели на запрос; по умолчанию — короткий текст. */
   reply: ((_body: { messages: { role: string; content?: string | null }[] }): AiChatReply => ({ choices: [{ message: { role: "assistant", content: "Это демо-ответ локальной модели." } }] })) as (body: { messages: { role: string; content?: string | null }[] }) => AiChatReply,
-  reset() { this.blob = {}; this.notified = []; this.models = ["demo-model-7b", "llama3.1"]; this.reply = () => ({ choices: [{ message: { role: "assistant", content: "Это демо-ответ локальной модели." } }] }); },
+  reset() { this.blob = {}; this.notified = []; this.caps = null; this.models = ["demo-model-7b", "llama3.1"]; this.reply = () => ({ choices: [{ message: { role: "assistant", content: "Это демо-ответ локальной модели." } }] }); },
 };
 
 export async function call(cmd: string, args: Record<string, unknown>): Promise<unknown> {
@@ -248,6 +250,11 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
     if (!/^https?:\/\//.test(String(args.baseUrl))) throw { code: "", message: "Адрес сервера модели: например, http://localhost:1234/v1" };
     if (String(args.baseUrl).includes("offline")) throw { code: "", message: "Сервер модели недоступен: connection refused. Запущен ли он и включён ли локальный сервер?" };
     return [...hubDemo.models];
+  }
+  if (cmd === "ai_capabilities") {
+    if (hubDemo.caps) return { ...hubDemo.caps };
+    const m = String(args.model).toLowerCase();
+    return { vision: /vision|-vl|llava|gemma3|omni/.test(m) ? true : null, audio: /audio|omni|voxtral/.test(m) ? true : null };
   }
   if (cmd === "ai_notify") { hubDemo.notified.push({ title: String(args.title), body: String(args.body) }); return null; }
   if (cmd === "ai_chat") return hubDemo.reply(args.body as { messages: { role: string; content?: string | null }[] });
@@ -481,7 +488,11 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
     case "update_info":
       return update;
     case "check_updates":
-      update = { ...update, phase: "upToDate" };
+      // Как ядро: сначала «checking», ответ сервера приходит не мгновенно.
+      update = { ...update, phase: "checking" };
+      emit("update-state", update);
+      await new Promise((r) => setTimeout(r, 900));
+      update = { ...update, phase: "upToDate", lastCheck: new Date().toISOString() };
       emit("update-state", update);
       return update;
     case "recent_releases":
