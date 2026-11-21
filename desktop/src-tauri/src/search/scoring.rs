@@ -2,7 +2,7 @@
 
 use crate::models::{LeadData, Relevance};
 use crate::search::text::normalize;
-use chrono::{DateTime, Utc};
+use crate::time::Timestamp;
 use once_cell::sync::Lazy;
 use regex::{Regex, RegexBuilder};
 use std::collections::HashMap;
@@ -267,7 +267,7 @@ fn round1(v: f64) -> f64 {
 }
 
 impl Scorer {
-    pub fn score_order(&self, lead: &mut LeadData, now: DateTime<Utc>) {
+    pub fn score_order(&self, lead: &mut LeadData, now: Timestamp) {
         let o = &self.orders;
         let text = normalize(&format!("{} {}", lead.title, lead.description));
         let mut reasons: Vec<String> = Vec::new();
@@ -367,7 +367,7 @@ impl Scorer {
 
         // 9. Свежесть
         if let Some(published) = lead.published_at {
-            let age = (now - published).num_milliseconds() as f64 / 1000.0;
+            let age = now.duration_since(published).as_millis() as f64 / 1000.0;
             if age > o.max_age_days * 86400.0 {
                 lead.score = 0.0;
                 lead.relevance = Relevance::Rejected;
@@ -476,7 +476,6 @@ impl Budget {
 mod tests {
     use super::*;
     use crate::models::LeadKind;
-    use chrono::Duration;
 
     fn order(title: &str, desc: &str) -> LeadData {
         let mut l = LeadData::new(LeadKind::Order, "fl_ru", "1", title);
@@ -484,14 +483,14 @@ mod tests {
         l
     }
 
-    fn now() -> DateTime<Utc> {
-        Utc::now()
+    fn now() -> Timestamp {
+        crate::time::now()
     }
 
     #[test]
     fn clear_order_is_scored_high() {
         let mut l = order("Нужен сайт для компании", "Ищем разработчика интернет-магазина, срочно. Бюджет 50000 руб. ".repeat(3).as_str());
-        l.published_at = Some(now() - Duration::hours(2));
+        l.published_at = Some(now() - crate::time::hours(2));
         Scorer::default().score_order(&mut l, now());
         assert!(l.score >= 65.0, "{} {:?}", l.score, l.score_reasons);
         assert_eq!(l.relevance, Relevance::High);
@@ -531,7 +530,7 @@ mod tests {
     #[test]
     fn old_posts_are_rejected() {
         let mut l = order("Нужен сайт", "Нужен сайт для компании");
-        l.published_at = Some(now() - Duration::days(30));
+        l.published_at = Some(now() - crate::time::days(30));
         Scorer::default().score_order(&mut l, now());
         assert_eq!(l.score, 0.0);
         assert_eq!(l.score_reasons.last().map(String::as_str), Some("устарело"));

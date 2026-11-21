@@ -4,7 +4,7 @@
 
 use super::schema::{Entity, Kind};
 use crate::error::{AppError, AppResult};
-use chrono::{DateTime, Datelike, Duration, Local, Utc};
+use crate::time::Timestamp;
 use rusqlite::types::Value as Sql;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -63,7 +63,7 @@ fn bad(text: String) -> AppError {
     AppError::msg(text)
 }
 
-fn where_clause(e: &Entity, q: &Query, me: &str, now: DateTime<Utc>) -> AppResult<(String, Vec<Sql>)> {
+fn where_clause(e: &Entity, q: &Query, me: &str, now: Timestamp) -> AppResult<(String, Vec<Sql>)> {
     let mut parts: Vec<String> = Vec::new();
     let mut args: Vec<Sql> = Vec::new();
     parts.push(if q.deleted { "deleted_at IS NOT NULL".into() } else { "deleted_at IS NULL".into() });
@@ -118,12 +118,13 @@ fn where_clause(e: &Entity, q: &Query, me: &str, now: DateTime<Utc>) -> AppResul
                 format!("({col} IS NOT NULL AND {col} <> '')")
             }),
             "this_week" | "today" | "overdue" => {
-                let local = now.with_timezone(&Local);
+                let tz = crate::time::local_zone();
+                let today = crate::time::civil_in(now, &tz).date();
                 let (from, to) = if f.op == "today" {
-                    (local.date_naive(), local.date_naive())
+                    (today, today)
                 } else {
-                    let monday = local.date_naive() - Duration::days(local.weekday().num_days_from_monday() as i64);
-                    (monday, monday + Duration::days(6))
+                    let monday = today.saturating_sub(crate::time::days(i64::from(today.weekday().to_monday_zero_offset())));
+                    (monday, monday.saturating_add(crate::time::days(6)))
                 };
                 match (f.op.as_str(), kind) {
                     ("overdue", _) => {
@@ -139,8 +140,8 @@ fn where_clause(e: &Entity, q: &Query, me: &str, now: DateTime<Utc>) -> AppResul
                         args.push(Sql::Text(to.to_string()));
                     }
                     _ => {
-                        let start = from.and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Local).earliest().map(|d| d.with_timezone(&Utc)).unwrap_or(now);
-                        let end = start + Duration::days((to - from).num_days() + 1);
+                        let start = from.to_zoned(tz.clone()).map(|d| d.timestamp()).unwrap_or(now);
+                        let end = start + crate::time::days(to.duration_since(from).as_hours() / 24 + 1);
                         parts.push(format!("{col} >= ? AND {col} < ?"));
                         args.push(Sql::Text(super::store::stamp(start)));
                         args.push(Sql::Text(super::store::stamp(end)));
@@ -163,7 +164,7 @@ fn like_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
 }
 
-pub fn build(e: &Entity, q: &Query, me: &str, now: DateTime<Utc>) -> AppResult<(String, Vec<Sql>)> {
+pub fn build(e: &Entity, q: &Query, me: &str, now: Timestamp) -> AppResult<(String, Vec<Sql>)> {
     let (w, args) = where_clause(e, q, me, now)?;
     let mut order: Vec<String> = Vec::new();
     for s in &q.sort {
@@ -179,7 +180,7 @@ pub fn build(e: &Entity, q: &Query, me: &str, now: DateTime<Utc>) -> AppResult<(
     Ok((format!("SELECT * FROM {} WHERE {w} ORDER BY {} LIMIT {limit} OFFSET {offset}", e.table, order.join(", ")), args))
 }
 
-pub fn build_count(e: &Entity, q: &Query, me: &str, now: DateTime<Utc>) -> AppResult<(String, Vec<Sql>)> {
+pub fn build_count(e: &Entity, q: &Query, me: &str, now: Timestamp) -> AppResult<(String, Vec<Sql>)> {
     let (w, args) = where_clause(e, q, me, now)?;
     Ok((format!("SELECT count(*) FROM {} WHERE {w}", e.table), args))
 }
@@ -194,12 +195,12 @@ mod tests {
         let e = schema::entity("companies").unwrap();
         let mut q = Query::default();
         q.filters.push(Filter { field: "name; DROP TABLE companies".into(), op: "eq".into(), value: Value::Null });
-        assert!(build(e, &q, "me", Utc::now()).is_err());
+        assert!(build(e, &q, "me", crate::time::now()).is_err());
         q.filters = vec![Filter { field: "name".into(), op: "or 1=1".into(), value: Value::Null }];
-        assert!(build(e, &q, "me", Utc::now()).is_err());
+        assert!(build(e, &q, "me", crate::time::now()).is_err());
         q.filters = vec![];
         q.sort = vec![Sort { field: "name desc, (select 1)".into(), dir: "asc".into() }];
-        assert!(build(e, &q, "me", Utc::now()).is_err());
+        assert!(build(e, &q, "me", crate::time::now()).is_err());
     }
 
     #[test]
@@ -210,7 +211,7 @@ mod tests {
             search: Some("50%_off'".into()),
             ..Default::default()
         };
-        let (sql, args) = build(e, &q, "user-1", Utc::now()).unwrap();
+        let (sql, args) = build(e, &q, "user-1", crate::time::now()).unwrap();
         assert!(!sql.contains("user-1") && !sql.contains("50%"));
         assert_eq!(args[0], Sql::Text("user-1".into()));
         assert_eq!(args[1], Sql::Text("%50\\%\\_off'%".into()));

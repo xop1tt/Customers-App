@@ -299,7 +299,7 @@ pub fn recover_interrupted_migration(path: &Path, key: &DbKey) -> AppResult<()> 
         FileState::Plaintext => {
             // На месте снова незашифрованная база (например, её вернули вручную): её данные новее,
             // отложенный файл оставляем под другим именем, чтобы ничего не потерять.
-            let stamp = chrono::Utc::now().timestamp();
+            let stamp = crate::time::now().as_second();
             fs::rename(&plain, with_suffix(path, &format!(".unencrypted-{stamp}")))?;
             remove_database_files(&staging);
         }

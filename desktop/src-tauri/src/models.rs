@@ -1,8 +1,8 @@
 //! Модели данных. JSON лида совместим с Python-версией (`Lead.to_json`) и с базами macOS/Windows,
 //! поэтому разбор намеренно мягкий: неверный тип поля не отбрасывает весь лид.
 
+use crate::time::Timestamp;
 use crate::util::{format_date, normalize, parse_date};
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -104,10 +104,10 @@ pub struct LeadData {
     pub title: String,
     pub url: String,
     pub description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub published_at: Option<DateTime<Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub discovered_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "crate::time::serde_auto::option::serialize")]
+    pub published_at: Option<Timestamp>,
+    #[serde(skip_serializing_if = "Option::is_none", serialize_with = "crate::time::serde_auto::option::serialize")]
+    pub discovered_at: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub budget: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -275,7 +275,7 @@ impl LeadData {
 pub struct LeadItem {
     pub id: String,
     pub data: LeadData,
-    pub discovered_at: DateTime<Utc>,
+    pub discovered_at: Timestamp,
     pub favorite: bool,
     pub archived: bool,
     pub excluded: bool,

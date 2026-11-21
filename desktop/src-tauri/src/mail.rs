@@ -3,9 +3,9 @@
 //! открывает `TlsSmtpTransport`.
 
 use crate::contact::{is_email, normalize_newlines};
+use crate::time::Timestamp;
 use async_trait::async_trait;
 use base64::Engine;
-use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -240,7 +240,7 @@ impl std::error::Error for MailError {}
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
 /// Письмо целиком, строки через CRLF, без завершающей точки DATA.
-pub fn build_message(mail: &OutgoingMail, account: &MailAccount, date: DateTime<Utc>, message_id: &str) -> Result<String, MailError> {
+pub fn build_message(mail: &OutgoingMail, account: &MailAccount, date: Timestamp, message_id: &str) -> Result<String, MailError> {
     let to = mail.to.trim();
     if !is_email(to) {
         return Err(MailError::InvalidRecipient);
@@ -259,7 +259,7 @@ pub fn build_message(mail: &OutgoingMail, account: &MailAccount, date: DateTime<
         format!("From: {}", if name.is_empty() { format!("<{from_addr}>") } else { format!("{} <{from_addr}>", encoded_word(name)) }),
         format!("To: <{to}>"),
         format!("Subject: {}", encoded_word(&subject)),
-        format!("Date: {}", date.with_timezone(&Local).format("%a, %d %b %Y %H:%M:%S %z")),
+        format!("Date: {}", crate::time::local_format(date, "%a, %d %b %Y %H:%M:%S %z")),
         format!("Message-ID: <{message_id}@{domain}>"),
         "MIME-Version: 1.0".to_string(),
         "Content-Type: text/plain; charset=UTF-8".to_string(),
@@ -342,7 +342,7 @@ impl<'a> SmtpClient<'a> {
         if password.is_empty() {
             return Err(MailError::NoPassword);
         }
-        let message = build_message(mail, account, Utc::now(), &uuid::Uuid::new_v4().to_string())?;
+        let message = build_message(mail, account, crate::time::now(), &uuid::Uuid::new_v4().to_string())?;
         let result = self.dialog(mail, account, password, hostname, &message).await;
         self.transport.close().await;
         result
@@ -716,7 +716,7 @@ mod tests {
 
     #[test]
     fn message_headers_are_safe_and_encoded() {
-        let when = DateTime::parse_from_rfc3339("2026-11-05T09:42:00Z").unwrap().with_timezone(&Utc);
+        let when = crate::time::parse_rfc3339("2026-11-05T09:42:00Z").unwrap();
         let mut m = mail();
         m.subject = "Тема\r\nBcc: evil@x.ru".into();
         let text = build_message(&m, &account(), when, "id1").unwrap();

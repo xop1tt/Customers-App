@@ -1,40 +1,40 @@
 //! Общие мелочи: даты в формате Python/Swift, нормализация значений, каталог источников, версии.
 
-use chrono::{DateTime, NaiveDateTime, SecondsFormat, TimeZone, Utc};
+use crate::time::{self, Timestamp};
 use std::cmp::Ordering;
 
 // ---------------------------------------------------------------- даты
 
 /// Разбор даты `datetime.isoformat()` Python и ISO 8601 Swift/C#: «2026-11-05T09:42:00+00:00»,
 /// «…Z», с долями секунды и без часового пояса (тогда UTC).
-pub fn parse_date(s: &str) -> Option<DateTime<Utc>> {
+pub fn parse_date(s: &str) -> Option<Timestamp> {
     let s = s.trim();
     if s.is_empty() {
         return None;
     }
-    if let Ok(d) = DateTime::parse_from_rfc3339(s) {
-        return Some(d.with_timezone(&Utc));
+    if let Some(d) = time::parse_rfc3339(s) {
+        return Some(d);
     }
     for fmt in ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"] {
-        if let Ok(n) = NaiveDateTime::parse_from_str(s, fmt) {
-            return Some(Utc.from_utc_datetime(&n));
+        if let Some(d) = time::parse_civil(s, fmt).and_then(time::utc_civil) {
+            return Some(d);
         }
     }
     // «+0000» без двоеточия.
     for fmt in ["%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S%.f%z", "%a, %d %b %Y %H:%M:%S %z", "%d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M %z"] {
-        if let Ok(d) = DateTime::parse_from_str(s, fmt) {
-            return Some(d.with_timezone(&Utc));
+        if let Some(d) = time::parse_with_offset(s, fmt) {
+            return Some(d);
         }
     }
-    if let Ok(d) = DateTime::parse_from_rfc2822(s) {
-        return Some(d.with_timezone(&Utc));
+    if let Some(d) = time::parse_rfc2822(s) {
+        return Some(d);
     }
     // RFC 822 с названием пояса (GMT, UTC, MSK не поддерживаем — только GMT/UTC/UT/Z).
     let trimmed = s.trim_end_matches(" GMT").trim_end_matches(" UTC").trim_end_matches(" UT");
     if trimmed.len() != s.len() {
         for fmt in ["%a, %d %b %Y %H:%M:%S", "%d %b %Y %H:%M:%S", "%a, %d %b %Y %H:%M"] {
-            if let Ok(n) = NaiveDateTime::parse_from_str(trimmed, fmt) {
-                return Some(Utc.from_utc_datetime(&n));
+            if let Some(d) = time::parse_civil(trimmed, fmt).and_then(time::utc_civil) {
+                return Some(d);
             }
         }
     }
@@ -42,17 +42,17 @@ pub fn parse_date(s: &str) -> Option<DateTime<Utc>> {
 }
 
 /// Формат Swift `ISO8601DateFormatter`: «2026-11-05T09:42:00Z».
-pub fn format_date(d: &DateTime<Utc>) -> String {
-    d.to_rfc3339_opts(SecondsFormat::Secs, true)
+pub fn format_date(d: &Timestamp) -> String {
+    time::rfc3339_secs(*d)
 }
 
 /// С миллисекундами — для журнала синхронизации, где два изменения в одну секунду должны различаться.
-pub fn format_precise(d: &DateTime<Utc>) -> String {
-    d.to_rfc3339_opts(SecondsFormat::Millis, true)
+pub fn format_precise(d: &Timestamp) -> String {
+    time::rfc3339_millis(*d)
 }
 
 pub fn now_string() -> String {
-    format_date(&Utc::now())
+    format_date(&crate::time::now())
 }
 
 // ---------------------------------------------------------------- нормализация
@@ -275,7 +275,7 @@ mod tests {
         let d = parse_date("2026-11-05T09:42:00").unwrap();
         assert_eq!(a, b);
         assert_eq!(a, d);
-        assert_eq!(c.timestamp(), a.timestamp());
+        assert_eq!(c.as_second(), a.as_second());
         assert!(parse_date("").is_none());
         assert!(parse_date("вчера").is_none());
         assert_eq!(format_date(&a), "2026-11-05T09:42:00Z");

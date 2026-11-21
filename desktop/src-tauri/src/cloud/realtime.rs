@@ -276,8 +276,7 @@ mod tests {
 
         // сессия с токеном, который не истекает в ближайший час
         let user = serde_json::from_value(json!({"id": "u1", "email": "me@example.com"})).unwrap();
-        let session =
-            CloudSession { access_token: "access-1".into(), refresh_token: "r".into(), expires_at: chrono::Utc::now() + chrono::Duration::hours(1), user };
+        let session = CloudSession { access_token: "access-1".into(), refresh_token: "r".into(), expires_at: crate::time::now() + crate::time::hours(1), user };
         let store = Arc::new(MemorySessionStore::default());
         store.save(Some(&session));
         let mut cfg = config();

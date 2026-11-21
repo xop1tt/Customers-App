@@ -9,7 +9,6 @@
 use super::dedupe;
 use super::store::{stamp, WorkspaceStore};
 use crate::error::{AppError, AppResult};
-use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -888,7 +887,7 @@ pub fn run(store: &WorkspaceStore, file_name: &str, table: &Table, opts: &Import
     if !created.is_empty() {
         store.conn().execute(
             "INSERT INTO import_batches(id, file, created_at, created, summary) VALUES(?1, ?2, ?3, ?4, ?5)",
-            params![batch, file_name.chars().take(200).collect::<String>(), stamp(Utc::now()), json!(created).to_string(), summary.to_string()],
+            params![batch, file_name.chars().take(200).collect::<String>(), stamp(crate::time::now()), json!(created).to_string(), summary.to_string()],
         )?;
     }
     let mut out = summary;
@@ -935,7 +934,7 @@ pub fn undo(store: &WorkspaceStore, batch: &str) -> AppResult<Value> {
         }
     }
     if failed.is_empty() {
-        store.conn().execute("UPDATE import_batches SET undone_at=?2 WHERE id=?1", params![batch, stamp(Utc::now())])?;
+        store.conn().execute("UPDATE import_batches SET undone_at=?2 WHERE id=?1", params![batch, stamp(crate::time::now())])?;
     }
     Ok(json!({"removed": removed, "failed": failed.len(), "message": failed.first()}))
 }
