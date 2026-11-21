@@ -5,7 +5,6 @@ use super::convert::{convert_lead, ConvertOptions};
 use super::query::{Filter, Query};
 use super::store::{deal_contact_id, Member, WorkspaceStore};
 use crate::models::{LeadData, LeadItem, LeadKind};
-use chrono::Utc;
 use serde_json::{json, Map, Value};
 
 const WS: &str = "11111111-1111-4111-8111-111111111111";
@@ -277,7 +276,7 @@ fn lead(kind: LeadKind) -> LeadItem {
     LeadItem {
         id: "lead-1".into(),
         data: d,
-        discovered_at: Utc::now(),
+        discovered_at: crate::time::now(),
         favorite: false,
         archived: false,
         excluded: false,

@@ -16,7 +16,6 @@ use super::session::Core;
 use super::{CmdError, CmdResult};
 use crate::db::{self, DbKey};
 use crate::workspace::catalog::Catalog;
-use chrono::Local;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -245,7 +244,7 @@ impl Core {
             return Err(CmdError::msg("Копия сделана более новой версией Customers. Обновите приложение и повторите."));
         }
 
-        let stamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
+        let stamp = crate::time::local_format(crate::time::now(), "%Y-%m-%d_%H-%M-%S");
         let copy = dir.join(format!("leadgen-{stamp}-перенос.db"));
         let crm = copy.with_extension("crm");
         let result = (|| -> CmdResult<()> {

@@ -138,14 +138,13 @@ mod tests {
     use crate::cloud::auth::tests::*;
     use crate::cloud::auth::{CloudSession, CloudUser, MemorySessionStore, SessionStore};
     use crate::models::{LeadData, LeadKind};
-    use chrono::{Duration, Utc};
 
     fn engine(server: Arc<Server>, store: Arc<Mutex<LeadStore>>) -> SyncEngine {
         let sessions = Arc::new(MemorySessionStore::default());
         sessions.save(Some(&CloudSession {
             access_token: "a".into(),
             refresh_token: "r".into(),
-            expires_at: Utc::now() + Duration::hours(1),
+            expires_at: crate::time::now() + crate::time::hours(1),
             user: CloudUser { id: "u".into(), email: "me@example.com".into(), ..Default::default() },
         }));
         let auth = Arc::new(CloudAuth::new(config(), server, sessions, "dev-1".into()));

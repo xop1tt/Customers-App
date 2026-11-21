@@ -6,8 +6,8 @@ use crate::cloud::types::*;
 use crate::db::{self, DbKey, FileState};
 use crate::error::{AppError, AppResult};
 use crate::models::*;
+use crate::time::Timestamp;
 use crate::util::{self, format_date, format_precise, normalize, parse_date, source_title};
-use chrono::{DateTime, TimeZone, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -103,8 +103,8 @@ pub const SYNCED_KEYS: [&str; 7] = ["search.settings", "draft.signature", "searc
 const LEAD_FIELDS: [&str; 6] = ["data", "favorite", "archived", "deleted", "seen", "note"];
 
 /// Время изменения для перенесённых данных: раньше любых изменений в облаке (2000-01-01).
-pub fn import_stamp() -> DateTime<Utc> {
-    Utc.timestamp_opt(946_684_800, 0).unwrap()
+pub fn import_stamp() -> Timestamp {
+    Timestamp::constant(946_684_800, 0)
 }
 
 pub struct LeadStore {
@@ -261,7 +261,7 @@ impl LeadStore {
         self.scalar_text("SELECT cursor_json FROM source_state WHERE source=?1", [source])
     }
 
-    pub fn last_success(&self, source: &str) -> Option<DateTime<Utc>> {
+    pub fn last_success(&self, source: &str) -> Option<Timestamp> {
         self.scalar_text("SELECT last_success_at FROM source_state WHERE source=?1", [source]).and_then(|s| parse_date(&s))
     }
 
@@ -296,7 +296,7 @@ impl LeadStore {
         let _ = self.add_sync_log(ok, added, updated, message);
     }
 
-    pub fn query_last_run(&self, hash: &str) -> Option<DateTime<Utc>> {
+    pub fn query_last_run(&self, hash: &str) -> Option<Timestamp> {
         self.scalar_text("SELECT last_run_at FROM search_queries WHERE qhash=?1", [hash]).and_then(|s| parse_date(&s))
     }
 
@@ -311,7 +311,7 @@ impl LeadStore {
         let _ = self.conn.execute("DELETE FROM search_queries WHERE qhash=?1", [hash]);
     }
 
-    pub fn object_checked_at(&self, source: &str, object_id: &str) -> Option<DateTime<Utc>> {
+    pub fn object_checked_at(&self, source: &str, object_id: &str) -> Option<Timestamp> {
         self.scalar_text("SELECT checked_at FROM seen_objects WHERE source=?1 AND object_id=?2", [source, object_id]).and_then(|s| parse_date(&s))
     }
 
@@ -354,7 +354,7 @@ impl LeadStore {
         for row in rows {
             let (id, json, disc, fav, arch, excl, seen, note) = row?;
             let Some(data) = LeadData::parse_json(&json) else { continue };
-            let discovered = disc.as_deref().and_then(parse_date).or(data.discovered_at).unwrap_or_else(Utc::now);
+            let discovered = disc.as_deref().and_then(parse_date).or(data.discovered_at).unwrap_or_else(crate::time::now);
             out.push(LeadItem {
                 id,
                 data,
@@ -700,7 +700,7 @@ impl LeadStore {
         // новое изменение, а всё, что появилось в облаке позже, загрузится заново.
         if self.sync_tracking {
             self.set_value("sync.enabled", "1")?;
-            self.mark_everything_dirty(Utc::now())?;
+            self.mark_everything_dirty(crate::time::now())?;
             self.reset_sync_cursors()?;
         }
         Ok(())
@@ -730,7 +730,7 @@ impl LeadStore {
 
     // ------------------------------------------------------------ журнал синхронизации
 
-    pub fn stamp(d: DateTime<Utc>) -> String {
+    pub fn stamp(d: Timestamp) -> String {
         format_precise(&d)
     }
 
@@ -738,7 +738,7 @@ impl LeadStore {
         if !self.sync_tracking {
             return Ok(());
         }
-        let stamp = at.map(str::to_string).unwrap_or_else(|| Self::stamp(Utc::now()));
+        let stamp = at.map(str::to_string).unwrap_or_else(|| Self::stamp(crate::time::now()));
         for f in fields {
             self.conn.execute(
                 "INSERT INTO sync_dirty(entity, key, field, changed_at) VALUES(?1,?2,?3,?4) ON CONFLICT(entity, key, field) DO UPDATE SET changed_at=excluded.changed_at",
@@ -749,7 +749,7 @@ impl LeadStore {
     }
 
     /// Отметить все данные как изменённые — для первой выгрузки (перенос локальной базы в облако).
-    pub fn mark_everything_dirty(&self, at: DateTime<Utc>) -> AppResult<()> {
+    pub fn mark_everything_dirty(&self, at: Timestamp) -> AppResult<()> {
         let ts = Self::stamp(at);
         self.transaction(|| {
             let ids: Vec<String> = {
@@ -877,7 +877,7 @@ impl LeadStore {
         })
     }
 
-    fn dirty_at(&self, entity: &str, key: &str) -> AppResult<HashMap<String, DateTime<Utc>>> {
+    fn dirty_at(&self, entity: &str, key: &str) -> AppResult<HashMap<String, Timestamp>> {
         let mut st = self.conn.prepare("SELECT field, changed_at FROM sync_dirty WHERE entity=?1 AND key=?2")?;
         let rows = st.query_map([entity, key], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
         let mut out = HashMap::new();
@@ -901,7 +901,7 @@ impl LeadStore {
                     match local.get(f) {
                         None => true,
                         Some(mine) => {
-                            let theirs = r.field_ts.get(f).and_then(|s| parse_date(s)).unwrap_or(DateTime::<Utc>::MIN_UTC);
+                            let theirs = r.field_ts.get(f).and_then(|s| parse_date(s)).unwrap_or(crate::time::NEVER);
                             theirs > *mine
                         }
                     }
@@ -936,7 +936,7 @@ impl LeadStore {
             for e in exclusions {
                 let key = format!("{}|{}", e.kind, e.value);
                 if let Some(mine) = self.dirty_at("exclusion", &key)?.get("deleted") {
-                    if *mine >= parse_date(&e.changed_at).unwrap_or(DateTime::<Utc>::MIN_UTC) {
+                    if *mine >= parse_date(&e.changed_at).unwrap_or(crate::time::NEVER) {
                         continue;
                     }
                 }
@@ -948,7 +948,7 @@ impl LeadStore {
             }
             for s in settings.iter().filter(|s| SYNCED_KEYS.contains(&s.key.as_str())) {
                 if let Some(mine) = self.dirty_at("setting", &s.key)?.get("value") {
-                    if *mine >= parse_date(&s.changed_at).unwrap_or(DateTime::<Utc>::MIN_UTC) {
+                    if *mine >= parse_date(&s.changed_at).unwrap_or(crate::time::NEVER) {
                         continue;
                     }
                 }
@@ -989,7 +989,7 @@ impl LeadStore {
 }
 
 impl crate::search::sources::SearchMemory for std::sync::Mutex<LeadStore> {
-    fn query_last_run(&self, hash: &str) -> Option<DateTime<Utc>> {
+    fn query_last_run(&self, hash: &str) -> Option<Timestamp> {
         self.lock().unwrap().query_last_run(hash)
     }
     fn record_query(&self, hash: &str, source: &str, label: &str, results: i64) {
@@ -998,7 +998,7 @@ impl crate::search::sources::SearchMemory for std::sync::Mutex<LeadStore> {
     fn forget_query(&self, hash: &str) {
         self.lock().unwrap().forget_query(hash)
     }
-    fn object_checked_at(&self, source: &str, object_id: &str) -> Option<DateTime<Utc>> {
+    fn object_checked_at(&self, source: &str, object_id: &str) -> Option<Timestamp> {
         self.lock().unwrap().object_checked_at(source, object_id)
     }
     fn mark_object_checked(&self, source: &str, object_id: &str) {
