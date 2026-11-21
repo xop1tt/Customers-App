@@ -189,13 +189,14 @@ impl Core {
         Ok(path.display().to_string())
     }
 
-    /// Раз в сутки (и после поиска), если копии включены.
+    /// С частотой из настроек (по умолчанию раз в сутки) и после поиска, если копии включены.
     pub(crate) fn daily_backup_if_needed(&self, s: &Session) {
-        if !s.account_prefs().auto_backup {
+        let prefs = s.account_prefs();
+        if !prefs.auto_backup {
             return;
         }
         let last = s.with_store(|st| st.value("last_backup_at")).as_deref().and_then(parse_date);
-        if last.map(|l| Utc::now() - l > Duration::hours(20)).unwrap_or(true) {
+        if last.map(|l| Utc::now() - l > Duration::hours(i64::from(prefs.backup_due_hours()))).unwrap_or(true) {
             let _ = self.backup_now(s);
         }
     }
@@ -382,10 +383,19 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(1100));
         core.daily_backup_if_needed(&s);
         assert_eq!(core.list_backups().unwrap().len(), 1, "прошло меньше 20 часов");
+        // Частота из настроек: раз в неделю — копия суточной давности ещё свежая, каждые 6 часов — уже нет.
+        core.patch_account_prefs(&json!({"backupHours": 168})).unwrap();
+        s.with_store(|st| st.set_value("last_backup_at", &crate::util::format_date(&(Utc::now() - Duration::hours(30))))).unwrap();
+        core.daily_backup_if_needed(&s);
+        assert_eq!(core.list_backups().unwrap().len(), 1, "раз в неделю: 30 часов — рано");
+        core.patch_account_prefs(&json!({"backupHours": 24})).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        core.daily_backup_if_needed(&s);
+        assert_eq!(core.list_backups().unwrap().len(), 2, "раз в день: 30 часов — пора");
         core.patch_account_prefs(&json!({"autoBackup": false})).unwrap();
         s.with_store(|st| st.set_value("last_backup_at", "2000-01-01T00:00:00Z")).unwrap();
         core.daily_backup_if_needed(&s);
-        assert_eq!(core.list_backups().unwrap().len(), 1, "копии выключены");
+        assert_eq!(core.list_backups().unwrap().len(), 2, "копии выключены");
     }
 
     #[tokio::test]

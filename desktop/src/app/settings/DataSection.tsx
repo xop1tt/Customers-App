@@ -3,12 +3,21 @@ import { api } from "../../api";
 import type { BackupFile } from "../../api/types";
 import { bytes, fullRu, plural, shortenHome } from "../../lib/format";
 import { pickFile, pickFolder } from "../../lib/platform";
-import { Button, EmptyState, Group, NumberInput, SettingRow, Switch, Tag, TextInput } from "../../ui/kit";
+import { Button, EmptyState, Group, NumberInput, Select, SettingRow, Switch, Tag, TextInput } from "../../ui/kit";
 import { confirmDialog } from "../../ui/overlay";
 import { Icon } from "../../ui/icons";
 import { attempt, boot, patchAccount, refreshSnapshot, toast, useStore } from "../../state/store";
 import { DrivesPanel } from "../panels/DrivesPanel";
 import { PortableCopyRows } from "./PortableCopy";
+
+/** Частота автоматических копий; часы совпадают с `BACKUP_INTERVALS` в ядре (`prefs.rs`). */
+const BACKUP_INTERVALS = [
+  { value: 6, label: "Каждые 6 часов" },
+  { value: 12, label: "Каждые 12 часов" },
+  { value: 24, label: "Раз в сутки" },
+  { value: 72, label: "Раз в 3 дня" },
+  { value: 168, label: "Раз в неделю" },
+];
 
 export function DataSection() {
   const session = useStore((s) => s.session);
@@ -60,7 +69,8 @@ export function DataSection() {
       </Group>
 
       <Group title="Резервные копии" sub="backups" note="Копии хранятся рядом с вашими документами. Перед восстановлением приложение всегда сохраняет текущую базу.">
-        <SettingRow title="Автоматические копии" hint="Раз в день, пока приложение запущено."><Switch checked={a.autoBackup} onChange={(v) => void patchAccount({ autoBackup: v })} /></SettingRow>
+        <SettingRow title="Автоматические копии" hint="Пока приложение запущено, в том числе в фоне."><Switch checked={a.autoBackup} onChange={(v) => void patchAccount({ autoBackup: v })} /></SettingRow>
+        <SettingRow title="Как часто делать копию"><Select width={180} disabled={!a.autoBackup} value={a.backupHours} options={BACKUP_INTERVALS} onChange={(v) => void patchAccount({ backupHours: v })} /></SettingRow>
         <SettingRow title="Хранить копий" hint="Старые копии удаляются автоматически."><NumberInput value={a.keepBackups} min={1} max={90} width={130} onChange={(v) => void patchAccount({ keepBackups: v })} /></SettingRow>
         <SettingRow title="Папка копий" hint={a.backupDirectory ? <span className="selectable">{shortenHome(a.backupDirectory)}</span> : "Стандартная папка приложения"}>
           <Button onClick={() => void chooseBackupDir()}>Выбрать…</Button>

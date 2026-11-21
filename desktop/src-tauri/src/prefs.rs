@@ -178,6 +178,8 @@ pub struct AccountPrefs {
     /// Папка резервных копий; пусто — стандартная.
     pub backup_directory: String,
     pub auto_backup: bool,
+    /// Как часто делать автоматическую копию, часы (одно из `BACKUP_INTERVALS`).
+    pub backup_hours: u32,
     pub keep_backups: u32,
     /// Своя папка для базы (после переноса) или None — стандартная.
     pub data_path: Option<String>,
@@ -207,6 +209,7 @@ impl Default for AccountPrefs {
             signature: String::new(),
             backup_directory: String::new(),
             auto_backup: true,
+            backup_hours: 24,
             keep_backups: 14,
             data_path: None,
             notify_new_leads: true,
@@ -224,7 +227,17 @@ impl Default for AccountPrefs {
     }
 }
 
+/// Частота автоматических копий, часы (подписи — в интерфейсе, `DataSection.tsx`). Проверка идёт раз в час,
+/// поэтому чаще 6 часов не предлагаем.
+pub const BACKUP_INTERVALS: [u32; 5] = [6, 12, 24, 72, 168];
+
 impl AccountPrefs {
+    /// Через сколько часов после прошлой копии пора делать новую. Запас в шестую часть интервала (сутки → 20 ч):
+    /// проверка идёт раз в час и после поиска, и копия не должна «уезжать» на час позже с каждым днём.
+    pub fn backup_due_hours(&self) -> u32 {
+        self.backup_hours - self.backup_hours / 6
+    }
+
     pub fn normalize(&mut self) {
         // Автопоиск: выключен (0) или не чаще раза в 2 часа (решение Maksim), не реже раза в сутки.
         if self.auto_search_minutes != 0 {
@@ -232,6 +245,10 @@ impl AccountPrefs {
         }
         self.new_leads_searches = self.new_leads_searches.clamp(1, 50);
         self.keep_backups = self.keep_backups.clamp(1, 365);
+        // Неизвестное значение (старый файл, ручная правка) — ближайший вариант из списка.
+        if !BACKUP_INTERVALS.contains(&self.backup_hours) {
+            self.backup_hours = BACKUP_INTERVALS.iter().copied().min_by_key(|h| h.abs_diff(self.backup_hours)).unwrap_or(24);
+        }
         // До версии 2 «выключено» записывалось при любом сохранении настроек, даже если пользователь
         // его не трогал, поэтому старое значение не считается выбором: звонок подтверждается по умолчанию.
         if self.confirm_calls_version < 2 {
@@ -452,6 +469,7 @@ mod tests {
         fs::write(&path, r#"{"autoSearchMinutes":99999,"keepBackups":0,"backupDirectory":"D:\\Копии","mailDelivery":"Smtp","confirmCalls":false,"welcomeDone":true,"notifySync":true}"#).unwrap();
         let a = PrefsFile::<AccountPrefs>::load(&path).value;
         assert_eq!((a.auto_search_minutes, a.keep_backups), (1440, 1));
+        assert_eq!(a.backup_hours, 24, "в старом файле частоты нет: раз в сутки, как раньше");
         assert_eq!(a.backup_directory, "D:\\Копии");
         assert_eq!(a.mail_delivery, "smtp", "Windows писал имя варианта с заглавной буквы");
         assert!(a.confirm_calls, "старое «выключено» не считается выбором");
@@ -528,5 +546,18 @@ mod tests {
         plist::Value::Dictionary(d).to_file_xml(&path).unwrap();
         assert!(read_defaults_plist(&path).unwrap().contains_key("updates.auto"));
         assert!(read_defaults_plist(&dir.path().join("missing.plist")).is_none());
+    }
+
+    #[test]
+    fn backup_interval_snaps_to_known_values_and_keeps_a_margin() {
+        let at = |h: u32| {
+            let mut a = AccountPrefs { backup_hours: h, ..AccountPrefs::default() };
+            a.normalize();
+            a.backup_hours
+        };
+        assert_eq!((at(6), at(12), at(24), at(72), at(168)), (6, 12, 24, 72, 168));
+        assert_eq!((at(0), at(1), at(30), at(100), at(10_000)), (6, 6, 24, 72, 168));
+        let due = |h: u32| AccountPrefs { backup_hours: h, ..AccountPrefs::default() }.backup_due_hours();
+        assert_eq!((due(6), due(12), due(24), due(72), due(168)), (5, 10, 20, 60, 140));
     }
 }

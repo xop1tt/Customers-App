@@ -129,7 +129,7 @@ const baseDevice: DevicePrefs = {
 let device: DevicePrefs = { ...baseDevice };
 
 let account: AccountPrefs = {
-  autoSearchMinutes: 120, newLeadsSearches: 1, signature: "", backupDirectory: "~/Documents/Customers Backups", autoBackup: true, keepBackups: 14, dataPath: null,
+  autoSearchMinutes: 120, newLeadsSearches: 1, signature: "", backupDirectory: "~/Documents/Customers Backups", autoBackup: true, backupHours: 24, keepBackups: 14, dataPath: null,
   notifyNewLeads: true, notifyErrors: true, notifySync: false, notifyMessages: true, mailAccount: "", mailDelivery: "mailApp", confirmCalls: true, confirmCallsVersion: 1, callApp: "system",
   welcomeDone: !demo.has("welcome"), exportLastTab: "file",
 };
@@ -481,7 +481,11 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
     case "update_info":
       return update;
     case "check_updates":
-      update = { ...update, phase: "upToDate" };
+      // Как ядро: сначала «checking», ответ сервера приходит не мгновенно.
+      update = { ...update, phase: "checking" };
+      emit("update-state", update);
+      await new Promise((r) => setTimeout(r, 900));
+      update = { ...update, phase: "upToDate", lastCheck: new Date().toISOString() };
       emit("update-state", update);
       return update;
     case "recent_releases":

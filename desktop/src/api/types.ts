@@ -177,6 +177,8 @@ export interface AccountPrefs {
   signature: string;
   backupDirectory: string;
   autoBackup: boolean;
+  /** Частота автоматических копий, часы: 6, 12, 24, 72 или 168. */
+  backupHours: number;
   keepBackups: number;
   dataPath: string | null;
   notifyNewLeads: boolean;
