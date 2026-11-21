@@ -1,7 +1,27 @@
-// Справочник отделов поверх текстового поля профиля (department). Отдельной сущности в базе нет (ADR-077):
-// отдел — это название, общее у нескольких участников. Переименование и слияние меняют это название у участников.
+// Отделы. На сервере отдел — сущность с деревом и руководителем (ADR-095); у сотрудника есть `department_id` и
+// название `department`. Группировка по названию (`departmentsOf`) осталась для сводок и фильтров.
 
-import type { TeamMember } from "../api/types";
+import type { Department as DepartmentEntity, TeamMember } from "../api/types";
+
+/** Подотделы отдела (`null` — верхний уровень), по порядку и названию. */
+export function subDepartments(deps: DepartmentEntity[], parent: string | null): DepartmentEntity[] {
+  return deps.filter((d) => (d.parent_id ?? null) === parent).sort((a, b) => a.position - b.position || a.name.localeCompare(b.name, "ru"));
+}
+
+/** «Продажи › Москва» — путь от верхнего отдела. */
+export function departmentPath(deps: DepartmentEntity[], id: string): string {
+  const out: string[] = [];
+  for (let d = deps.find((x) => x.id === id), i = 0; d && i < 50; d = deps.find((x) => x.id === d!.parent_id), i++) out.unshift(d.name);
+  return out.join(" › ");
+}
+
+/** Сотрудники отдела (без подотделов): по id, а у карточек без id — по названию. */
+export function membersOfDepartment(team: TeamMember[], d: DepartmentEntity): TeamMember[] {
+  const name = d.name.trim().toLowerCase();
+  return team
+    .filter((m) => (m.department_id ? m.department_id === d.id : m.department.trim().toLowerCase() === name && !!name))
+    .sort((a, b) => b.rank - a.rank || a.display_name.localeCompare(b.display_name, "ru"));
+}
 
 export interface Department {
   /** Название; пустая строка — участники без отдела. */

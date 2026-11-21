@@ -3,15 +3,25 @@
 //! на время отдельных шагов, сеть — без блокировки.
 
 use super::catalog::WorkspaceInfo;
-use super::schema::ENTITIES;
+use super::schema::{Class, ENTITIES};
 use super::store::{Member, WorkspaceStore};
 use crate::cloud::auth::CloudAuth;
 use crate::cloud::error::{CloudError, CloudResult};
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 pub const PAGE: usize = 500;
+const SCOPE_EVENTS: &str = "crm_scope_events";
+
+/// Что изменилось в видимости записей с прошлой загрузки.
+#[derive(Debug, Default)]
+struct Scope {
+    last: i64,
+    full: bool,
+    moved: std::collections::BTreeMap<String, Vec<String>>,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -185,6 +195,10 @@ impl CrmSync {
     pub async fn pull(&self) -> CloudResult<usize> {
         let mut total = 0;
         let ws = format!("workspace_id=eq.{}&", self.workspace);
+        let scope = self.scope_events().await?;
+        if scope.full {
+            self.db(|s| s.reset_record_cursors())?;
+        }
         for e in ENTITIES {
             loop {
                 let cursor = self.db(|s| Ok(s.cursor(e.table)))?;
@@ -217,6 +231,10 @@ impl CrmSync {
                 }
             }
         }
+        self.drop_hidden(&scope).await?;
+        if scope.last > 0 {
+            self.db(|s| s.set_cursor(SCOPE_EVENTS, scope.last))?;
+        }
         let prefs = call(
             &self.auth,
             "GET",
@@ -234,6 +252,69 @@ impl CrmSync {
             Ok(())
         })?;
         Ok(total)
+    }
+
+    /// Журнал видимости (ADR-095): какие записи перешли в другой отдел или к другому ответственному и менялись ли
+    /// права и структура отделов. Сервер без журнала (миграция ещё не применена) — пустой ответ.
+    async fn scope_events(&self) -> CloudResult<Scope> {
+        let mut scope = Scope { last: self.db(|s| Ok(s.cursor(SCOPE_EVENTS)))?, ..Scope::default() };
+        loop {
+            let path =
+                format!("/rest/v1/{SCOPE_EVENTS}?workspace_id=eq.{}&id=gt.{}&order=id.asc&limit={PAGE}&select=id,entity,entity_id", self.workspace, scope.last);
+            let rows = match call(&self.auth, "GET", &path, None, &[]).await {
+                Ok(v) => v.as_array().cloned().unwrap_or_default(),
+                Err(CloudError::Server(m)) if m.contains(SCOPE_EVENTS) || m == "HTTP 404" => return Ok(Scope::default()),
+                Err(e) => return Err(e),
+            };
+            for r in &rows {
+                scope.last = scope.last.max(r["id"].as_i64().unwrap_or(0));
+                match (r["entity"].as_str(), r["entity_id"].as_str()) {
+                    (Some(t), Some(id)) if ENTITIES.iter().any(|e| e.table == t) => scope.moved.entry(t.to_string()).or_default().push(id.to_string()),
+                    _ => scope.full = true,
+                }
+            }
+            if rows.len() < PAGE {
+                return Ok(scope);
+            }
+        }
+    }
+
+    /// Убирает с устройства записи, которых сервер больше не показывает.
+    async fn drop_hidden(&self, scope: &Scope) -> CloudResult<()> {
+        if scope.full {
+            for e in ENTITIES.iter().filter(|e| e.class == Class::Records) {
+                let mut visible = HashSet::new();
+                let mut after = String::new();
+                loop {
+                    let from = if after.is_empty() { String::new() } else { format!("id=gt.{after}&") };
+                    let path = format!("/rest/v1/{}?workspace_id=eq.{}&{from}select=id&order=id.asc&limit=1000", e.table, self.workspace);
+                    let rows = call(&self.auth, "GET", &path, None, &[]).await?.as_array().cloned().unwrap_or_default();
+                    for r in &rows {
+                        if let Some(id) = r["id"].as_str() {
+                            visible.insert(id.to_string());
+                            after = id.to_string();
+                        }
+                    }
+                    if rows.len() < 1000 {
+                        break;
+                    }
+                }
+                let hidden: Vec<String> = self.db(|s| s.synced_ids(e.table))?.into_iter().filter(|id| !visible.contains(id)).collect();
+                self.db(|s| s.forget_hidden(e.table, &hidden))?;
+            }
+            return Ok(());
+        }
+        for (table, ids) in &scope.moved {
+            for chunk in ids.chunks(100) {
+                let list = chunk.join(",");
+                let path = format!("/rest/v1/{table}?workspace_id=eq.{}&id=in.({list})&select=id", self.workspace);
+                let rows = call(&self.auth, "GET", &path, None, &[]).await?;
+                let seen: HashSet<&str> = rows.as_array().map(|a| a.iter().filter_map(|r| r["id"].as_str()).collect()).unwrap_or_default();
+                let hidden: Vec<String> = chunk.iter().filter(|id| !seen.contains(id.as_str())).cloned().collect();
+                self.db(|s| s.forget_hidden(table, &hidden))?;
+            }
+        }
+        Ok(())
     }
 
     async fn push_prefs(&self) -> CloudResult<()> {

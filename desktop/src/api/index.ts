@@ -6,7 +6,7 @@ import type {
   AccountPrefs, AuthCallback, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
-  CrmRecord, WsAuditItem, WsAuditQuery, WsCard, WsCollection, WsConflict, WsConverted, WsInvitation, WsIncoming, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll,
+  CrmRecord, WsAuditItem, WsAuditQuery, WsCard, WsCollection, WsConflict, WsConverted, WsInvitation, WsIncoming, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll, Department, RecordScope,
   AiCaps, AiChatReply, ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
 } from "./types";
 
@@ -161,6 +161,12 @@ export const api = {
   wsRoles: () => call<WsRoles>("ws_roles"),
   wsSaveRole: (key: string, name: string, rank: number, permissions: string[]) => call<WsRoles>("ws_save_role", { key, name, rank, permissions }),
   wsDeleteRole: (key: string) => call<WsRoles>("ws_delete_role", { key }),
+  wsSetRoleScope: (key: string, scope: RecordScope) => call<WsRoles>("ws_set_role_scope", { key, scope }),
+  wsDepartments: () => call<Department[]>("ws_departments"),
+  wsSaveDepartment: (d: { id?: string | null; name: string; parent?: string | null; head?: string | null }) =>
+    call<{ id: string }>("ws_save_department", { id: d.id ?? null, name: d.name, parent: d.parent ?? null, head: d.head ?? null }),
+  wsDeleteDepartment: (id: string) => call<null>("ws_delete_department", { id }),
+  wsSetMemberDepartment: (user: string, department: string | null) => call<null>("ws_set_member_department", { user, department }),
   wsDeleteStage: (stage: string, moveTo: string) => call<{ moved: number }>("ws_delete_stage", { stage, moveTo }),
   wsLeave: () => call<WsState>("ws_leave"),
   wsTeam: () => call<TeamMember[]>("ws_team"),

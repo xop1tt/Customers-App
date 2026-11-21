@@ -184,6 +184,28 @@ impl WorkspaceStore {
             }
         }
         self.conn.execute_batch(&sql)?;
+        // База с прошлой версии приложения: новые поля сущностей добавляются столбцами, а таблица загружается
+        // с сервера заново, чтобы новые поля пришли и у старых записей (например, отдел, ADR-095).
+        for e in ENTITIES {
+            let have: BTreeSet<String> = {
+                let mut st = self.conn.prepare(&format!("PRAGMA table_info({})", e.table))?;
+                let names = st.query_map([], |r| r.get::<_, String>(1))?;
+                names.collect::<Result<_, _>>()?
+            };
+            let mut added = false;
+            for f in e.fields.iter().filter(|f| !have.contains(f.name)) {
+                let ty = match f.kind {
+                    Kind::Num => "REAL",
+                    Kind::Bool => "INTEGER",
+                    _ => "TEXT",
+                };
+                self.conn.execute_batch(&format!("ALTER TABLE {} ADD COLUMN {} {ty}", e.table, f.name))?;
+                added = true;
+            }
+            if added {
+                self.conn.execute("DELETE FROM sync_cursor WHERE table_name=?1", [e.table])?;
+            }
+        }
         if self.meta("schema_version").is_none() {
             self.set_meta("schema_version", &SCHEMA_VERSION.to_string())?;
         }
@@ -750,6 +772,59 @@ impl WorkspaceStore {
                 )?;
             }
             Ok(rows.len())
+        })
+    }
+
+    /// Курсор журнала, у которого нет своей таблицы на устройстве (например, `crm_scope_events`).
+    pub fn set_cursor(&self, name: &str, seq: i64) -> AppResult<()> {
+        self.conn.execute(
+            "INSERT INTO sync_cursor(table_name, server_seq) VALUES(?1, ?2) ON CONFLICT(table_name) DO UPDATE SET server_seq=max(server_seq, excluded.server_seq)",
+            params![name, seq],
+        )?;
+        Ok(())
+    }
+
+    /// Права или отдел изменились: записи загружаются заново с начала, чтобы пришли ставшие видимыми.
+    pub fn reset_record_cursors(&self) -> AppResult<()> {
+        for e in ENTITIES.iter().filter(|e| e.class == Class::Records) {
+            self.conn.execute("DELETE FROM sync_cursor WHERE table_name=?1", [e.table])?;
+        }
+        Ok(())
+    }
+
+    /// id записей таблицы, которые уже есть на сервере (неотправленные новые не считаются).
+    pub fn synced_ids(&self, table: &str) -> AppResult<Vec<String>> {
+        let e = schema::entity(table).ok_or_else(|| err(format!("Неизвестная сущность: {table}")))?;
+        let mut st = self.conn.prepare(&format!("SELECT id FROM {} WHERE sync_state <> 'pending'", e.table))?;
+        let rows = st.query_map([], |r| r.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Записи стали не видны (другой отдел, другие права): локальные копии удаляются вместе с заметками,
+    /// звонками, вложениями, значениями полей и контактами сделки. Задачи, где я исполнитель, остаются.
+    pub fn forget_hidden(&self, table: &str, ids: &[String]) -> AppResult<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let e = schema::entity(table).ok_or_else(|| err(format!("Неизвестная сущность: {table}")))?;
+        let me = self.user_id.clone();
+        self.transaction(|c| {
+            let mut n = 0;
+            for id in ids {
+                n += c.execute(&format!("DELETE FROM {} WHERE id=?1", e.table), [id])?;
+                c.execute("DELETE FROM sync_outbox WHERE entity=?1 AND entity_id=?2", params![e.table, id])?;
+                if e.entity_type.is_some() {
+                    for child in ["notes", "comments", "activities", "attachments", "custom_field_values"] {
+                        c.execute(&format!("DELETE FROM {child} WHERE entity_id=?1"), [id])?;
+                    }
+                    c.execute("DELETE FROM tasks WHERE entity_id=?1 AND coalesce(assignee_id, '') <> ?2", params![id, me])?;
+                }
+                if e.table == "deals" {
+                    c.execute("DELETE FROM deal_contacts WHERE deal_id=?1", [id])?;
+                    c.execute("DELETE FROM deal_stage_history WHERE deal_id=?1", [id])?;
+                }
+            }
+            Ok(n)
         })
     }
 

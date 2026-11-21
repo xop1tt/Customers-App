@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api } from "../../api";
-import type { CrmRecord, WsRole } from "../../api/types";
+import type { CrmRecord, RecordScope, WsRole } from "../../api/types";
 import { Button, Checkbox, Group, IconButton, Notice, NumberInput, Select, SettingRow, Tag, TextInput } from "../../ui/kit";
 import { Dialog, confirmDialog } from "../../ui/overlay";
 import { attempt, refreshWorkspace, useStore } from "../../state/store";
@@ -110,6 +110,13 @@ function RemoveStage({ stage, others, onClose, onDone }: { stage: CrmRecord; oth
   );
 }
 
+/** Видимость записей роли (ADR-095). */
+const SCOPES: { value: RecordScope; label: string }[] = [
+  { value: "all", label: "Все записи" },
+  { value: "department", label: "Свой отдел и подотделы" },
+  { value: "own", label: "Только свои" },
+];
+
 /** Роли рабочего пространства: системные неизменны, свои создаются из разрешений, которые есть у вас, с рангом ниже вашего. */
 export function RolesEditor({ onClose }: { onClose: () => void }) {
   const ws = useStore((s) => s.ws)!;
@@ -121,6 +128,8 @@ export function RolesEditor({ onClose }: { onClose: () => void }) {
   const roles = data?.roles ?? [];
   const catalog = data?.catalog ?? [];
   const reload = async () => { setSaved((n) => n + 1); await refreshWorkspace(); };
+  const myRole = ws.workspaces.find((w) => w.id === ws.active)?.role;
+  const [scopes, setScopes] = useState<Record<string, RecordScope>>({});
 
   return (
     <Dialog title="Роли" onClose={onClose} width={640}>
@@ -134,6 +143,11 @@ export function RolesEditor({ onClose }: { onClose: () => void }) {
                 <span className="ellipsis">{r.name} {r.system && <Tag>системная</Tag>}</span>
                 <span className="faint" style={{ fontSize: "var(--fs-sm)" }}>ранг {r.rank} · разрешений: {r.permissions.length}</span>
               </span>
+              {r.rank >= 100 ? <span className="faint">видит все записи</span> : (
+                <Select small value={scopes[r.key] ?? r.scope ?? "all"} options={SCOPES} label={`Какие записи видит роль «${r.name}»`}
+                  disabled={!can || r.rank >= myRank || (myRank < 100 && r.key === myRole)}
+                  onChange={async (v) => { if (await attempt(() => api.wsSetRoleScope(r.key, v))) setScopes((cur) => ({ ...cur, [r.key]: v })); }} />
+              )}
               {can && !r.system && r.rank < myRank && (
                 <>
                   <IconButton icon="edit" tip="Изменить" onClick={() => setEdit(r)} />

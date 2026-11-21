@@ -446,3 +446,43 @@ fn second_pipeline_with_deals_is_kept() {
     s.dedupe_local_seed().unwrap();
     assert_eq!(s.list("pipelines", &Query::default()).unwrap().len(), 2, "воронку со сделкой не удаляем");
 }
+
+#[test]
+fn hidden_records_leave_the_device_with_their_notes() {
+    let (_d, s) = open();
+    let c = s.save("companies", None, &m(json!({"name": "Ушла в другой отдел"}))).unwrap();
+    let keep = s.save("companies", None, &m(json!({"name": "Своя"}))).unwrap();
+    let note = s.save("notes", None, &m(json!({"entity_type": "company", "entity_id": id(&c), "body": "секрет"}))).unwrap();
+    let mine = s.save("tasks", None, &m(json!({"title": "Моя задача", "entity_type": "company", "entity_id": id(&c), "assignee_id": ME}))).unwrap();
+    let theirs = s.save("tasks", None, &m(json!({"title": "Чужая", "entity_type": "company", "entity_id": id(&c), "assignee_id": OTHER}))).unwrap();
+    s.conn().execute_batch("UPDATE companies SET sync_state='synced'; UPDATE notes SET sync_state='synced'; UPDATE tasks SET sync_state='synced';").unwrap();
+    let unsent = s.save("companies", None, &m(json!({"name": "Ещё не отправлена"}))).unwrap();
+    let synced = s.synced_ids("companies").unwrap();
+    assert!(synced.contains(&id(&c)) && !synced.contains(&id(&unsent)), "неотправленные новые не считаются скрытыми");
+    assert_eq!(s.forget_hidden("companies", &[id(&c)]).unwrap(), 1);
+    assert!(s.get("companies", &id(&c)).unwrap().is_none());
+    assert!(s.get("notes", &id(&note)).unwrap().is_none());
+    assert!(s.get("tasks", &id(&theirs)).unwrap().is_none());
+    assert!(s.get("tasks", &id(&mine)).unwrap().is_some(), "задача, где я исполнитель, остаётся");
+    assert!(s.get("companies", &id(&keep)).unwrap().is_some());
+    // Права изменились: записи загружаются заново.
+    s.set_cursor("companies", 50).unwrap();
+    s.reset_record_cursors().unwrap();
+    assert_eq!(s.cursor("companies"), 0);
+}
+
+#[test]
+fn old_database_gets_new_columns_and_reloads_the_table() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("ws.db");
+    {
+        let s = WorkspaceStore::open(&path, None, WS, ME).unwrap();
+        s.save("companies", None, &m(json!({"name": "Старая"}))).unwrap();
+        s.set_cursor("companies", 77).unwrap();
+        s.conn().execute_batch("ALTER TABLE companies DROP COLUMN department_id").unwrap();
+    }
+    let s = WorkspaceStore::open(&path, None, WS, ME).unwrap();
+    assert_eq!(s.cursor("companies"), 0, "таблица загрузится заново, чтобы пришёл отдел старых записей");
+    let c = s.save("companies", None, &m(json!({"name": "Новая", "department_id": "44444444-4444-4444-8444-444444444444"}))).unwrap();
+    assert_eq!(c["department_id"], "44444444-4444-4444-8444-444444444444");
+}

@@ -24,18 +24,20 @@ const byId = (rows: CrmRecord[]) => new Map(rows.map((r) => [r.id, r]));
 export function useLookup(): Lookup {
   const members = useStore((s) => s.ws?.members ?? NONE);
   const { data } = useWsQuery(async () => {
-    const [pipelines, stages, companies] = await Promise.all([
+    const [pipelines, stages, companies, departments] = await Promise.all([
       api.wsList("pipelines", { limit: 5000 }),
       api.wsList("pipeline_stages", { limit: 5000, sort: [{ field: "position", dir: "asc" }] }),
       api.wsList("companies", { limit: 5000, archived: true, sort: [{ field: "name", dir: "asc" }] }),
+      api.wsDepartments().catch(() => []),
     ]);
-    return { pipelines: pipelines.items, stages: stages.items, companies: companies.items };
+    return { pipelines: pipelines.items, stages: stages.items, companies: companies.items, departments };
   }, []);
   return {
     members,
     pipelines: byId(data?.pipelines ?? []),
     stages: byId(data?.stages ?? []),
     companies: byId(data?.companies ?? []),
+    departments: data?.departments ?? [],
   };
 }
 

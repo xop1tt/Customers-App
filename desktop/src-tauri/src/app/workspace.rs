@@ -845,10 +845,14 @@ impl Core {
             return Ok(json!({"roles": [], "catalog": []}));
         };
         let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let roles = sync::select(&cloud, &format!("roles?select=key,name,rank,is_system,workspace_id,role_permissions(permission_key)&or=(workspace_id.is.null,workspace_id.eq.{})&order=rank.desc", active.id))
+        let roles = sync::select(&cloud, &format!("roles?select=id,key,name,rank,is_system,workspace_id,role_permissions(permission_key)&or=(workspace_id.is.null,workspace_id.eq.{})&order=rank.desc", active.id))
             .await
             .map_err(cloud_err)?;
         let catalog = sync::select(&cloud, "permissions?select=key,description&order=key").await.map_err(cloud_err)?;
+        // Видимость записей роли в этом Workspace (ADR-095); сервер без отделов — у всех ролей «всё».
+        let scopes = sync::select(&cloud, &format!("role_scopes?workspace_id=eq.{}&select=role_id,scope", active.id)).await.unwrap_or(Value::Null);
+        let scope_of =
+            |id: &Value| scopes.as_array().and_then(|a| a.iter().find(|s| &s["role_id"] == id)).and_then(|s| s["scope"].as_str()).unwrap_or("all").to_string();
         // Своя роль с тем же ключом заменяет системный шаблон.
         let mut by_key: std::collections::BTreeMap<String, Value> = Default::default();
         for r in roles.as_array().cloned().unwrap_or_default() {
@@ -856,7 +860,10 @@ impl Core {
             let own = !r["workspace_id"].is_null();
             if own || !by_key.contains_key(&key) {
                 let perms: Vec<Value> = r["role_permissions"].as_array().map(|a| a.iter().map(|p| p["permission_key"].clone()).collect()).unwrap_or_default();
-                by_key.insert(key.clone(), json!({"key": key, "name": r["name"], "rank": r["rank"], "system": r["is_system"], "permissions": perms}));
+                by_key.insert(
+                    key.clone(),
+                    json!({"key": key, "name": r["name"], "rank": r["rank"], "system": r["is_system"], "permissions": perms, "scope": scope_of(&r["id"])}),
+                );
             }
         }
         let mut list: Vec<Value> = by_key.into_values().collect();
@@ -875,6 +882,61 @@ impl Core {
         }
         self.ws_rpc("save_role", json!({"p_key": key, "p_name": name, "p_rank": rank, "p_permissions": permissions}), true).await?;
         self.ws_roles().await
+    }
+
+    /// Какие записи видит роль: all, department, own (ADR-095).
+    pub async fn ws_set_role_scope(self: &Arc<Self>, key: &str, scope: &str) -> CmdResult<Value> {
+        if !matches!(scope, "all" | "department" | "own") {
+            return Err(CmdError::msg("Видимость — «все записи», «свой отдел» или «только свои»."));
+        }
+        self.ws_rpc("set_role_scope", json!({"p_key": key, "p_scope": scope}), true).await?;
+        self.ws_roles().await
+    }
+
+    // ------------------------------------------------------------ отделы (ADR-095)
+
+    /// Отделы активного облачного Workspace (дерево по `parent_id`). Локальный — пусто.
+    pub async fn ws_departments(self: &Arc<Self>) -> CmdResult<Value> {
+        let s = self.require()?;
+        let Some(active) = self.remote_active(&s)? else {
+            return Ok(json!([]));
+        };
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        let path = format!("departments?workspace_id=eq.{}&deleted_at=is.null&select=id,name,parent_id,head_id,position&order=position,name", active.id);
+        match sync::select(&cloud, &path).await {
+            Ok(v) => Ok(v),
+            Err(CloudError::Server(m)) if m.contains("departments") || m == "HTTP 404" => Ok(json!([])),
+            Err(e) => Err(cloud_err(e)),
+        }
+    }
+
+    /// Создать (`id` пусто) или изменить отдел.
+    pub async fn ws_save_department(self: &Arc<Self>, id: Option<String>, name: &str, parent: Option<String>, head: Option<String>) -> CmdResult<Value> {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 120 {
+            return Err(CmdError::msg("Название отдела — от 1 до 120 символов."));
+        }
+        for v in [&id, &parent, &head].into_iter().flatten() {
+            check_uuid(v)?;
+        }
+        let r = self.ws_rpc("save_department", json!({"p_id": id, "p_name": name, "p_parent": parent, "p_head": head}), true).await?;
+        Ok(json!({"id": r}))
+    }
+
+    /// Закрыть отдел: сотрудники, подотделы и записи переходят в вышестоящий.
+    pub async fn ws_delete_department(self: &Arc<Self>, id: &str) -> CmdResult<()> {
+        check_uuid(id)?;
+        self.ws_rpc("delete_department", json!({"p_id": id}), true).await?;
+        Ok(())
+    }
+
+    pub async fn ws_set_member_department(self: &Arc<Self>, user: &str, department: Option<String>) -> CmdResult<()> {
+        check_uuid(user)?;
+        if let Some(d) = &department {
+            check_uuid(d)?;
+        }
+        self.ws_rpc("set_member_department", json!({"p_user": user, "p_department": department}), true).await?;
+        Ok(())
     }
 
     pub async fn ws_delete_role(self: &Arc<Self>, key: &str) -> CmdResult<Value> {

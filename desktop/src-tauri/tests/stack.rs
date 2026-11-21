@@ -304,3 +304,53 @@ async fn workspace_crm_sync_rights_and_conflicts() {
     let idle = sync_a.sync().await.unwrap();
     assert_eq!((idle.pushed, idle.pulled), (0, 0));
 }
+
+/// Отделы (ADR-095): запись ушла в чужой отдел — исчезает с устройства сотрудника; вернулась — приходит снова;
+/// видимость роли сменилась — устройство перепроверяет всё.
+#[tokio::test]
+async fn departments_hide_and_return_records_on_devices() {
+    let Some(stack) = stack() else {
+        eprintln!("локальный стенд не задан, тест пропущен");
+        return;
+    };
+    let (owner, _) = stack.user("dep-owner").await;
+    let wid = crm_sync::rpc(&owner, "create_workspace", json!({"p_name": "Отделы"})).await.unwrap().as_str().unwrap().to_string();
+    let (worker, worker_email) = stack.user("dep-worker").await;
+    let invite = crm_sync::rpc(&owner, "invite_member", json!({"p_workspace": wid, "p_email": worker_email, "p_role": "employee"})).await.unwrap();
+    crm_sync::rpc(&worker, "accept_invitation", json!({"p_token": invite["token"]})).await.unwrap();
+    let dep = |name: &str| json!({"p_workspace": wid, "p_id": null, "p_name": name, "p_parent": null, "p_head": null});
+    let sales = crm_sync::rpc(&owner, "save_department", dep("Продажи")).await.unwrap().as_str().unwrap().to_string();
+    let mkt = crm_sync::rpc(&owner, "save_department", dep("Маркетинг")).await.unwrap().as_str().unwrap().to_string();
+    let worker_id = worker.user().unwrap().id;
+    crm_sync::rpc(&owner, "set_member_department", json!({"p_workspace": wid, "p_user": worker_id, "p_department": sales})).await.unwrap();
+
+    let (store_a, sync_a) = stack.crm(&owner, &wid, None).await;
+    let theirs = store_a.lock().unwrap().save("companies", None, &fields(json!({"name": "Клиент маркетинга", "department_id": mkt}))).unwrap();
+    let tid = theirs["id"].as_str().unwrap().to_string();
+    let note = store_a.lock().unwrap().save("notes", None, &fields(json!({"entity_type": "company", "entity_id": tid, "body": "секрет"}))).unwrap();
+    let nid = note["id"].as_str().unwrap().to_string();
+    sync_a.sync().await.unwrap();
+
+    // Роль видит всё: запись и заметка приходят.
+    let (store_b, sync_b) = stack.crm(&worker, &wid, None).await;
+    sync_b.sync().await.unwrap();
+    assert!(store_b.lock().unwrap().get("companies", &tid).unwrap().is_some());
+    assert!(store_b.lock().unwrap().get("notes", &nid).unwrap().is_some());
+
+    // Видимость «свой отдел»: устройство перепроверяет всё и убирает запись маркетинга вместе с заметкой.
+    crm_sync::rpc(&owner, "set_role_scope", json!({"p_workspace": wid, "p_key": "employee", "p_scope": "department"})).await.unwrap();
+    sync_b.sync().await.unwrap();
+    assert!(store_b.lock().unwrap().get("companies", &tid).unwrap().is_none());
+    assert!(store_b.lock().unwrap().get("notes", &nid).unwrap().is_none());
+
+    // Передали в «Продажи» — пришла; вернули в «Маркетинг» — снова исчезла.
+    store_a.lock().unwrap().save("companies", Some(&tid), &fields(json!({"department_id": sales}))).unwrap();
+    sync_a.sync().await.unwrap();
+    sync_b.sync().await.unwrap();
+    assert_eq!(store_b.lock().unwrap().get("companies", &tid).unwrap().unwrap()["department_id"], sales.as_str());
+    assert!(store_b.lock().unwrap().get("notes", &nid).unwrap().is_some(), "заметка пришла вместе с карточкой");
+    store_a.lock().unwrap().save("companies", Some(&tid), &fields(json!({"department_id": mkt}))).unwrap();
+    sync_a.sync().await.unwrap();
+    sync_b.sync().await.unwrap();
+    assert!(store_b.lock().unwrap().get("companies", &tid).unwrap().is_none());
+}

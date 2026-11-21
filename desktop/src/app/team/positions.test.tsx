@@ -76,6 +76,7 @@ describe("отделы", () => {
   it("владелец создаёт отдел из выбранных сотрудников", async () => {
     await boot();
     setWsMockRole("owner");
+    setState({ ws: await api.wsState() });
     setState({ section: "people" });
     fireEvent.click(await screen.findByRole("tab", { name: "Отделы" }));
     fireEvent.click(await screen.findByRole("button", { name: "Создать отдел" }));

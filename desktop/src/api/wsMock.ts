@@ -34,6 +34,8 @@ const PERM_TEXT: Record<string, string> = {
 };
 interface CustomRole { key: string; name: string; rank: number; permissions: string[] }
 const customRoles = new Map<string, CustomRole[]>();
+/** Видимость записей роли в Workspace (ADR-095): «ws:key» → scope. */
+const roleScopes = new Map<string, "all" | "department" | "own">();
 
 interface Ws { info: WorkspaceInfo; members: WsMember[]; tables: Map<string, Row[]>; prefs: Map<string, { position: number; hidden: boolean }>; conflicts: WsConflict[] }
 
@@ -226,7 +228,8 @@ function rights(ws: Ws, name: string, current: Row | undefined, fields: Record<s
     return;
   }
   if ("deleted_at" in fields && !has(ws, "records.delete")) fail("Нет прав на удаление.");
-  const own = current.created_by === ME || current.owner_id === ME || current.assignee_id === ME;
+  // Как private.can_edit на сервере (ADR-094): ответственный, исполнитель; автор — пока нет ответственного.
+  const own = current.owner_id === ME || current.assignee_id === ME || (!current.owner_id && current.created_by === ME);
   if (!has(ws, "records.edit") && !(own && has(ws, "records.edit_own")) && name !== "collections") fail("Нет прав на изменение этой записи.");
 }
 
@@ -556,7 +559,8 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       if (!TEAM) return { roles: [], catalog: [] };
       const sys = Object.keys(ROLE_PERMS).map((key) => ({ key, name: ROLE_NAME[key], rank: RANK[key], system: true, permissions: ROLE_PERMS[key] }));
       const own = (customRoles.get(ws.info.id) ?? []).map((r) => ({ ...r, system: false }));
-      return { roles: [...sys, ...own].sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0)), catalog: ALL_PERMS.map((key) => ({ key, description: PERM_TEXT[key] })) };
+      const withScope = [...sys, ...own].map((r) => ({ ...r, scope: roleScopes.get(`${ws.info.id}:${r.key}`) ?? "all" }));
+      return { roles: withScope.sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0)), catalog: ALL_PERMS.map((key) => ({ key, description: PERM_TEXT[key] })) };
     }
     case "ws_save_role": {
       if (!TEAM) return remoteOnly();
@@ -572,6 +576,17 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
       const next = { key, name: s("name").trim(), rank, permissions: perms };
       customRoles.set(ws.info.id, [...list.filter((r) => r.key !== key), next]);
       ws.members.forEach((m) => { if (m.role === key) Object.assign(m, member(m.userId, m.displayName, key, ws.info.id)); });
+      return wsCall("ws_roles", {}, leads);
+    }
+    case "ws_set_role_scope": {
+      if (!TEAM) return remoteOnly();
+      if (!has(ws, "roles.manage")) fail("Нет прав на роли.");
+      const rank = RANK[s("key")] ?? roleOf(ws.info.id, s("key"))?.rank ?? 100;
+      if (rank >= ws.info.rank) fail("Роль должна быть ниже вашей.");
+      if (ws.info.rank < 100 && ws.info.role === s("key")) fail("Свою роль менять нельзя.");
+      const scope = s("scope") as "all" | "department" | "own";
+      if (!["all", "department", "own"].includes(scope)) fail("Неизвестная видимость.");
+      roleScopes.set(`${ws.info.id}:${s("key")}`, scope);
       return wsCall("ws_roles", {}, leads);
     }
     case "ws_delete_role": {

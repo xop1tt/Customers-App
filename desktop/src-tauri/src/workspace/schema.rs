@@ -62,7 +62,7 @@ pub struct Entity {
 
 use Kind::*;
 
-const COMMON_OWNED: [Field; 3] = [w("owner_id", Uuid, 36), w("archived_at", Ts, 40), w("deleted_at", Ts, 40)];
+const COMMON_OWNED: [Field; 4] = [w("owner_id", Uuid, 36), w("archived_at", Ts, 40), w("deleted_at", Ts, 40), w("department_id", Uuid, 36)];
 
 pub static COMPANIES: Entity = Entity {
     table: "companies",
@@ -72,6 +72,7 @@ pub static COMPANIES: Entity = Entity {
         COMMON_OWNED[0],
         COMMON_OWNED[1],
         COMMON_OWNED[2],
+        COMMON_OWNED[3],
         w("name", Text, 300),
         w("legal_name", Text, 300),
         w("inn", Text, 20),
@@ -100,6 +101,7 @@ pub static CONTACTS: Entity = Entity {
         COMMON_OWNED[0],
         COMMON_OWNED[1],
         COMMON_OWNED[2],
+        COMMON_OWNED[3],
         w("company_id", Uuid, 36),
         w("first_name", Text, 120),
         w("last_name", Text, 120),
@@ -126,6 +128,7 @@ pub static CRM_LEADS: Entity = Entity {
         COMMON_OWNED[0],
         COMMON_OWNED[1],
         COMMON_OWNED[2],
+        COMMON_OWNED[3],
         w("title", Text, 500),
         w("person_name", Text, 240),
         w("company_name", Text, 300),
@@ -178,6 +181,7 @@ pub static DEALS: Entity = Entity {
         COMMON_OWNED[0],
         COMMON_OWNED[1],
         COMMON_OWNED[2],
+        COMMON_OWNED[3],
         w("pipeline_id", Uuid, 36),
         w("stage_id", Uuid, 36),
         w("title", Text, 300),
@@ -214,6 +218,7 @@ pub static TASKS: Entity = Entity {
         w("title", Text, 300),
         w("description", Text, 20000),
         w("assignee_id", Uuid, 36),
+        w("department_id", Uuid, 36),
         w("due_at", Ts, 40),
         w("remind_at", Ts, 40),
         w("priority", Text, 10),
@@ -448,6 +453,7 @@ mod tests {
             include_str!("../../../../supabase/migrations/20261110120400_collections.sql"),
             include_str!("../../../../supabase/migrations/20261110130100_custom_fields.sql"),
             include_str!("../../../../supabase/migrations/20261110130300_attachments.sql"),
+            include_str!("../../../../supabase/migrations/20261121130000_departments.sql"),
         ]
         .concat();
         for e in ENTITIES {

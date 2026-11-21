@@ -482,6 +482,26 @@ pub async fn ws_save_role(core: C<'_>, key: String, name: String, rank: i64, per
     core.inner().ws_save_role(&key, &name, rank, permissions).await
 }
 #[tauri::command]
+pub async fn ws_set_role_scope(core: C<'_>, key: String, scope: String) -> CmdResult<Value> {
+    core.inner().ws_set_role_scope(&key, &scope).await
+}
+#[tauri::command]
+pub async fn ws_departments(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_departments().await
+}
+#[tauri::command]
+pub async fn ws_save_department(core: C<'_>, id: Option<String>, name: String, parent: Option<String>, head: Option<String>) -> CmdResult<Value> {
+    core.inner().ws_save_department(id, &name, parent, head).await
+}
+#[tauri::command]
+pub async fn ws_delete_department(core: C<'_>, id: String) -> CmdResult<()> {
+    core.inner().ws_delete_department(&id).await
+}
+#[tauri::command]
+pub async fn ws_set_member_department(core: C<'_>, user: String, department: Option<String>) -> CmdResult<()> {
+    core.inner().ws_set_member_department(&user, department).await
+}
+#[tauri::command]
 pub async fn ws_delete_role(core: C<'_>, key: String) -> CmdResult<Value> {
     core.inner().ws_delete_role(&key).await
 }

@@ -46,6 +46,10 @@ private.can_edit_entity(ws uuid, type text, id uuid) → boolean   -- can_edit �
 | update | `using (private.can_edit(workspace_id, created_by, owner_id, assignee_id))`, `with check (private.can_write(workspace_id))` — ответственный может передать запись коллеге; триггер запрещает менять `workspace_id`, `id`, `created_*` |
 | delete (физический) | политики нет — только мягкое удаление полем `deleted_at` (требует `records.delete`, проверяет триггер) |
 
+Видимость записей (ADR-095): select-политики компаний, контактов, лидов, сделок и задач — `private.can_see(ws, department_id,
+created_by, owner_id, assignee_id)` по `role_scopes` (`all` / `department` / `own`), дочерние записи — `private.can_see_entity`
+по карточке. Журнал `crm_scope_events` (только id) нужен устройствам, чтобы удалить ставшие невидимыми записи.
+
 Особые таблицы: `collections` (личные видит только автор: `visibility = 'workspace' or owner_id = auth.uid()`),
 `custom_field_values` и `deal_contacts` (запись — по `can_edit_entity` карточки, ADR-094), `sync_conflicts`
 (конфликты личных коллекций видит только их участник), `audit_log` (select — `audit.view`, insert — только definer-функции), `workspace_members` / `roles` / приглашения

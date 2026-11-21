@@ -2,7 +2,7 @@
 // Повторяет правила сервера (миграция 20261110170000_team_chat.sql), которые видны в интерфейсе: права на группы,
 // упоминания по имени и почте, непрочитанное, курсор опроса. Без `?team` — локальное рабочее пространство: только вы, чата нет.
 
-import type { AppNotification, ChatConversation, ChatMessage, TeamMember, WsMember, ChatAttachment } from "./types";
+import type { AppNotification, ChatConversation, ChatMessage, Department, TeamMember, WsMember, ChatAttachment } from "./types";
 
 export interface TeamCtx { team: boolean; me: string; myName: string; myAvatar: string | null; wsId: string; members: WsMember[]; perms: string[] }
 
@@ -17,6 +17,8 @@ const iso = (minAgo = 0) => new Date(Date.now() - minAgo * 60_000).toISOString()
 const fail = (message: string, code = ""): never => { throw { code, message }; };
 
 const profiles = new Map<string, Profile>();
+/** Отделы как на сервере (ADR-095): дерево, руководитель; отдел сотрудника — по названию в карточке. */
+const depts: Department[] = [];
 const convs: Conv[] = [];
 const msgs: Msg[] = [];
 const notes: (AppNotification & { user: string; ws: string })[] = [];
@@ -28,7 +30,7 @@ const G = "00000000-0000-4000-8000-000000000004";
 
 /** Сбросить демо-данные (тесты). */
 export function resetChatMock() {
-  profiles.clear(); convs.length = 0; msgs.length = 0; notes.length = 0; seeded = ""; seq = 100;
+  profiles.clear(); depts.length = 0; convs.length = 0; msgs.length = 0; notes.length = 0; seeded = ""; seq = 100;
 }
 
 function nameOf(ctx: TeamCtx, id: string | null): string {
@@ -46,6 +48,7 @@ function seed(ctx: TeamCtx) {
   profiles.set(ctx.me, { title: "Руководитель группы", department: "Продажи", manager_id: B, hired_on: year("2021") });
   profiles.set(V, { title: "Менеджер по продажам", department: "Продажи", manager_id: ctx.me, hired_on: year("2023") });
   profiles.set(G, { title: "Менеджер по продажам", department: "Продажи", manager_id: ctx.me, hired_on: year("2024") });
+  depts.push({ id: nid(), name: "Продажи", parent_id: null, head_id: B, position: 0 });
   const direct = conv(ctx, "direct", null, [ctx.me, B], B, 90);
   post(direct, B, "Алексей, привет! Как дела со сделкой «Северный ветер»?", 60);
   post(direct, ctx.me, "Отправил предложение, жду ответа.", 50);
@@ -99,6 +102,55 @@ export function mentionedIn(text: string, people: { id: string; name: string; em
   return people.filter((p) => low.includes(p.email.toLowerCase()) || (p.name.trim().length >= 2 && low.includes(`@${p.name.trim().toLowerCase()}`))).map((p) => p.id);
 }
 
+const depByName = (name: string) => (name.trim() ? depts.find((d) => d.name.toLowerCase() === name.trim().toLowerCase()) : undefined);
+/** Как триггер сервера: отдел, присланный текстом, находится по названию или создаётся. */
+function ensureDept(name: string) {
+  if (name.trim() && !depByName(name)) depts.push({ id: nid(), name: name.trim(), parent_id: null, head_id: null, position: depts.length });
+}
+
+function departmentCall(cmd: string, args: Record<string, unknown>, ctx: TeamCtx): unknown {
+  if (!ctx.team) return cmd === "ws_departments" ? [] : fail("Отделы доступны в облачном рабочем пространстве.");
+  seed(ctx);
+  if (cmd === "ws_departments") return depts.map((d) => ({ ...d }));
+  const manage = ctx.perms.includes("members.manage");
+  if (cmd === "ws_set_member_department") {
+    const target = directory(ctx).find((m) => m.user_id === args.user) ?? fail("Участник не найден.");
+    if (!target.can_edit) fail("Нет прав на карточку сотрудника.");
+    const d = args.department ? depts.find((x) => x.id === args.department) ?? fail("Отдел не найден.") : null;
+    const cur = profiles.get(target.user_id) ?? { title: "", department: "", manager_id: null, hired_on: null };
+    profiles.set(target.user_id, { ...cur, department: d?.name ?? "" });
+    return null;
+  }
+  if (!manage) fail("Отделы меняет тот, у кого есть право управлять участниками.");
+  if (cmd === "ws_save_department") {
+    const name = String(args.name ?? "").trim();
+    if (!name) fail("Название отдела — от 1 до 120 символов.");
+    const id = (args.id as string | null) ?? null;
+    if (depts.some((d) => d.id !== id && d.name.toLowerCase() === name.toLowerCase())) fail("Такой отдел уже есть.");
+    const parent = (args.parent as string | null) ?? null;
+    for (let w = parent, i = 0; w && i < 60; w = depts.find((d) => d.id === w)?.parent_id ?? null, i++) if (w === id) fail("Так получится замкнутый круг отделов.");
+    const head = (args.head as string | null) ?? null;
+    if (id) {
+      const d = depts.find((x) => x.id === id) ?? fail("Отдел не найден.");
+      profiles.forEach((p) => { if (p.department.toLowerCase() === d.name.toLowerCase()) p.department = name; });
+      Object.assign(d, { name, parent_id: parent, head_id: head });
+      return { id };
+    }
+    const d = { id: nid(), name, parent_id: parent, head_id: head, position: depts.length };
+    depts.push(d);
+    return { id: d.id };
+  }
+  if (cmd === "ws_delete_department") {
+    const d = depts.find((x) => x.id === args.id) ?? fail("Отдел не найден.");
+    const parent = depts.find((x) => x.id === d.parent_id);
+    depts.forEach((x) => { if (x.parent_id === d.id) x.parent_id = d.parent_id; });
+    profiles.forEach((p) => { if (p.department.toLowerCase() === d.name.toLowerCase()) p.department = parent?.name ?? ""; });
+    depts.splice(depts.indexOf(d), 1);
+    return null;
+  }
+  return fail(`Неизвестная команда ${cmd}`);
+}
+
 function directory(ctx: TeamCtx): TeamMember[] {
   if (!ctx.team) {
     return [{ user_id: ctx.me, display_name: ctx.myName, avatar: ctx.myAvatar, email: null, role: "owner", role_name: "Владелец", rank: 100, joined_at: null, title: "", department: "", manager_id: null, hired_on: null, last_seen: null, online: true, can_edit: false }];
@@ -110,7 +162,8 @@ function directory(ctx: TeamCtx): TeamMember[] {
     const online = m.userId === ctx.me || i % 2 === 1;
     return {
       user_id: m.userId, display_name: m.userId === ctx.me ? ctx.myName : m.displayName, avatar: m.userId === ctx.me ? ctx.myAvatar : null, email: emailOf(ctx, m.userId),
-      role: m.role, role_name: m.roleName, rank: m.rank, joined_at: "2024-01-15T09:00:00Z", title: p.title, department: p.department, manager_id: p.manager_id,
+      role: m.role, role_name: m.roleName, rank: m.rank, joined_at: "2024-01-15T09:00:00Z", title: p.title, department: p.department,
+      department_id: depByName(p.department)?.id ?? null, manager_id: p.manager_id,
       hired_on: p.hired_on ?? "2024-01-15", last_seen: online ? iso(0) : iso(180), online,
       can_edit: (ctx.perms.includes("members.manage") || ctx.perms.includes("invitations.manage")) && (m.rank < myRank || (m.userId === ctx.me && ctx.perms.includes("members.manage"))),
     };
@@ -119,6 +172,7 @@ function directory(ctx: TeamCtx): TeamMember[] {
 
 export function teamCall(cmd: string, args: Record<string, unknown>, ctx: TeamCtx): unknown {
   if (cmd === "ws_team") return directory(ctx);
+  if (cmd.includes("department")) return departmentCall(cmd, args, ctx);
   if (cmd === "ws_chat_poll") {
     if (!ctx.team) return { cursor: 0, unread: {}, fresh: [], notifications: [], freshNotifications: [], available: false };
     seed(ctx);
@@ -135,6 +189,7 @@ export function teamCall(cmd: string, args: Record<string, unknown>, ctx: TeamCt
     const cur = profiles.get(target.user_id) ?? { title: "", department: "", manager_id: null, hired_on: null };
     if (f.managerId === target.user_id) fail("Сотрудник не может быть своим руководителем.");
     for (let w = f.managerId ?? null, i = 0; w && i < 100; w = profiles.get(w)?.manager_id ?? null, i++) if (w === target.user_id) fail("Так получится замкнутый круг руководителей.");
+    if (f.department !== undefined) ensureDept(f.department);
     profiles.set(target.user_id, {
       title: f.title?.trim() ?? cur.title, department: f.department?.trim() ?? cur.department,
       manager_id: f.managerId === undefined ? cur.manager_id : f.managerId, hired_on: f.hiredOn === undefined ? cur.hired_on : f.hiredOn,
