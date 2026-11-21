@@ -5,8 +5,8 @@
 //!
 //! Интерфейс получает настройки одним объектом и присылает изменения частью объекта (`patch`).
 
+use crate::time::Timestamp;
 use crate::util::{format_date, parse_date};
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -154,7 +154,7 @@ impl DevicePrefs {
         }
     }
 
-    pub fn last_update_check(&self) -> Option<DateTime<Utc>> {
+    pub fn last_update_check(&self) -> Option<Timestamp> {
         self.last_update_check.as_deref().and_then(parse_date)
     }
 }
@@ -415,7 +415,7 @@ mod tests {
         assert!(!p.nav_open && p.compact_rows);
         // Устаревший ключ `rememberedUser` в старом файле не мешает загрузке.
         assert_eq!((p.last_section.as_str(), p.list_sort.as_str()), ("favorites", "score"));
-        assert_eq!(p.last_update_check().unwrap().timestamp(), 1_793_871_720);
+        assert_eq!(p.last_update_check().unwrap().as_second(), 1_793_871_720);
     }
 
     #[test]

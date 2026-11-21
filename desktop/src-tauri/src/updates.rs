@@ -3,8 +3,8 @@
 //! Сетевые вызовы идут через `HttpTransport`, поэтому вся логика проверяется тестами без интернета.
 
 use crate::search::http::{HttpRequest, HttpTransport, SearchError, Sleeper};
+use crate::time::Timestamp;
 use crate::util::{format_date, parse_date, AppVersion};
-use chrono::{DateTime, Duration, Utc};
 use fancy_regex::Regex as FRegex;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -133,7 +133,7 @@ impl ReleaseInfo {
     pub fn parse(data: &[u8]) -> Option<Self> {
         serde_json::from_slice(data).ok()
     }
-    pub fn published_date(&self) -> Option<DateTime<Utc>> {
+    pub fn published_date(&self) -> Option<Timestamp> {
         self.published_at.as_deref().and_then(parse_date)
     }
     /// Название для списка: «Customers 1.1.0» или тег, если названия нет.
@@ -486,24 +486,24 @@ pub fn normalized_interval(hours: Option<i64>) -> u32 {
 
 /// Пора ли проверять обновления. Небольшой запас, чтобы проверка «раз в час» не сдвигалась на следующий тик;
 /// после неудачи повторяем не чаще раза в час.
-pub fn should_check(automatic: bool, interval_hours: u32, last_check: Option<DateTime<Utc>>, last_attempt: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
+pub fn should_check(automatic: bool, interval_hours: u32, last_check: Option<Timestamp>, last_attempt: Option<Timestamp>, now: Timestamp) -> bool {
     if !automatic {
         return false;
     }
     if let Some(l) = last_check {
-        if now - l < Duration::seconds(i64::from(interval_hours) * 3600 - 300) {
+        if now.duration_since(l) < crate::time::secs(i64::from(interval_hours) * 3600 - 300) {
             return false;
         }
     }
     if let Some(a) = last_attempt {
-        if now - a < Duration::seconds(3600 - 300) {
+        if now.duration_since(a) < crate::time::secs(3600 - 300) {
             return false;
         }
     }
     true
 }
 
-pub fn stamp(d: &DateTime<Utc>) -> String {
+pub fn stamp(d: &Timestamp) -> String {
     format_date(d)
 }
 
@@ -727,7 +727,7 @@ mod tests {
         p.prerelease = true;
         let list = recent(vec![d, p, full_release("v1.2.0"), full_release("v1.1.0"), full_release("v1.0.0")], 2);
         assert_eq!(list.iter().map(|r| r.tag_name.as_str()).collect::<Vec<_>>(), ["v1.2.0", "v1.1.0"]);
-        assert_eq!(full_release("v1.0.0").published_date().unwrap().timestamp(), 1_793_871_720);
+        assert_eq!(full_release("v1.0.0").published_date().unwrap().as_second(), 1_793_871_720);
     }
 
     #[tokio::test]
@@ -837,13 +837,13 @@ mod tests {
 
     #[test]
     fn check_schedule() {
-        let now = Utc::now();
+        let now = crate::time::now();
         assert!(!should_check(false, 24, None, None, now));
         assert!(should_check(true, 24, None, None, now));
-        assert!(!should_check(true, 24, Some(now - Duration::hours(23)), None, now));
-        assert!(should_check(true, 24, Some(now - Duration::hours(25)), None, now));
-        assert!(should_check(true, 1, Some(now - Duration::minutes(56)), None, now), "запас на тик таймера");
-        assert!(!should_check(true, 1, Some(now - Duration::hours(3)), Some(now - Duration::minutes(10)), now), "после неудачи — не чаще раза в час");
+        assert!(!should_check(true, 24, Some(now - crate::time::hours(23)), None, now));
+        assert!(should_check(true, 24, Some(now - crate::time::hours(25)), None, now));
+        assert!(should_check(true, 1, Some(now - crate::time::minutes(56)), None, now), "запас на тик таймера");
+        assert!(!should_check(true, 1, Some(now - crate::time::hours(3)), Some(now - crate::time::minutes(10)), now), "после неудачи — не чаще раза в час");
         assert_eq!(normalized_interval(Some(6)), 6);
         assert_eq!(normalized_interval(Some(5)), 24);
         assert_eq!(normalized_interval(None), 24);

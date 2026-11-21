@@ -12,8 +12,8 @@ use super::query::{Filter, Query, Sort, MAX_LIMIT};
 use super::schema;
 use super::store::WorkspaceStore;
 use crate::error::{AppError, AppResult};
+use crate::time::{CivilDateTime, Date, TimeZone};
 use crate::tray_text::Lang;
-use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Timelike};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -221,8 +221,8 @@ pub enum Cell {
     Empty,
     Text(String),
     Num(f64),
-    Date(NaiveDate),
-    Time(NaiveDateTime),
+    Date(Date),
+    Time(CivilDateTime),
 }
 
 impl Cell {
@@ -244,13 +244,13 @@ pub struct Sheet {
 }
 
 /// Момент времени из базы (RFC 3339, UTC) во времени пользователя, с точностью до минуты.
-fn to_naive<Tz: TimeZone>(v: &str, tz: &Tz) -> Option<NaiveDateTime> {
-    let t = DateTime::parse_from_rfc3339(v).ok()?.with_timezone(tz).naive_local();
-    t.with_second(0).and_then(|t| t.with_nanosecond(0))
+fn to_naive(v: &str, tz: &TimeZone) -> Option<CivilDateTime> {
+    let t = crate::time::civil_in(crate::time::parse_rfc3339(v)?, tz);
+    t.with().second(0).subsec_nanosecond(0).build().ok()
 }
 
-fn date(v: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(v.get(..10)?, "%Y-%m-%d").ok()
+fn date(v: &str) -> Option<Date> {
+    crate::time::parse_ymd(v.get(..10)?)
 }
 
 fn list_text(v: &Value) -> String {
@@ -323,10 +323,10 @@ fn all_rows(store: &WorkspaceStore, table: &str, query: &Query) -> AppResult<Vec
 
 /// Таблица для файла: выбранные колонки в порядке описания сущности, свои поля — после них.
 pub fn build(store: &WorkspaceStore, table: &str, query: &Query, keys: &[String], lang: Lang) -> AppResult<Sheet> {
-    build_in(store, table, query, keys, lang, &Local)
+    build_in(store, table, query, keys, lang, &crate::time::local_zone())
 }
 
-fn build_in<Tz: TimeZone>(store: &WorkspaceStore, table: &str, query: &Query, keys: &[String], lang: Lang, tz: &Tz) -> AppResult<Sheet> {
+fn build_in(store: &WorkspaceStore, table: &str, query: &Query, keys: &[String], lang: Lang, tz: &TimeZone) -> AppResult<Sheet> {
     if !store.can("records.export") {
         return Err(err("Недостаточно прав для экспорта записей."));
     }
@@ -432,8 +432,8 @@ fn cell_text(c: &Cell, lang: Lang) -> String {
         Cell::Empty => String::new(),
         Cell::Text(s) => s.clone(),
         Cell::Num(n) => number_text(*n, lang),
-        Cell::Date(d) => d.format("%d.%m.%Y").to_string(),
-        Cell::Time(t) => t.format("%d.%m.%Y %H:%M").to_string(),
+        Cell::Date(d) => d.strftime("%d.%m.%Y").to_string(),
+        Cell::Time(t) => t.strftime("%d.%m.%Y %H:%M").to_string(),
     }
 }
 
@@ -496,9 +496,9 @@ fn column_name(mut i: usize) -> String {
 }
 
 /// Дата и время как число Excel: дни от 30.12.1899 и доля суток.
-fn serial(t: &NaiveDateTime) -> f64 {
-    let base = NaiveDate::from_ymd_opt(1899, 12, 30).unwrap_or_default().and_hms_opt(0, 0, 0).unwrap_or_default();
-    (*t - base).num_seconds() as f64 / 86_400.0
+fn serial(t: &CivilDateTime) -> f64 {
+    let base = jiff::civil::date(1899, 12, 30).at(0, 0, 0, 0);
+    t.duration_since(base).as_secs() as f64 / 86_400.0
 }
 
 const STYLE_HEADER: u8 = 1;
@@ -541,7 +541,7 @@ fn sheet_xml(sheet: &Sheet) -> String {
                 Cell::Text(s) => text_cell(&mut x, &at, s, 0),
                 Cell::Num(v) if v.is_finite() => x.push_str(&format!(r#"<c r="{at}"><v>{v}</v></c>"#)),
                 Cell::Num(_) => {}
-                Cell::Date(d) => x.push_str(&format!(r#"<c r="{at}" s="{STYLE_DATE}"><v>{}</v></c>"#, serial(&d.and_hms_opt(0, 0, 0).unwrap_or_default()))),
+                Cell::Date(d) => x.push_str(&format!(r#"<c r="{at}" s="{STYLE_DATE}"><v>{}</v></c>"#, serial(&d.at(0, 0, 0, 0)))),
                 Cell::Time(t) => x.push_str(&format!(r#"<c r="{at}" s="{STYLE_TIME}"><v>{}</v></c>"#, serial(t))),
             }
         }
@@ -654,7 +654,6 @@ pub fn file(store: &WorkspaceStore, table: &str, query: &Query, keys: &[String],
 mod tests {
     use super::super::import;
     use super::*;
-    use chrono::FixedOffset;
     use serde_json::{json, Map};
 
     const WS: &str = "11111111-1111-4111-8111-111111111111";
@@ -854,15 +853,15 @@ mod tests {
         let k = vec!["name".to_string(), format!("cf:{vip}"), format!("cf:{seg}"), format!("cf:{since}")];
         let sheet = build(&s, "companies", &Query::default(), &k, Lang::Ru).unwrap();
         assert_eq!(sheet.headers, ["Компания", "Сегмент", "VIP", "Клиент с"], "свои поля — в порядке настройки");
-        assert_eq!(sheet.rows[0][1..], [Cell::Text("B".into()), Cell::Text("да".into()), Cell::Date(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap())]);
+        assert_eq!(sheet.rows[0][1..], [Cell::Text("B".into()), Cell::Text("да".into()), Cell::Date(jiff::civil::date(2024, 3, 1))]);
         assert!(build(&s, "companies", &Query::default(), &keys(&["cf:нет"]), Lang::Ru).is_err());
 
         s.save("tasks", None, &m(json!({"title": "Позвонить", "priority": "high", "assignee_id": ME, "due_at": "2026-12-01T09:30:00.000Z", "entity_type": "deal", "entity_id": deal}))).unwrap();
-        let tz = FixedOffset::east_opt(3 * 3600).unwrap();
+        let tz = TimeZone::fixed(jiff::tz::offset(3));
         let tasks =
             build_in(&s, "tasks", &Query::default(), &keys(&["title", "status", "priority", "due_at", "assignee_id", "related"]), Lang::En, &tz).unwrap();
         assert_eq!(tasks.headers, ["Task", "Status", "Priority", "Due", "Assignee", "Related to"]);
-        let due = NaiveDate::from_ymd_opt(2026, 12, 1).unwrap().and_hms_opt(12, 30, 0).unwrap();
+        let due = jiff::civil::date(2026, 12, 1).at(12, 30, 0, 0);
         assert_eq!(
             tasks.rows[0],
             [
@@ -881,13 +880,13 @@ mod tests {
     #[test]
     fn numbers_dates_and_column_names() {
         assert_eq!((number_text(120000.0, Lang::Ru), number_text(1.5, Lang::Ru), number_text(1.5, Lang::En)), ("120000".into(), "1,5".into(), "1.5".into()));
-        assert_eq!(cell_text(&Cell::Date(NaiveDate::from_ymd_opt(2026, 12, 15).unwrap()), Lang::Ru), "15.12.2026");
-        assert_eq!(serial(&NaiveDate::from_ymd_opt(2026, 1, 1).unwrap().and_hms_opt(12, 0, 0).unwrap()), 46023.5);
+        assert_eq!(cell_text(&Cell::Date(jiff::civil::date(2026, 12, 15)), Lang::Ru), "15.12.2026");
+        assert_eq!(serial(&jiff::civil::date(2026, 1, 1).at(12, 0, 0, 0)), 46023.5);
         assert_eq!(
             [column_name(0), column_name(25), column_name(26), column_name(27), column_name(701), column_name(702)],
             ["A", "Z", "AA", "AB", "ZZ", "AAA"]
         );
-        assert_eq!(to_naive("2026-06-30T22:15:42.123Z", &FixedOffset::east_opt(5 * 3600).unwrap()).unwrap().to_string(), "2026-07-01 03:15:00");
+        assert_eq!(to_naive("2026-06-30T22:15:42.123Z", &TimeZone::fixed(jiff::tz::offset(5))), Some(jiff::civil::date(2026, 7, 1).at(3, 15, 0, 0)));
     }
 
     #[test]

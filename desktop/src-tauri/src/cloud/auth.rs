@@ -8,7 +8,7 @@ use crate::cloud::config::CloudConfig;
 use crate::cloud::error::{CloudError, CloudResult};
 use crate::cloud::validation;
 use crate::search::http::{HttpRequest, HttpTransport};
-use chrono::{DateTime, Duration, TimeZone, Utc};
+use crate::time::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -50,20 +50,20 @@ impl CloudUser {
 pub struct CloudSession {
     pub access_token: String,
     pub refresh_token: String,
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     pub user: CloudUser,
 }
 
 impl CloudSession {
-    pub fn expires_soon(&self, now: DateTime<Utc>, margin_secs: i64) -> bool {
-        self.expires_at - now < Duration::seconds(margin_secs)
+    pub fn expires_soon(&self, now: Timestamp, margin_secs: i64) -> bool {
+        self.expires_at.duration_since(now) < crate::time::secs(margin_secs)
     }
 
     pub fn to_json(&self) -> String {
         json!({
             "accessToken": self.access_token,
             "refreshToken": self.refresh_token,
-            "expiresAt": self.expires_at.timestamp(),
+            "expiresAt": self.expires_at.as_second(),
             "user": self.user,
         })
         .to_string()
@@ -79,7 +79,7 @@ impl CloudSession {
         let expires_at = if let Some(n) = exp.as_f64() {
             // Секунды от 2001-01-01 (≈ 8·10^8) отличаются от unix-времени (≈ 1.7·10^9).
             let unix = if n < 1.5e9 { n + 978_307_200.0 } else { n };
-            Utc.timestamp_opt(unix as i64, 0).single()?
+            crate::time::from_unix(unix as i64)?
         } else {
             crate::util::parse_date(exp.as_str()?)?
         };
@@ -230,8 +230,8 @@ impl CloudAuth {
         let refresh = v.get("refresh_token").and_then(Value::as_str).ok_or_else(bad)?;
         let user: CloudUser = serde_json::from_value(v.get("user").cloned().unwrap_or(Value::Null)).map_err(|_| bad())?;
         let exp = match v.get("expires_at").and_then(Value::as_f64) {
-            Some(t) => Utc.timestamp_opt(t as i64, 0).single().unwrap_or_else(Utc::now),
-            None => Utc::now() + Duration::seconds(v.get("expires_in").and_then(Value::as_f64).unwrap_or(3600.0) as i64),
+            Some(t) => crate::time::from_unix(t as i64).unwrap_or_else(crate::time::now),
+            None => crate::time::now() + crate::time::secs(v.get("expires_in").and_then(Value::as_f64).unwrap_or(3600.0) as i64),
         };
         let s = CloudSession { access_token: access.into(), refresh_token: refresh.into(), expires_at: exp, user };
         self.set_session(Some(s.clone()));
@@ -309,7 +309,7 @@ impl CloudAuth {
     /// Действующая сессия: при скором истечении токен обновляется.
     pub async fn valid_session(&self) -> CloudResult<CloudSession> {
         let s = self.session().ok_or(CloudError::SessionExpired)?;
-        if !s.expires_soon(Utc::now(), 60) {
+        if !s.expires_soon(crate::time::now(), 60) {
             return Ok(s);
         }
         self.refresh().await
@@ -320,7 +320,7 @@ impl CloudAuth {
         let before = self.session().ok_or(CloudError::SessionExpired)?;
         let _guard = self.refresh_lock.lock().await;
         if let Some(now) = self.session() {
-            if now.refresh_token != before.refresh_token && !now.expires_soon(Utc::now(), 60) {
+            if now.refresh_token != before.refresh_token && !now.expires_soon(crate::time::now(), 60) {
                 return Ok(now); // пока мы ждали, другой вызов уже обновил токен
             }
         }
@@ -496,8 +496,8 @@ impl CloudAuth {
             let exp = params
                 .get("expires_at")
                 .and_then(|v| v.parse::<f64>().ok())
-                .and_then(|t| Utc.timestamp_opt(t as i64, 0).single())
-                .unwrap_or_else(|| Utc::now() + Duration::seconds(params.get("expires_in").and_then(|v| v.parse::<i64>().ok()).unwrap_or(3600)));
+                .and_then(|t| crate::time::from_unix(t as i64))
+                .unwrap_or_else(|| crate::time::now() + crate::time::secs(params.get("expires_in").and_then(|v| v.parse::<i64>().ok()).unwrap_or(3600)));
             self.set_session(Some(CloudSession { access_token: access.clone(), refresh_token: refresh.clone(), expires_at: exp, user: CloudUser::default() }));
             if let Err(e) = self.reload_user().await {
                 self.set_session(None);
@@ -620,7 +620,7 @@ pub mod tests {
         store.save(Some(&CloudSession {
             access_token: "a1".into(),
             refresh_token: "r1".into(),
-            expires_at: Utc::now() + Duration::seconds(10),
+            expires_at: crate::time::now() + crate::time::secs(10),
             user: CloudUser { id: "u1".into(), email: "me@example.com".into(), ..Default::default() },
         }));
         let auth = CloudAuth::new(config(), server.clone(), store.clone(), "d".into());
@@ -639,7 +639,7 @@ pub mod tests {
         store.save(Some(&CloudSession {
             access_token: "a".into(),
             refresh_token: "r".into(),
-            expires_at: Utc::now() - Duration::seconds(5),
+            expires_at: crate::time::now() - crate::time::secs(5),
             user: CloudUser::default(),
         }));
         let auth = CloudAuth::new(config(), server, store.clone(), "d".into());
@@ -657,7 +657,7 @@ pub mod tests {
         store.save(Some(&CloudSession {
             access_token: "a1".into(),
             refresh_token: "r1".into(),
-            expires_at: Utc::now() + Duration::hours(1),
+            expires_at: crate::time::now() + crate::time::hours(1),
             user: CloudUser::default(),
         }));
         let auth = CloudAuth::new(config(), server.clone(), store, "d".into());
@@ -670,7 +670,7 @@ pub mod tests {
         store.save(Some(&CloudSession {
             access_token: "a1".into(),
             refresh_token: "r1".into(),
-            expires_at: Utc::now() + Duration::hours(1),
+            expires_at: crate::time::now() + crate::time::hours(1),
             user: CloudUser::default(),
         }));
         let auth = CloudAuth::new(config(), server, store.clone(), "d".into());
@@ -744,11 +744,11 @@ pub mod tests {
         let user = json!({"id":"u","email":"a@b.cd"});
         // Swift: секунды от 2001-01-01
         let swift = json!({"accessToken":"a","refreshToken":"r","expiresAt": 800_000_000.5, "user": user}).to_string();
-        assert_eq!(CloudSession::from_json(&swift).unwrap().expires_at.timestamp(), 1_778_307_200);
+        assert_eq!(CloudSession::from_json(&swift).unwrap().expires_at.as_second(), 1_778_307_200);
         let unix = json!({"accessToken":"a","refreshToken":"r","expiresAt": 1_900_000_000, "user": user}).to_string();
-        assert_eq!(CloudSession::from_json(&unix).unwrap().expires_at.timestamp(), 1_900_000_000);
+        assert_eq!(CloudSession::from_json(&unix).unwrap().expires_at.as_second(), 1_900_000_000);
         let iso = json!({"accessToken":"a","refreshToken":"r","expiresAt":"2030-01-01T00:00:00Z","user":user}).to_string();
-        assert_eq!(CloudSession::from_json(&iso).unwrap().expires_at.timestamp(), 1_893_456_000);
+        assert_eq!(CloudSession::from_json(&iso).unwrap().expires_at.as_second(), 1_893_456_000);
         assert!(CloudSession::from_json("{}").is_none());
         let s = CloudSession::from_json(&unix).unwrap();
         assert_eq!(CloudSession::from_json(&s.to_json()).unwrap(), s);

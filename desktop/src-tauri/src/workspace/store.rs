@@ -9,7 +9,7 @@ use super::query::{self, Query};
 use super::schema::{self, Class, Entity, Kind, ENTITIES, REFERENCES};
 use crate::db::{self, DbKey};
 use crate::error::{AppError, AppResult};
-use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
+use crate::time::Timestamp;
 use rusqlite::{params, types::Value as Sql, Connection, OptionalExtension};
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -39,8 +39,8 @@ pub const ALL_PERMISSIONS: [&str; 18] = [
     "audit.view",
 ];
 
-pub fn stamp(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Millis, true)
+pub fn stamp(t: Timestamp) -> String {
+    crate::time::rfc3339_millis(t)
 }
 
 pub fn new_id() -> String {
@@ -283,7 +283,7 @@ impl WorkspaceStore {
 
     pub fn list(&self, table: &str, q: &Query) -> AppResult<Vec<Value>> {
         let e = schema::entity(table).ok_or_else(|| err(format!("Неизвестная сущность: {table}")))?;
-        let (sql, args) = query::build(e, q, &self.user_id, Utc::now())?;
+        let (sql, args) = query::build(e, q, &self.user_id, crate::time::now())?;
         let mut st = self.conn.prepare(&sql)?;
         let rows = st.query_map(rusqlite::params_from_iter(args.iter()), |r| Ok(row_json(e, r)))?;
         Ok(rows.collect::<Result<_, _>>()?)
@@ -291,7 +291,7 @@ impl WorkspaceStore {
 
     pub fn count(&self, table: &str, q: &Query) -> AppResult<i64> {
         let e = schema::entity(table).ok_or_else(|| err(format!("Неизвестная сущность: {table}")))?;
-        let (sql, args) = query::build_count(e, q, &self.user_id, Utc::now())?;
+        let (sql, args) = query::build_count(e, q, &self.user_id, crate::time::now())?;
         Ok(self.conn.query_row(&sql, rusqlite::params_from_iter(args.iter()), |r| r.get(0))?)
     }
 
@@ -370,10 +370,10 @@ impl WorkspaceStore {
 
     /// Создать (`id = None`) или изменить запись. Возвращает строку после записи.
     pub fn save(&self, table: &str, id: Option<&str>, fields: &Map<String, Value>) -> AppResult<Value> {
-        self.save_at(table, id, fields, Utc::now())
+        self.save_at(table, id, fields, crate::time::now())
     }
 
-    pub fn save_at(&self, table: &str, id: Option<&str>, fields: &Map<String, Value>, now: DateTime<Utc>) -> AppResult<Value> {
+    pub fn save_at(&self, table: &str, id: Option<&str>, fields: &Map<String, Value>, now: Timestamp) -> AppResult<Value> {
         let e = schema::entity(table).ok_or_else(|| err(format!("Неизвестная сущность: {table}")))?;
         let id = id.map(str::to_string).unwrap_or_else(new_id);
         uuid::Uuid::parse_str(&id).map_err(|_| err("Неверный идентификатор записи."))?;
@@ -429,7 +429,7 @@ impl WorkspaceStore {
     /// Мягкое удаление (надгробие).
     pub fn delete(&self, table: &str, id: &str) -> AppResult<Value> {
         let mut m = Map::new();
-        m.insert("deleted_at".into(), json!(stamp(Utc::now())));
+        m.insert("deleted_at".into(), json!(stamp(crate::time::now())));
         self.save(table, Some(id), &m)
     }
 
@@ -556,7 +556,7 @@ impl WorkspaceStore {
             "SELECT op_id, entity, entity_id, kind, fields, ts, base_version, attempts, state, last_error FROM sync_outbox
              WHERE state='pending' AND (next_attempt_at IS NULL OR next_attempt_at <= ?1) ORDER BY seq LIMIT ?2",
         )?;
-        let rows = st.query_map(params![stamp(Utc::now()), limit as i64], op_from_row)?;
+        let rows = st.query_map(params![stamp(crate::time::now()), limit as i64], op_from_row)?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
@@ -615,7 +615,7 @@ impl WorkspaceStore {
                 let attempts: i64 = c.query_row("SELECT attempts FROM sync_outbox WHERE op_id=?1", [&o.op_id], |r| r.get(0)).unwrap_or(1);
                 let secs = (2f64 * 2f64.powi((attempts - 1).clamp(0, 20) as i32)).min(300.0);
                 let jitter = 0.8 + (uuid::Uuid::new_v4().as_u128() % 400) as f64 / 1000.0;
-                let next = Utc::now() + chrono::Duration::milliseconds((secs * jitter * 1000.0) as i64);
+                let next = crate::time::now() + crate::time::millis((secs * jitter * 1000.0) as i64);
                 c.execute("UPDATE sync_outbox SET next_attempt_at=?2, last_error=?3 WHERE op_id=?1", params![o.op_id, stamp(next), error])?;
             }
             Ok(())
@@ -793,7 +793,7 @@ impl WorkspaceStore {
     }
 
     pub fn resolve_conflict(&self, id: &str) -> AppResult<()> {
-        self.conn.execute("UPDATE conflicts SET resolved_at=?2 WHERE id=?1", params![id, stamp(Utc::now())])?;
+        self.conn.execute("UPDATE conflicts SET resolved_at=?2 WHERE id=?1", params![id, stamp(crate::time::now())])?;
         Ok(())
     }
 
@@ -1188,12 +1188,12 @@ fn check_value(e: &Entity, name: &str, kind: Kind, max_len: usize, v: &Value) ->
         Kind::Bool => json!(v.as_bool().ok_or_else(|| err(format!("Поле «{name}»: ожидается да/нет.")))?),
         Kind::Ts => {
             let s = v.as_str().ok_or_else(|| err(format!("Поле «{name}»: ожидается дата и время.")))?;
-            let t = DateTime::parse_from_rfc3339(s).map_err(|_| err(format!("Поле «{}»: неверная дата.", field_title(name))))?;
-            json!(stamp(t.with_timezone(&Utc)))
+            let t = crate::time::parse_rfc3339(s).ok_or_else(|| err(format!("Поле «{}»: неверная дата.", field_title(name))))?;
+            json!(stamp(t))
         }
         Kind::Date => {
             let s = v.as_str().ok_or_else(|| err(format!("Поле «{name}»: ожидается дата.")))?;
-            NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| err(format!("Поле «{}»: дата в виде ГГГГ-ММ-ДД.", field_title(name))))?;
+            crate::time::parse_ymd(s).ok_or_else(|| err(format!("Поле «{}»: дата в виде ГГГГ-ММ-ДД.", field_title(name))))?;
             json!(s)
         }
         Kind::Uuid => {
