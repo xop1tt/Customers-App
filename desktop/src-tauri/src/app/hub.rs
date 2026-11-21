@@ -138,6 +138,92 @@ fn api_error(status: u16, body: &[u8]) -> CmdError {
     }
 }
 
+/// Что модель принимает кроме текста. `None` — сервер не сообщил и по названию не понять: тогда файл
+/// отправляется, а если модель его не примет, пользователь увидит ответ сервера.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+pub struct AiCaps {
+    pub vision: Option<bool>,
+    pub audio: Option<bool>,
+}
+
+impl AiCaps {
+    fn known(&self) -> bool {
+        self.vision.is_some() && self.audio.is_some()
+    }
+    /// Дополняет неизвестное тем, что знает `other`; уже известное не меняется.
+    fn fill(&mut self, other: AiCaps) {
+        self.vision = self.vision.or(other.vision);
+        self.audio = self.audio.or(other.audio);
+    }
+}
+
+fn has_str(list: &[Value], words: &[&str]) -> bool {
+    list.iter().filter_map(Value::as_str).any(|x| words.iter().any(|w| x.eq_ignore_ascii_case(w)))
+}
+
+/// Возможности из описания модели, в каком бы виде его ни отдал сервер:
+/// `architecture.input_modalities` (OpenRouter и похожие), `input_modalities`, `capabilities` списком (Ollama `/api/show`)
+/// или объектом, `modalities` (llama.cpp `/props`), `type: vlm|llm` (LM Studio `/api/v0/models`).
+pub fn caps_from_meta(v: &Value) -> AiCaps {
+    let mut c = AiCaps::default();
+    for list in [v.pointer("/architecture/input_modalities"), v.get("input_modalities"), v.get("modalities")].into_iter().flatten() {
+        if let Some(a) = list.as_array() {
+            c.fill(AiCaps { vision: Some(has_str(a, &["image", "vision"])), audio: Some(has_str(a, &["audio"])) });
+        }
+    }
+    for obj in [v.get("modalities"), v.get("capabilities")].into_iter().flatten() {
+        if let Some(o) = obj.as_object() {
+            c.fill(AiCaps { vision: o.get("vision").and_then(Value::as_bool), audio: o.get("audio").and_then(Value::as_bool) });
+        }
+    }
+    if let Some(a) = v.get("capabilities").and_then(Value::as_array) {
+        c.fill(AiCaps { vision: Some(has_str(a, &["vision", "image"])), audio: Some(has_str(a, &["audio"])) });
+    }
+    match v.get("type").and_then(Value::as_str) {
+        Some("vlm") => c.fill(AiCaps { vision: Some(true), audio: Some(false) }),
+        Some("llm") => c.fill(AiCaps { vision: Some(false), audio: Some(false) }),
+        _ => {}
+    }
+    c
+}
+
+/// Догадка по названию, когда сервер ничего не сообщил. Только «да»: по названию нельзя уверенно сказать «нет».
+pub fn caps_from_name(model: &str) -> AiCaps {
+    let n = model.to_ascii_lowercase();
+    let any = |words: &[&str]| words.iter().any(|w| n.contains(w));
+    let vision = any(&[
+        "vision",
+        "-vl",
+        "_vl",
+        "vl-",
+        "llava",
+        "pixtral",
+        "minicpm-v",
+        "moondream",
+        "gemma3",
+        "gemma-3",
+        "llama4",
+        "llama-4",
+        "internvl",
+        "gpt-4o",
+        "gpt-4.1",
+        "gpt-5",
+        "gemini",
+        "claude",
+        "mistral-small-3.1",
+        "mistral-small3.1",
+        "omni",
+        "granite-vision",
+        "smolvlm",
+    ]);
+    let audio = any(&["audio", "omni", "ultravox", "voxtral", "gemma-3n", "gemma3n", "phi-4-multimodal"]);
+    AiCaps { vision: vision.then_some(true), audio: audio.then_some(true) }
+}
+
+fn server_root(base: &str) -> &str {
+    base.strip_suffix("/v1").unwrap_or(base)
+}
+
 impl Core {
     fn hub_blob(&self, s: &Session) -> Value {
         let raw = secrets::get_or_empty(self.env.secrets.as_ref(), &hub_secret_name(s));
@@ -217,6 +303,48 @@ impl Core {
         names.sort();
         names.dedup();
         Ok(names)
+    }
+
+    /// Понимает ли модель изображения и звук. Спрашивает сервер (список моделей, затем описания Ollama,
+    /// llama.cpp и LM Studio), что не узнали — угадывает по названию. Ошибки запросов не мешают: остаётся «неизвестно».
+    pub async fn ai_capabilities(&self, base_url: &str, api_key: &str, model: &str) -> CmdResult<AiCaps> {
+        self.require()?;
+        let base = ai_base(base_url)?;
+        let model = model.trim();
+        let mut caps = AiCaps::default();
+        if model.is_empty() {
+            return Ok(caps);
+        }
+        let root = server_root(&base).to_string();
+        let get = |url: String| HttpRequest { method: "GET".into(), url, headers: ai_headers(api_key), body: None, timeout: 5.0 };
+        let encoded: String = url::form_urlencoded::byte_serialize(model.as_bytes()).collect();
+        let probes: Vec<(HttpRequest, bool)> = vec![
+            (get(format!("{base}/models")), true),
+            (json_post(format!("{root}/api/show"), &json!({"model": model}), ai_headers(api_key), 5.0), false),
+            (get(format!("{root}/props")), false),
+            (get(format!("{root}/api/v0/models/{encoded}")), false),
+        ];
+        for (req, is_list) in probes {
+            if caps.known() {
+                break;
+            }
+            let Ok(r) = self.env.transport.send(req).await else { continue };
+            if !(200..300).contains(&r.status) {
+                continue;
+            }
+            let Ok(v) = serde_json::from_slice::<Value>(&r.data) else { continue };
+            let meta = if is_list {
+                let list = v.get("data").and_then(Value::as_array).or_else(|| v.get("models").and_then(Value::as_array));
+                list.and_then(|l| l.iter().find(|m| m.get("id").or_else(|| m.get("name")).and_then(Value::as_str) == Some(model)).cloned())
+            } else {
+                Some(v)
+            };
+            if let Some(m) = meta {
+                caps.fill(caps_from_meta(&m));
+            }
+        }
+        caps.fill(caps_from_name(model));
+        Ok(caps)
     }
 
     /// Системное уведомление от помощника Ai («закончил», «ждёт ответа»). Показывается, только когда окно не на виду (решает оболочка).
@@ -333,6 +461,53 @@ mod tests {
         let core = signed_in(&f);
         let cfg = json!({"token": test_token(), "chat": "@news"});
         assert!(core.hub_send("telegram", "x", Some(cfg)).await.is_err(), "Telegram отвечает 200 с ok:false");
+    }
+
+    #[test]
+    fn capabilities_are_read_from_any_known_description() {
+        let c = |v: Value| caps_from_meta(&v);
+        let yes_no = |v: bool, a: bool| AiCaps { vision: Some(v), audio: Some(a) };
+        assert_eq!(c(json!({"architecture": {"input_modalities": ["text", "image"]}})), yes_no(true, false), "OpenRouter");
+        assert_eq!(c(json!({"capabilities": ["completion", "vision", "tools"]})), yes_no(true, false), "Ollama /api/show");
+        assert_eq!(c(json!({"capabilities": ["completion", "audio"]})), yes_no(false, true));
+        assert_eq!(c(json!({"modalities": {"vision": false, "audio": true}})), yes_no(false, true), "llama.cpp /props");
+        assert_eq!(c(json!({"type": "vlm"})), yes_no(true, false), "LM Studio");
+        assert_eq!(c(json!({"type": "llm"})), yes_no(false, false));
+        assert_eq!(c(json!({"id": "x", "object": "model"})), AiCaps::default(), "обычный /models ничего не говорит");
+    }
+
+    #[test]
+    fn capabilities_guessed_by_name_only_say_yes() {
+        assert_eq!(caps_from_name("qwen2.5-vl-7b-instruct").vision, Some(true));
+        assert_eq!(caps_from_name("llama3.2-vision:11b").vision, Some(true));
+        assert_eq!(caps_from_name("Qwen2.5-Omni-7B"), AiCaps { vision: Some(true), audio: Some(true) });
+        assert_eq!(caps_from_name("voxtral-mini").audio, Some(true));
+        assert_eq!(caps_from_name("llama3.1:8b"), AiCaps::default());
+    }
+
+    #[tokio::test]
+    async fn capabilities_come_from_the_server_then_from_the_name() {
+        // Ollama: /v1/models без подробностей, /api/show знает про зрение, звук — нет.
+        let f = fixture(
+            false,
+            vec![Ok(HttpResponse::new(200, r#"{"data":[{"id":"gemma3:4b"}]}"#)), Ok(HttpResponse::new(200, r#"{"capabilities":["completion","vision"]}"#))],
+        );
+        let core = signed_in(&f);
+        let caps = core.ai_capabilities("http://localhost:11434/v1", "", "gemma3:4b").await.unwrap();
+        assert_eq!(caps, AiCaps { vision: Some(true), audio: Some(false) });
+        let reqs = f.transport.requests.lock().unwrap().clone();
+        assert_eq!(reqs.len(), 2, "всё узнали — дальше не спрашиваем");
+        assert_eq!(reqs[1].url, "http://localhost:11434/api/show");
+        // Сервер молчит (ошибки и пустые ответы): остаётся догадка по названию.
+        let f = fixture(
+            false,
+            vec![Ok(HttpResponse::new(500, "")), Ok(HttpResponse::new(404, "")), Ok(HttpResponse::new(404, "")), Ok(HttpResponse::new(404, ""))],
+        );
+        let core = signed_in(&f);
+        let caps = core.ai_capabilities("http://localhost:1234/v1", "", "qwen2-audio-7b").await.unwrap();
+        assert_eq!(caps, AiCaps { vision: None, audio: Some(true) });
+        assert_eq!(core.ai_capabilities("http://localhost:1234/v1", "", " ").await.unwrap(), AiCaps::default());
+        assert!(core.ai_capabilities("not a url", "", "m").await.is_err());
     }
 
     #[tokio::test]

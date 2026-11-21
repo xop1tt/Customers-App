@@ -5,7 +5,8 @@ import { api } from "../../api";
 import { AI_GROUPS, AI_PROVIDERS, type AiMode, type AiProvider, isLocalUrl } from "../../lib/hub";
 import { AI_TOOLS } from "../../lib/aiTools";
 import { Button, Checkbox, Group, Notice, PasswordInput, Select, SettingRow, Switch, TextArea, TextInput } from "../../ui/kit";
-import { saveAi, useHub } from "../../state/hub";
+import { saveAi, useAiCaps, useHub } from "../../state/hub";
+import type { AiCaps } from "../../api/types";
 
 const MODES: { value: AiMode; label: string; hint: string }[] = [
   { value: "writes", label: "Правки — с вопросом", hint: "Чтение и переходы без вопросов; всё, что что-то меняет, — после вашего «Выполнить»" },
@@ -13,8 +14,17 @@ const MODES: { value: AiMode; label: string; hint: string }[] = [
   { value: "safe", label: "Безопасное — без вопросов", hint: "Без вопросов: чтение, переходы, настройки и обратимые правки (избранное, архив, заметки)" },
 ];
 
+/** Что понимает модель, словами: определяется автоматически, переключателей нет. */
+export function capsText(c: AiCaps): string {
+  const has = [c.vision && "изображения", c.audio && "звук"].filter(Boolean) as string[];
+  const unknown = [c.vision === null && "изображения", c.audio === null && "звук"].filter(Boolean) as string[];
+  const main = has.length ? `Текст, ${has.join(" и ")}` : "Текст";
+  return unknown.length ? `${main}; ${unknown.join(" и ")} — не удалось узнать, файл будет отправлен на пробу` : main;
+}
+
 export function AiSection() {
   const { ai } = useHub();
+  const caps = useAiCaps();
   const [url, setUrl] = useState(ai.baseUrl);
   const [key, setKey] = useState(ai.apiKey);
   const [system, setSystem] = useState(ai.system);
@@ -73,6 +83,11 @@ export function AiSection() {
             <TextInput value={ai.model} onChange={(v) => void saveAi({ model: v })} placeholder="Название модели" aria-label="Название модели" />
           )}
         </SettingRow>
+        {ai.model && (
+          <SettingRow title="Что понимает модель" hint="Определяется автоматически по ответу сервера и названию модели. Текстовые файлы (txt, csv, json и др.) работают с любой моделью.">
+            <span className="muted" aria-label="Что понимает модель">{capsText(caps)}</span>
+          </SettingRow>
+        )}
         <SettingRow title="Указания модели" hint="Необязательно: например, «Отвечай кратко» или как называть клиентов." stack>
           <TextArea value={system} onChange={setSystem} onBlur={() => { if (system !== ai.system) void saveAi({ system }); }} rows={3} placeholder="Дополнительные указания" />
         </SettingRow>
@@ -92,12 +107,6 @@ export function AiSection() {
         ))}
         <SettingRow title="Уведомлять об Ai" hint="Сообщать, когда модель закончила или ждёт вашего ответа (подтверждения действия). Если окно не на виду — системным уведомлением, если вы в другом разделе при закрытом чате — подсказкой. Пока чат открыт перед вами, уведомлений нет.">
           <Switch checked={ai.notify} onChange={(v) => void saveAi({ notify: v })} label="Уведомлять, когда модель закончила или требует ответа" />
-        </SettingRow>
-        <SettingRow title="Модель понимает изображения" hint="Включите, если выбрана мультимодальная модель (например, с «vision»): тогда в чат можно прикладывать картинки. Текстовые файлы (txt, csv, json и др.) работают с любой моделью.">
-          <Switch checked={ai.vision} onChange={(v) => void saveAi({ vision: v })} label="Модель понимает изображения" />
-        </SettingRow>
-        <SettingRow title="Модель понимает звук" hint="Для моделей с приёмом аудио: можно прикладывать файлы wav и mp3.">
-          <Switch checked={ai.audio} onChange={(v) => void saveAi({ audio: v })} label="Модель понимает звук" />
         </SettingRow>
         <SettingRow title="Шагов за один ответ" hint="Сколько действий модель может выполнить подряд, прежде чем остановится.">
           <Select width={120} value={String(ai.maxSteps)} label="Предел шагов" options={["2", "4", "6", "8", "12"].map((v) => ({ value: v, label: v }))} onChange={(v) => void saveAi({ maxSteps: Number(v) })} />

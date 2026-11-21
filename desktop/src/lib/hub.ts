@@ -18,10 +18,6 @@ export interface AiConfig {
   maxSteps: number;
   /** Какие группы действий разрешены модели. */
   allow: AiGroup[];
-  /** Модель понимает изображения (можно прикладывать картинки к сообщению). */
-  vision: boolean;
-  /** Модель понимает звук (wav, mp3). */
-  audio: boolean;
   /** Уведомлять, когда модель закончила или ждёт ответа (подтверждения действия), если чат Ai сейчас не на виду. */
   notify: boolean;
 }
@@ -44,10 +40,11 @@ export const AI_PROVIDERS: { id: AiProvider; title: string; url: string; hint: s
 
 export const defaultAi = (): AiConfig => ({
   enabled: true, provider: "lmstudio", baseUrl: AI_PROVIDERS[0]!.url, model: "", apiKey: "", mode: "writes", system: "", temperature: 0.2, maxSteps: 6,
-  allow: ["read", "navigate", "settings", "data"], vision: false, audio: false, notify: true,
+  allow: ["read", "navigate", "settings", "data"], notify: true,
 });
 
-/** Сохранённые настройки. Поле `integrations` старых версий (адреса вебхуков и токены мессенджеров) при первом сохранении стирается. */
+/** Сохранённые настройки. Поля `vision` и `audio` старых версий (переключатели «модель понимает…») больше не читаются:
+ * это определяется автоматически. Поле `integrations` старых версий (адреса вебхуков и токены мессенджеров) при первом сохранении стирается. */
 export interface HubConfig { ai: AiConfig }
 
 export function normalizeHub(raw: unknown): HubConfig {
@@ -65,8 +62,6 @@ export function normalizeHub(raw: unknown): HubConfig {
     temperature: typeof a.temperature === "number" ? Math.min(2, Math.max(0, a.temperature)) : d.temperature,
     maxSteps: typeof a.maxSteps === "number" ? Math.min(12, Math.max(1, Math.round(a.maxSteps))) : d.maxSteps,
     allow: Array.isArray(a.allow) ? a.allow.filter((g): g is AiGroup => AI_GROUPS.some((x) => x.id === g)) : d.allow,
-    vision: a.vision === true,
-    audio: a.audio === true,
     notify: a.notify !== false,
   };
   return { ai };

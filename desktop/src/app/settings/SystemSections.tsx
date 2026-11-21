@@ -90,20 +90,38 @@ export function ReportDialog({ onClose, initial = "", crash = false }: { onClose
   );
 }
 
+/** Минимальное время показа индикатора проверки обновлений, мс. */
+const CHECK_MIN_MS = 600;
+
 export function UpdatesSection() {
   const u = useStore((s) => s.update);
   const d = useStore((s) => s.device);
   const [releases, setReleases] = useState<ReleaseSummary[]>([]);
   const [intervals, setIntervals] = useState<{ hours: number; title: string }[]>([]);
   const [open, setOpen] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
   useEffect(() => {
     void api.recentReleases().then(setReleases).catch(() => {});
     void api.updateIntervals().then(setIntervals).catch(() => {});
   }, []);
   if (!u) return null;
-  const busy = u.phase === "checking" || u.phase === "downloading" || u.phase === "installing";
+  // Проверка обычно занимает доли секунды: индикатор включается сразу по нажатию и держится
+  // не меньше CHECK_MIN_MS, иначе он только мелькает и выглядит как «ничего не произошло».
+  const isChecking = checking || u.phase === "checking";
+  const busy = isChecking || u.phase === "downloading" || u.phase === "installing";
+  const check = async () => {
+    setChecking(true);
+    const started = Date.now();
+    try {
+      await attempt(() => api.checkUpdates());
+    } finally {
+      const left = CHECK_MIN_MS - (Date.now() - started);
+      if (left > 0) await new Promise((r) => setTimeout(r, left));
+      setChecking(false);
+    }
+  };
   const status =
-    u.phase === "checking" ? "Проверяем наличие обновлений…" :
+    isChecking ? "Проверяем наличие обновлений…" :
     u.phase === "downloading" ? "Загружаем обновление…" :
     u.phase === "installing" ? "Устанавливаем обновление…" :
     u.phase === "ready" ? `Обновление ${u.stagedVersion ?? u.available?.version ?? ""} загружено и готово к установке` :
@@ -116,8 +134,8 @@ export function UpdatesSection() {
     <>
       <Group title="Версия" sub="version">
         <SettingRow title={`Customers ${u.current}`} hint={<>{status}{status && u.lastCheck ? " · " : ""}{u.lastCheck ? `Проверено: ${fullRu(u.lastCheck)}` : ""}</>}>
-          {busy && <Spinner />}
-          <Button icon="refresh" disabled={busy} onClick={() => void attempt(() => api.checkUpdates())}>Проверить</Button>
+          {busy && !isChecking && <Spinner />}
+          <Button icon="refresh" busy={isChecking} disabled={busy} onClick={() => void check()}>{isChecking ? "Проверяем…" : "Проверить"}</Button>
           {u.canUpdate && (u.phase === "ready" || (u.stagedVersion && !busy)) && <Button variant="primary" icon="download" onClick={() => void attempt(() => api.installUpdate())}>Обновить</Button>}
         </SettingRow>
         {u.phase === "failed" && <div style={{ paddingTop: 10 }}><Notice tone="error">{u.message ?? "Не удалось обновить приложение."}</Notice></div>}
