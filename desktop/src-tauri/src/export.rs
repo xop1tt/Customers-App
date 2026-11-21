@@ -315,7 +315,6 @@ pub fn fields_for_ui() -> Value {
 mod tests {
     use super::*;
     use crate::models::Relevance;
-    use chrono::TimeZone;
 
     fn item(title: &str) -> LeadItem {
         let mut d = LeadData::new(LeadKind::Order, "fl_ru", "1", title);
@@ -325,7 +324,7 @@ mod tests {
         LeadItem {
             id: "abc".into(),
             data: d,
-            discovered_at: chrono::Utc.with_ymd_and_hms(2026, 11, 5, 9, 42, 0).unwrap(),
+            discovered_at: crate::time::parse_rfc3339("2026-11-05T09:42:00Z").unwrap(),
             favorite: true,
             archived: false,
             excluded: false,

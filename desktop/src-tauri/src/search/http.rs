@@ -2,7 +2,6 @@
 //! Транспорт подменяется в тестах.
 
 use async_trait::async_trait;
-use chrono::Utc;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -290,8 +289,8 @@ impl SourceHttp {
         if let Ok(secs) = v.parse::<f64>() {
             return Some(secs.max(0.0));
         }
-        let date = chrono::DateTime::parse_from_rfc2822(v).ok()?;
-        Some((date.with_timezone(&Utc) - Utc::now()).num_milliseconds().max(0) as f64 / 1000.0)
+        let date = crate::time::parse_rfc2822(v)?;
+        Some(date.duration_since(crate::time::now()).as_millis().max(0) as f64 / 1000.0)
     }
 
     /// Адрес без параметров (там бывают ключи доступа).

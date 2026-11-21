@@ -2,8 +2,8 @@
 //! и по кнопке открывает в браузере новое обращение в Issues репозитория. Отправляет его сам пользователь
 //! со своей учётной записью GitHub, поэтому в приложении нет ни ключей, ни сервера.
 
+use crate::time::Timestamp;
 use crate::updates::REPOSITORY;
-use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
@@ -32,7 +32,7 @@ impl ErrorLog {
     }
 
     /// Добавляет строку и оставляет только последние `keep` строк. Журнал не должен ронять приложение.
-    pub fn append(&self, message: &str, at: DateTime<Utc>) {
+    pub fn append(&self, message: &str, at: Timestamp) {
         if let Some(dir) = self.path.parent() {
             let _ = fs::create_dir_all(dir);
         }
@@ -70,7 +70,8 @@ pub fn scrub(message: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub struct CrashFile {
     pub path: PathBuf,
-    pub date: DateTime<Utc>,
+    #[serde(with = "crate::time::serde_auto")]
+    pub date: Timestamp,
     pub kind: String,
 }
 
@@ -101,12 +102,12 @@ pub fn is_ours(file_name: &str) -> bool {
     !beta && ["LeadGenerator", "Lead Generator", "Customers", "customers"].iter().any(|p| file_name.starts_with(p))
 }
 
-fn modified(path: &Path) -> DateTime<Utc> {
-    fs::metadata(path).and_then(|m| m.modified()).map(DateTime::<Utc>::from).unwrap_or(DateTime::<Utc>::MIN_UTC)
+fn modified(path: &Path) -> Timestamp {
+    fs::metadata(path).ok().and_then(|m| m.modified().ok()).and_then(crate::time::from_system).unwrap_or(crate::time::NEVER)
 }
 
 /// Отчёты этого приложения, новые сначала: системные (macOS) и собственные (`crash-*.txt` после паники).
-pub fn find(system_dirs: &[PathBuf], own_dir: Option<&Path>, newer_than: Option<DateTime<Utc>>) -> Vec<CrashFile> {
+pub fn find(system_dirs: &[PathBuf], own_dir: Option<&Path>, newer_than: Option<Timestamp>) -> Vec<CrashFile> {
     let mut found = vec![];
     let mut scan = |dir: &Path, own: bool| {
         let Ok(entries) = fs::read_dir(dir) else { return };
@@ -238,7 +239,7 @@ pub fn default_issue_url(title: &str, body: &str) -> String {
 pub fn install_panic_hook(logs_dir: PathBuf, app_version: String) {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let now = Utc::now();
+        let now = crate::time::now();
         let location = info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_else(|| "?".into());
         let message = info
             .payload()
@@ -255,7 +256,7 @@ pub fn install_panic_hook(logs_dir: PathBuf, app_version: String) {
         );
         let dir = logs_dir.join("crashes");
         let _ = fs::create_dir_all(&dir);
-        let _ = fs::write(dir.join(format!("crash-{}.txt", now.format("%Y%m%d-%H%M%S"))), scrub(&report));
+        let _ = fs::write(dir.join(format!("crash-{}.txt", now.strftime("%Y%m%d-%H%M%S"))), scrub(&report));
         ErrorLog::new(&logs_dir).append(&format!("Паника: {message} ({location})"), now);
         previous(info);
     }));
@@ -275,7 +276,6 @@ mod tests {
         }
         assert!(!is_ours("customers-notes.txt"));
     }
-    use chrono::Duration;
 
     #[test]
     fn only_own_reports_are_found() {
@@ -297,7 +297,7 @@ mod tests {
             ["LeadGenerator-2026-11-06-120000.ips", "LeadGenerator_2026-11-06-120500.hang", "Customers-2026-11-07.ips"].map(String::from).into_iter().collect()
         );
         assert_eq!(found.iter().find(|f| f.path.extension().unwrap() == "hang").unwrap().kind, "Зависание");
-        assert!(find(&[dir.path().to_path_buf()], None, Some(Utc::now() + Duration::seconds(60))).is_empty());
+        assert!(find(&[dir.path().to_path_buf()], None, Some(crate::time::now() + crate::time::secs(60))).is_empty());
     }
 
     #[test]
@@ -350,12 +350,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let log = ErrorLog::new(dir.path()).with_keep(3);
         for i in 1..=5 {
-            log.append(&format!("ошибка {i}\nвторая строка"), Utc::now());
+            log.append(&format!("ошибка {i}\nвторая строка"), crate::time::now());
         }
         let lines = log.recent(10);
         assert_eq!(lines.len(), 3);
         assert!(lines.last().unwrap().ends_with("ошибка 5 вторая строка"));
-        log.append("GET https://api.example.com/x?key=SECRET#frag не удалось", Utc::now());
+        log.append("GET https://api.example.com/x?key=SECRET#frag не удалось", crate::time::now());
         let last = log.recent(1).remove(0);
         assert!(last.contains("https://api.example.com/x?…") && !last.contains("SECRET"));
         log.clear();

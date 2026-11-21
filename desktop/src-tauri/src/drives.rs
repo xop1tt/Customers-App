@@ -3,9 +3,9 @@
 //! Каталог, адреса, разбор ответов и запросы выгрузки не зависят от сети и проверяются тестами.
 
 use crate::search::http::{HttpRequest, HttpResponse, HttpTransport};
+use crate::time::Timestamp;
 use crate::util::{format_date, parse_date};
 use base64::Engine;
-use chrono::{DateTime, Duration, Utc};
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -281,13 +281,13 @@ pub struct OAuthToken {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "iso_opt")]
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<Timestamp>,
 }
 
 impl OAuthToken {
     /// Истёк или истечёт в ближайшую минуту.
-    pub fn is_expired(&self, now: DateTime<Utc>) -> bool {
-        self.expires_at.map(|e| e - now < Duration::seconds(60)).unwrap_or(false)
+    pub fn is_expired(&self, now: Timestamp) -> bool {
+        self.expires_at.map(|e| e.duration_since(now) < crate::time::secs(60)).unwrap_or(false)
     }
 }
 
@@ -295,13 +295,13 @@ mod iso_opt {
     use super::*;
     use serde::{Deserializer, Serializer};
 
-    pub fn serialize<S: Serializer>(v: &Option<DateTime<Utc>>, s: S) -> Result<S::Ok, S::Error> {
+    pub fn serialize<S: Serializer>(v: &Option<Timestamp>, s: S) -> Result<S::Ok, S::Error> {
         match v {
             Some(d) => s.serialize_str(&format_date(d)),
             None => s.serialize_none(),
         }
     }
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<DateTime<Utc>>, D::Error> {
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Timestamp>, D::Error> {
         Ok(Option::<String>::deserialize(d)?.and_then(|s| parse_date(&s)))
     }
 }
@@ -310,10 +310,10 @@ mod iso {
     use super::*;
     use serde::{Deserializer, Serializer};
 
-    pub fn serialize<S: Serializer>(v: &DateTime<Utc>, s: S) -> Result<S::Ok, S::Error> {
+    pub fn serialize<S: Serializer>(v: &Timestamp, s: S) -> Result<S::Ok, S::Error> {
         s.serialize_str(&format_date(v))
     }
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<DateTime<Utc>, D::Error> {
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Timestamp, D::Error> {
         let s = String::deserialize(d)?;
         parse_date(&s).ok_or_else(|| serde::de::Error::custom("неверная дата"))
     }
@@ -427,7 +427,7 @@ pub mod oauth {
     }
 
     /// Ответ сервера токенов. refresh_token при обновлении может не прийти — тогда остаётся прежний.
-    pub fn parse_token(data: &[u8], previous_refresh: Option<&str>, now: DateTime<Utc>) -> Result<OAuthToken, IntegrationError> {
+    pub fn parse_token(data: &[u8], previous_refresh: Option<&str>, now: Timestamp) -> Result<OAuthToken, IntegrationError> {
         let obj: Value = serde_json::from_slice(data)
             .ok()
             .filter(Value::is_object)
@@ -447,7 +447,7 @@ pub mod oauth {
         Ok(OAuthToken {
             access_token: access.into(),
             refresh_token: obj.get("refresh_token").and_then(Value::as_str).map(str::to_string).or_else(|| previous_refresh.map(str::to_string)),
-            expires_at: expires.map(|e| now + Duration::milliseconds((e * 1000.0) as i64)),
+            expires_at: expires.map(|e| now + crate::time::millis((e * 1000.0) as i64)),
         })
     }
 }
@@ -501,12 +501,12 @@ pub struct DriveConnection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
     #[serde(with = "iso")]
-    pub connected_at: DateTime<Utc>,
+    pub connected_at: Timestamp,
 }
 
 impl DriveConnection {
     pub fn new(service: DriveService) -> Self {
-        Self { service, token: None, webdav_url: None, login: None, password: None, connected_at: Utc::now() }
+        Self { service, token: None, webdav_url: None, login: None, password: None, connected_at: crate::time::now() }
     }
     pub fn encoded(&self) -> String {
         serde_json::to_string(self).unwrap_or_default()
@@ -652,11 +652,11 @@ pub async fn upload_file(
 ) -> Result<DriveConnection, IntegrationError> {
     let mut conn = c.clone();
     if let (DriveAuth::OAuth(provider), Some(token)) = (conn.service.auth(), conn.token.clone()) {
-        if token.is_expired(Utc::now()) {
+        if token.is_expired(crate::time::now()) {
             let client = client.ok_or(IntegrationError::NotConfigured(provider))?;
             let refresh = token.refresh_token.clone().ok_or(IntegrationError::Reauthorize)?;
             let r = send(t, oauth::refresh_request(client, &refresh)).await?;
-            conn.token = Some(oauth::parse_token(&r.data, Some(&refresh), Utc::now())?);
+            conn.token = Some(oauth::parse_token(&r.data, Some(&refresh), crate::time::now())?);
         }
     }
     for req in upload_requests(&conn, file_name, data)? {
@@ -750,7 +750,7 @@ pub async fn connect_oauth(
     open(&url).map_err(|e| IntegrationError::Denied(format!("не удалось открыть браузер: {e}")))?;
     let code = wait.await?;
     let r = send(t, oauth::token_request(client, &code, &verifier)).await?;
-    oauth::parse_token(&r.data, None, Utc::now())
+    oauth::parse_token(&r.data, None, crate::time::now())
 }
 
 #[cfg(test)]
@@ -810,10 +810,10 @@ mod tests {
 
     #[test]
     fn token_parsing() {
-        let now = Utc::now();
+        let now = crate::time::now();
         let t = oauth::parse_token(br#"{"access_token":"a","refresh_token":"r","expires_in":3600}"#, None, now).unwrap();
         assert_eq!((t.access_token.as_str(), t.refresh_token.as_deref()), ("a", Some("r")));
-        assert!(!t.is_expired(now) && t.is_expired(now + Duration::seconds(3550)));
+        assert!(!t.is_expired(now) && t.is_expired(now + crate::time::secs(3550)));
         let kept = oauth::parse_token(br#"{"access_token":"b","expires_in":"60"}"#, Some("old"), now).unwrap();
         assert_eq!(kept.refresh_token.as_deref(), Some("old"));
         assert_eq!(oauth::parse_token(br#"{"error":"invalid_grant"}"#, None, now).unwrap_err(), IntegrationError::Reauthorize);
@@ -907,7 +907,8 @@ mod tests {
     #[tokio::test]
     async fn upload_refreshes_expired_token_and_returns_updated_connection() {
         let mut c = DriveConnection::new(DriveService::GoogleDrive);
-        c.token = Some(OAuthToken { access_token: "old".into(), refresh_token: Some("rt".into()), expires_at: Some(Utc::now() - Duration::minutes(5)) });
+        c.token =
+            Some(OAuthToken { access_token: "old".into(), refresh_token: Some("rt".into()), expires_at: Some(crate::time::now() - crate::time::minutes(5)) });
         let t = FakeTransport::new(vec![Ok(HttpResponse::new(200, r#"{"access_token":"new","expires_in":3600}"#)), Ok(HttpResponse::new(200, "{}"))]);
         let updated = upload_file(&c, Some(&client(OAuthProvider::Google)), "b.db", b"x", t.as_ref()).await.unwrap();
         assert_eq!(updated.token.as_ref().unwrap().access_token, "new");
@@ -940,7 +941,7 @@ mod tests {
         let text = r#"{"service":"googleDrive","connectedAt":"2026-11-05T09:42:00Z","token":{"accessToken":"a","refreshToken":"r","expiresAt":"2026-11-05T10:42:00Z"}}"#;
         let c = DriveConnection::decode(Some(text)).unwrap();
         assert_eq!(c.service, DriveService::GoogleDrive);
-        assert_eq!(c.token.as_ref().unwrap().expires_at.unwrap().timestamp(), 1_793_875_320);
+        assert_eq!(c.token.as_ref().unwrap().expires_at.unwrap().as_second(), 1_793_875_320);
         assert_eq!(DriveConnection::decode(Some(&c.encoded())), Some(c));
         assert!(DriveConnection::decode(Some("{}")).is_none());
     }

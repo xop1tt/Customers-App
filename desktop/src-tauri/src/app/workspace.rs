@@ -14,7 +14,6 @@ use crate::workspace::query::Query;
 use crate::workspace::store::{stamp, Member, WorkspaceStore, ALL_PERMISSIONS};
 use crate::workspace::sync::{self, CrmSync};
 use crate::workspace::{dedupe, schema};
-use chrono::Utc;
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -286,7 +285,7 @@ impl Core {
                 let ops = st.all_ops().unwrap_or_default();
                 if !ops.is_empty() {
                     let _ = std::fs::write(
-                        dir.join(format!("{id}-unsent-{}.json", Utc::now().format("%Y%m%d-%H%M%S"))),
+                        dir.join(format!("{id}-unsent-{}.json", crate::time::now().strftime("%Y%m%d-%H%M%S"))),
                         serde_json::to_vec_pretty(&ops).unwrap_or_default(),
                     );
                 }
@@ -627,7 +626,7 @@ impl Core {
         if let Some(cloud) = self.env.cloud.clone() {
             let id = id.to_string();
             tokio::spawn(async move {
-                let body = json!({"resolved_at": stamp(Utc::now())});
+                let body = json!({"resolved_at": stamp(crate::time::now())});
                 let _ = cloud.authorized("PATCH", &format!("/rest/v1/sync_conflicts?id=eq.{id}"), Some(&body), &[("Prefer", "return=minimal")]).await;
             });
         }
@@ -1139,7 +1138,7 @@ impl Core {
         let text = |k: &str| fields.get(k).and_then(Value::as_str).map(|v| v.trim().chars().take(120).collect::<String>());
         let manager = fields.get("managerId");
         let hired = fields.get("hiredOn");
-        let hired_ok = hired.and_then(Value::as_str).map(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").is_ok()).unwrap_or(true);
+        let hired_ok = hired.and_then(Value::as_str).map(|d| crate::time::parse_ymd(d).is_some()).unwrap_or(true);
         if !hired_ok {
             return Err(CmdError::msg("Дата прихода — в формате ГГГГ-ММ-ДД."));
         }
@@ -1358,7 +1357,7 @@ impl Core {
                     match &result {
                         Ok(_) => {
                             st.last_error = None;
-                            st.last_sync = Some(stamp(Utc::now()));
+                            st.last_sync = Some(stamp(crate::time::now()));
                         }
                         Err(CloudError::Network(_)) => st.last_error = Some("Нет связи: изменения отправятся позже.".into()),
                         Err(e) => st.last_error = Some(e.to_string()),
@@ -1423,7 +1422,7 @@ impl Core {
             let st = store.lock().unwrap();
             let q = Query {
                 filters: vec![
-                    crate::workspace::query::Filter { field: "remind_at".into(), op: "lte".into(), value: json!(stamp(Utc::now())) },
+                    crate::workspace::query::Filter { field: "remind_at".into(), op: "lte".into(), value: json!(stamp(crate::time::now())) },
                     crate::workspace::query::Filter { field: "status".into(), op: "in".into(), value: json!(["todo", "in_progress"]) },
                 ],
                 ..Default::default()

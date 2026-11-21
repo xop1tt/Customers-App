@@ -5,8 +5,8 @@ use crate::models::{LeadData, LeadKind};
 use crate::search::http::{HttpResponse, SearchError, SourceHttp};
 use crate::search::settings::{self as cfg, FeedSourceSettings, OsmCategory, OsmSourceSettings, TelegramSourceSettings, VkSourceSettings};
 use crate::search::text::{contacts, html_to_text};
+use crate::time::Timestamp;
 use crate::util::{normalize, parse_date, prefix_chars, short_hash};
-use chrono::{DateTime, Datelike, Local, NaiveDateTime, TimeZone, Utc};
 use once_cell::sync::Lazy;
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -50,10 +50,10 @@ impl Default for FetchResult {
 
 /// Хранилище служебного состояния поиска (история запросов OSM, проверенные объекты).
 pub trait SearchMemory: Send + Sync {
-    fn query_last_run(&self, hash: &str) -> Option<DateTime<Utc>>;
+    fn query_last_run(&self, hash: &str) -> Option<Timestamp>;
     fn record_query(&self, hash: &str, source: &str, label: &str, results: i64);
     fn forget_query(&self, hash: &str);
-    fn object_checked_at(&self, source: &str, object_id: &str) -> Option<DateTime<Utc>>;
+    fn object_checked_at(&self, source: &str, object_id: &str) -> Option<Timestamp>;
     fn mark_object_checked(&self, source: &str, object_id: &str);
 }
 
@@ -73,7 +73,7 @@ pub struct FeedEntry {
     pub title: String,
     pub link: String,
     pub summary: String,
-    pub published: Option<DateTime<Utc>>,
+    pub published: Option<Timestamp>,
     pub category: Option<String>,
 }
 
@@ -82,7 +82,7 @@ fn local_name(name: &[u8]) -> String {
     s.rsplit(':').next().unwrap_or(&s).to_lowercase()
 }
 
-fn parse_feed_date(raw: Option<&String>) -> Option<DateTime<Utc>> {
+fn parse_feed_date(raw: Option<&String>) -> Option<Timestamp> {
     let raw = raw?.trim();
     if raw.is_empty() {
         return None;
@@ -90,17 +90,17 @@ fn parse_feed_date(raw: Option<&String>) -> Option<DateTime<Utc>> {
     if let Some(d) = parse_date(raw) {
         return Some(d);
     }
-    if let Ok(d) = DateTime::parse_from_rfc2822(raw) {
-        return Some(d.with_timezone(&Utc));
+    if let Some(d) = crate::time::parse_rfc2822(raw) {
+        return Some(d);
     }
-    for f in ["%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z", "%d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M %z"] {
-        if let Ok(d) = DateTime::parse_from_str(raw, f) {
-            return Some(d.with_timezone(&Utc));
+    for f in ["%a, %d %b %Y %H:%M:%S %z", "%d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M %z"] {
+        if let Some(d) = crate::time::parse_with_offset(raw, f) {
+            return Some(d);
         }
     }
     for f in ["%a, %d %b %Y %H:%M:%S", "%d %b %Y %H:%M:%S"] {
-        if let Ok(d) = NaiveDateTime::parse_from_str(raw, f) {
-            return Some(Utc.from_utc_datetime(&d));
+        if let Some(d) = crate::time::parse_civil(raw, f).and_then(crate::time::utc_civil) {
+            return Some(d);
         }
     }
     None
@@ -283,7 +283,7 @@ pub struct TelegramPost {
     pub channel: String,
     pub id: i64,
     pub text: String,
-    pub published: Option<DateTime<Utc>>,
+    pub published: Option<Timestamp>,
 }
 
 impl TelegramPost {
@@ -451,7 +451,7 @@ pub async fn fetch_vk(cfg: &VkSourceSettings, token: &str, cursor: Option<&str>,
                 let mut d = LeadData::new(LeadKind::Order, cfg::VK, &format!("{owner}_{pid}"), &first_line(text, 200));
                 d.url = format!("https://vk.com/wall{owner}_{pid}");
                 d.description = prefix_chars(text, 4000);
-                d.published_at = it.get("date").and_then(Value::as_i64).and_then(|s| Utc.timestamp_opt(s, 0).single());
+                d.published_at = it.get("date").and_then(Value::as_i64).and_then(crate::time::from_unix);
                 d.contacts = contacts(text);
                 res.candidates.push(Candidate::order(d));
             }
@@ -488,7 +488,7 @@ pub async fn fetch_osm(
     memory: &dyn SearchMemory,
     http: &SourceHttp,
     site_http: Option<&SourceHttp>,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<FetchResult, SearchError> {
     let mut res = FetchResult::default();
     let cats: Vec<&OsmCategory> = cfg.categories.iter().filter(|c| c.enabled && !c.filters.is_empty()).collect();
@@ -508,7 +508,7 @@ pub async fn fetch_osm(
             let query = build_overpass_query(region, &cat.filters, 90);
             let qhash = short_hash(&query);
             if let Some(last) = memory.query_last_run(&qhash) {
-                if (now - last).num_seconds() as f64 <= cfg.refresh_days * 86400.0 && (now - last).num_seconds() >= 0 {
+                if now.duration_since(last).as_secs() as f64 <= cfg.refresh_days * 86400.0 && now.duration_since(last).as_secs() >= 0 {
                     continue; // этот запрос недавно выполнялся — не тратим квоту
                 }
             }
@@ -573,7 +573,7 @@ async fn osm_candidate(
     memory: &dyn SearchMemory,
     site_http: Option<&SourceHttp>,
     cache: &mut HashMap<String, SiteCheck>,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<Option<Candidate>, SearchError> {
     let tags: HashMap<String, String> = el
         .get("tags")
@@ -583,7 +583,7 @@ async fn osm_candidate(
     let Some(name) = tags.get("name").filter(|n| !n.is_empty()).cloned() else { return Ok(None) };
     let oid = format!("{}/{}", el.get("type").and_then(Value::as_str).unwrap_or("node"), el.get("id").and_then(Value::as_i64).unwrap_or(0));
     if let Some(checked) = memory.object_checked_at(cfg::OSM, &oid) {
-        if ((now - checked).num_seconds() as f64) < cfg.recheck_days * 86400.0 {
+        if (now.duration_since(checked).as_secs() as f64) < cfg.recheck_days * 86400.0 {
             return Ok(None); // уже обработан, перепроверять рано
         }
     }
@@ -633,7 +633,7 @@ async fn osm_candidate(
                 if chk.reachable {
                     signals.insert("no_https".into(), !chk.https);
                     signals.insert("no_viewport".into(), !chk.viewport);
-                    if chk.copyright_year.map(|y| y <= now.year() - 4).unwrap_or(false) {
+                    if chk.copyright_year.map(|y| y <= i32::from(crate::time::TimeZone::UTC.to_datetime(now).year()) - 4).unwrap_or(false) {
                         signals.insert("outdated".into(), true);
                     }
                     if !chk.has_booking && needs_booking {
@@ -721,9 +721,9 @@ pub fn is_public_http_url(s: &str) -> bool {
 }
 
 /// Один запрос к главной странице. Возвращает только проверенные факты.
-pub async fn check_site(raw: &str, http: &SourceHttp, now: DateTime<Utc>) -> Result<SiteCheck, SearchError> {
+pub async fn check_site(raw: &str, http: &SourceHttp, now: Timestamp) -> Result<SiteCheck, SearchError> {
     let url = normalize_site_url(raw);
-    let day = now.with_timezone(&Local).format("%d.%m.%Y").to_string();
+    let day = crate::time::local_format(now, "%d.%m.%Y");
     if !is_public_http_url(&url) {
         return Ok(SiteCheck {
             url, reachable: false, facts: vec!["В источнике указан некорректный адрес сайта".into()], ..Default::default()
@@ -944,25 +944,25 @@ mod tests {
 
     #[derive(Default)]
     pub struct MemoryStub {
-        queries: Mutex<HashMap<String, DateTime<Utc>>>,
-        objects: Mutex<HashMap<String, DateTime<Utc>>>,
+        queries: Mutex<HashMap<String, Timestamp>>,
+        objects: Mutex<HashMap<String, Timestamp>>,
     }
 
     impl SearchMemory for MemoryStub {
-        fn query_last_run(&self, h: &str) -> Option<DateTime<Utc>> {
+        fn query_last_run(&self, h: &str) -> Option<Timestamp> {
             self.queries.lock().unwrap().get(h).copied()
         }
         fn record_query(&self, h: &str, _: &str, _: &str, _: i64) {
-            self.queries.lock().unwrap().insert(h.into(), Utc::now());
+            self.queries.lock().unwrap().insert(h.into(), crate::time::now());
         }
         fn forget_query(&self, h: &str) {
             self.queries.lock().unwrap().remove(h);
         }
-        fn object_checked_at(&self, s: &str, o: &str) -> Option<DateTime<Utc>> {
+        fn object_checked_at(&self, s: &str, o: &str) -> Option<Timestamp> {
             self.objects.lock().unwrap().get(&format!("{s}|{o}")).copied()
         }
         fn mark_object_checked(&self, s: &str, o: &str) {
-            self.objects.lock().unwrap().insert(format!("{s}|{o}"), Utc::now());
+            self.objects.lock().unwrap().insert(format!("{s}|{o}"), crate::time::now());
         }
     }
 
@@ -987,7 +987,7 @@ mod tests {
         let mem = MemoryStub::default();
         let http = http_for(t.clone());
         let site = http_for(t.clone());
-        let r = fetch_osm(&osm_cfg(), &mem, &http, Some(&site), Utc::now()).await.unwrap();
+        let r = fetch_osm(&osm_cfg(), &mem, &http, Some(&site), crate::time::now()).await.unwrap();
         assert_eq!(r.candidates.len(), 2);
         let a = &r.candidates[0];
         assert_eq!(a.data.external_id, "node/1");
@@ -1005,7 +1005,7 @@ mod tests {
         assert_eq!(b.signals.get("site_unreachable"), Some(&false));
         // повторный запуск: запрос недавно выполнялся, организации уже проверены
         let t2 = FakeTransport::new(vec![]);
-        let again = fetch_osm(&osm_cfg(), &mem, &http_for(t2.clone()), None, Utc::now()).await.unwrap();
+        let again = fetch_osm(&osm_cfg(), &mem, &http_for(t2.clone()), None, crate::time::now()).await.unwrap();
         assert!(again.candidates.is_empty());
         assert!(t2.urls().is_empty());
     }
@@ -1017,7 +1017,7 @@ mod tests {
         cfg.max_new_per_run = 1;
         cfg.check_websites = false;
         let mem = MemoryStub::default();
-        let r = fetch_osm(&cfg, &mem, &http_for(t), None, Utc::now()).await.unwrap();
+        let r = fetch_osm(&cfg, &mem, &http_for(t), None, crate::time::now()).await.unwrap();
         assert_eq!(r.candidates.len(), 1);
         assert_eq!(r.warnings.len(), 1);
         let q = build_overpass_query("Ереван", &cfg.categories[0].filters, 90);
@@ -1027,7 +1027,7 @@ mod tests {
     #[tokio::test]
     async fn osm_http_failure_is_partial_error() {
         let t = FakeTransport::new(vec![Ok(HttpResponse::new(404, ""))]);
-        let r = fetch_osm(&osm_cfg(), &MemoryStub::default(), &http_for(t), None, Utc::now()).await.unwrap();
+        let r = fetch_osm(&osm_cfg(), &MemoryStub::default(), &http_for(t), None, crate::time::now()).await.unwrap();
         assert_eq!(r.partial_errors.len(), 1);
         assert_eq!(r.items, 1);
     }
@@ -1059,14 +1059,14 @@ mod tests {
             "https://good.am/",
             Ok(HttpResponse::new(200, r#"<meta name="viewport" content="width=device-width"> © 2012-2026 <a>Записаться онлайн</a>"#)),
         )]);
-        let c = check_site("https://good.am/", &http_for(t), Utc::now()).await.unwrap();
+        let c = check_site("https://good.am/", &http_for(t), crate::time::now()).await.unwrap();
         assert!(c.reachable && c.https && c.viewport && c.has_booking);
         assert_eq!(c.copyright_year, Some(2026));
         assert!(!c.facts.iter().any(|f| f.contains("без HTTPS")));
-        let bad = check_site("http://127.0.0.1/", &http_for(FakeTransport::new(vec![])), Utc::now()).await.unwrap();
+        let bad = check_site("http://127.0.0.1/", &http_for(FakeTransport::new(vec![])), crate::time::now()).await.unwrap();
         assert!(!bad.reachable);
         assert!(bad.facts[0].contains("некорректный адрес"));
-        let down = check_site("https://down.am", &http_for(FakeTransport::new(vec![Ok(HttpResponse::new(404, ""))])), Utc::now()).await.unwrap();
+        let down = check_site("https://down.am", &http_for(FakeTransport::new(vec![Ok(HttpResponse::new(404, ""))])), crate::time::now()).await.unwrap();
         assert!(!down.reachable);
         assert_eq!(down.status, Some(404));
     }

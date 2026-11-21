@@ -754,7 +754,6 @@ mod tests {
     use crate::models::{LeadData, Relevance};
     use crate::search::http::testing::FakeTransport;
     use crate::search::http::{no_sleep, SearchError};
-    use chrono::Utc;
 
     fn item(id: &str, title: &str) -> LeadItem {
         let mut d = LeadData::new(LeadKind::Organization, "osm_organizations", id, title);
@@ -768,7 +767,14 @@ mod tests {
         d.contacts.insert("email".into(), "info@lavanda.ru".into());
         d.customer_name = Some(title.into());
         LeadItem {
-            id: id.into(), data: d, discovered_at: Utc::now(), favorite: true, archived: false, excluded: false, seen: false, note: "позвонить".into()
+            id: id.into(),
+            data: d,
+            discovered_at: crate::time::now(),
+            favorite: true,
+            archived: false,
+            excluded: false,
+            seen: false,
+            note: "позвонить".into(),
         }
     }
 

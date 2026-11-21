@@ -6,7 +6,6 @@ use super::dedupe;
 use super::store::{stamp, WorkspaceStore};
 use crate::error::{AppError, AppResult};
 use crate::models::{LeadItem, LeadKind};
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
@@ -34,7 +33,7 @@ impl Converted {
     /// Отметка в лиде генератора: `data.crm`.
     pub fn mark(&self) -> Value {
         json!({"workspace_id": self.workspace_id, "company_id": self.company_id, "contact_id": self.contact_id,
-               "deal_id": self.deal_id, "converted_at": stamp(Utc::now())})
+               "deal_id": self.deal_id, "converted_at": stamp(crate::time::now())})
     }
 }
 

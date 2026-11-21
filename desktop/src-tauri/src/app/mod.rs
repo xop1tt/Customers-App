@@ -155,7 +155,7 @@ impl Env {
     /// Записать ошибку в журнал, если журнал включён.
     pub fn log_error(&self, message: &str) {
         if self.device_prefs().reports_log_errors {
-            self.errors.append(message, chrono::Utc::now());
+            self.errors.append(message, crate::time::now());
         }
     }
 
