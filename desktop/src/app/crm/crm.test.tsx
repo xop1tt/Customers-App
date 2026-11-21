@@ -33,6 +33,7 @@ describe("описание CRM-сущностей", () => {
     expect(can(employee, "edit", rec({ created_by: "x", owner_id: "me" }), "me")).toBe(true);
     expect(can(employee, "edit", rec({ created_by: "x", assignee_id: "me" }), "me")).toBe(true);
     expect(can(employee, "edit", rec({ created_by: "x" }), "me")).toBe(false);
+    expect(can(employee, "edit", rec({ created_by: "me", owner_id: "x" }), "me")).toBe(false);
     expect(can(employee, "delete")).toBe(false);
     expect(can(["records.view"], "create")).toBe(false);
     expect(can([...employee, "records.edit"], "edit", rec({ created_by: "x" }), "me")).toBe(true);

@@ -197,7 +197,8 @@ export function can(perms: string[], action: "view" | "create" | "edit" | "delet
     case "edit":
       if (has("records.edit")) return true;
       if (!has("records.edit_own") || !record || !me) return false;
-      return record.created_by === me || record.owner_id === me || record.assignee_id === me;
+      // Как private.can_edit на сервере (ADR-094): ответственный, исполнитель; автор — пока нет ответственного.
+      return record.owner_id === me || record.assignee_id === me || (!record.owner_id && record.created_by === me);
   }
 }
 

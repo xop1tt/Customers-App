@@ -564,9 +564,39 @@ impl Core {
 
     /// Сохраняет записи в файл CSV или XLSX. С `collection` выгружается то, что показывает коллекция
     /// (её фильтры и `query` пользователя), без неё — записи таблицы `entity` по `query`.
+    /// Облачный Workspace: сервер проверяет `records.export` и пишет выгрузку в журнал действий (ADR-094);
+    /// без ответа сервера файл не сохраняется.
+    pub async fn ws_export_checked(self: &Arc<Self>, request: crate::workspace::export::Request, path: &Path) -> CmdResult<Value> {
+        let s = self.require()?;
+        let Some(active) = self.ws_catalog(&s)?.active_info().filter(|w| w.remote).cloned() else {
+            return self.ws_export(request, path);
+        };
+        let format = request.format.clone();
+        let (bytes, count, table) = self.export_bytes(request)?;
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        sync::rpc(&cloud, "log_export", json!({"p_workspace": active.id, "p_entity": table, "p_count": count, "p_format": format})).await.map_err(
+            |e| match e {
+                CloudError::Server(m) if m.starts_with("permission denied") => CmdError::msg("Недостаточно прав для экспорта записей."),
+                CloudError::Network(_) => {
+                    CmdError::msg("Нет связи с облаком. Выгрузку облачного рабочего пространства подтверждает сервер: повторите, когда связь появится.")
+                }
+                e => cloud_err(e),
+            },
+        )?;
+        std::fs::write(path, bytes).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
+        Ok(json!({"count": count}))
+    }
+
+    /// Выгрузка локального Workspace (облачный — через `ws_export_checked`).
     pub fn ws_export(&self, request: crate::workspace::export::Request, path: &Path) -> CmdResult<Value> {
+        let (bytes, count, _) = self.export_bytes(request)?;
+        std::fs::write(path, bytes).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
+        Ok(json!({"count": count}))
+    }
+
+    fn export_bytes(&self, request: crate::workspace::export::Request) -> CmdResult<(Vec<u8>, usize, String)> {
         let lang = crate::tray_text::Lang::parse(&request.lang);
-        let (bytes, count) = self.with_crm(|st| {
+        self.with_crm(|st| {
             let (table, q) = match request.collection.as_deref() {
                 Some(id) => {
                     let (_, table, q) = Self::collection_query(st, id, request.query)?;
@@ -574,10 +604,9 @@ impl Core {
                 }
                 None => (request.entity, request.query),
             };
-            crate::workspace::export::file(st, &table, &q, &request.fields, &request.format, lang)
-        })?;
-        std::fs::write(path, bytes).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
-        Ok(json!({"count": count}))
+            let (bytes, count) = crate::workspace::export::file(st, &table, &q, &request.fields, &request.format, lang)?;
+            Ok((bytes, count, table))
+        })
     }
 
     /// Порядок коллекций в левой панели — свой у каждого пользователя.
@@ -1497,6 +1526,8 @@ pub(crate) fn chat_alerts(fresh: &Value, notes: &[Value]) -> Vec<(String, String
             Some("added_to_group") => out.push((format!("{actor} добавляет вас в обсуждение"), excerpt)),
             Some("note_mention") => out.push((format!("{actor} упоминает вас в заметке"), excerpt)),
             Some("comment_mention") => out.push((format!("{actor} упоминает вас в комментарии"), excerpt)),
+            Some("task_assigned") => out.push((format!("{actor} назначает вам задачу"), excerpt)),
+            Some("record_assigned") => out.push((format!("{actor} передаёт вам запись"), excerpt)),
             _ => {}
         }
     }
@@ -1621,6 +1652,8 @@ mod team_tests {
             json!({"kind": "added_to_group", "actor_name": "Глеб", "excerpt": "Отдел продаж"}),
             json!({"kind": "note_mention", "actor_name": "Глеб", "excerpt": "проверь счёт"}),
             json!({"kind": "mention", "actor_name": "Вера", "excerpt": "уже в сообщениях"}),
+            json!({"kind": "task_assigned", "actor_name": "Вера", "excerpt": "Подготовить КП"}),
+            json!({"kind": "record_assigned", "actor_name": "Вера", "excerpt": "ООО Вектор"}),
         ];
         let a = chat_alerts(&fresh, &notes);
         assert_eq!(a[0], ("Борис".to_string(), "Привет".to_string()));
@@ -1629,7 +1662,9 @@ mod team_tests {
         assert_eq!(a[3], ("Новые сообщения".to_string(), "И ещё 2".to_string()));
         assert_eq!(a[4].0, "Глеб добавляет вас в обсуждение");
         assert_eq!(a[5].0, "Глеб упоминает вас в заметке");
-        assert_eq!(a.len(), 6, "упоминание в чате уже показано как сообщение");
+        assert_eq!(a[6], ("Вера назначает вам задачу".to_string(), "Подготовить КП".to_string()));
+        assert_eq!(a[7].0, "Вера передаёт вам запись");
+        assert_eq!(a.len(), 8, "упоминание в чате уже показано как сообщение");
         assert!(chat_alerts(&json!([]), &[]).is_empty());
     }
 }

@@ -107,6 +107,40 @@ fn role_permissions_are_checked_before_writing() {
 }
 
 #[test]
+fn own_records_follow_owner_and_assignee_like_the_server() {
+    let (_d, s) = open();
+    s.seed_local().unwrap();
+    let (pipeline, first) = s.first_stage(None).unwrap();
+    let f = s.save("custom_fields", None, &m(json!({"entity_type": "company", "label": "Сегмент"}))).unwrap();
+    let handed = s.save("companies", None, &m(json!({"name": "Передана"}))).unwrap();
+    let theirs = s.save("companies", None, &m(json!({"name": "Чужая"}))).unwrap();
+    let deal = s.save("deals", None, &m(json!({"title": "Сделка", "pipeline_id": pipeline, "stage_id": first}))).unwrap();
+    let task = s.save("tasks", None, &m(json!({"title": "Позвонить"}))).unwrap();
+    let call = s.save("activities", None, &m(json!({"entity_type": "company", "entity_id": id(&handed), "type": "call"}))).unwrap();
+    let note = s.save("notes", None, &m(json!({"entity_type": "company", "entity_id": id(&handed), "body": "черновик"}))).unwrap();
+    s.conn().execute("UPDATE companies SET owner_id=?1 WHERE id=?2", [OTHER, &id(&handed)]).unwrap();
+    s.conn().execute("UPDATE companies SET created_by=?1 WHERE id=?2", [OTHER, &id(&theirs)]).unwrap();
+    s.conn().execute("UPDATE deals SET created_by=?1, owner_id=?1 WHERE id=?2", [OTHER, &id(&deal)]).unwrap();
+    s.conn().execute("UPDATE tasks SET created_by=?1, assignee_id=?2 WHERE id=?3", [OTHER, ME, &id(&task)]).unwrap();
+    s.set_permissions(&["records.view".into(), "records.create".into(), "records.edit_own".into()]).unwrap();
+
+    // Автор теряет право правки, когда у записи появился другой ответственный.
+    assert!(s.save("companies", Some(&id(&handed)), &m(json!({"name": "Вернул"}))).unwrap_err().to_string().contains("прав"));
+    // Исполнитель передаёт задачу коллеге.
+    assert_eq!(s.save("tasks", Some(&id(&task)), &m(json!({"assignee_id": OTHER}))).unwrap()["assignee_id"], OTHER);
+    // Своё поле и контакт сделки — по правам карточки.
+    let cfv = json!({"field_id": id(&f), "entity_type": "company", "entity_id": id(&theirs), "value": "A"});
+    assert!(s.save("custom_field_values", None, &m(cfv)).unwrap_err().to_string().contains("прав"));
+    let contact = s.save("contacts", None, &m(json!({"first_name": "Ирина"}))).unwrap();
+    let link = json!({"deal_id": id(&deal), "contact_id": id(&contact)});
+    assert!(s.save("deal_contacts", None, &m(link)).unwrap_err().to_string().contains("прав"));
+    // Звонки удаляет только records.delete, заметки — автор.
+    assert!(s.delete("activities", &id(&call)).unwrap_err().to_string().contains("прав"));
+    s.conn().execute("UPDATE companies SET owner_id=NULL WHERE id=?1", [&id(&handed)]).unwrap();
+    assert!(s.delete("notes", &id(&note)).is_ok());
+}
+
+#[test]
 fn deals_follow_stage_kind_and_keep_history() {
     let (_d, s) = open();
     s.seed_local().unwrap();

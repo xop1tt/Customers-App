@@ -83,5 +83,8 @@ describe("журнал действий", () => {
     const members = [{ userId: "a", displayName: "Алексей", role: "owner", roleName: "В", rank: 1, avatarPath: null, email: null }];
     const i = { id: 1, actor_id: "a", action: "owner_change", entity_type: "deals", entity_id: "x", at: "", details: { from: "a", to: null } };
     expect(detailText(i, members)).toBe("Алексей → никого");
+    expect(actionText("export")).toBe("выгрузил(а) записи в файл");
+    expect(detailText({ ...i, action: "export", details: { count: 42, format: "xlsx" } }, members)).toBe("записей: 42, XLSX");
+    expect(detailText({ ...i, action: "role_update", details: { key: "hr", rank: 50 } }, members)).toBe("hr, ранг 50");
   });
 });

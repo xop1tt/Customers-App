@@ -679,7 +679,7 @@ export interface ChatFresh { seq: number; conversation_id: string; kind: "direct
 export interface AppNotification {
   id: string;
   seq: number;
-  kind: "mention" | "added_to_group" | "note_mention" | "comment_mention";
+  kind: "mention" | "added_to_group" | "note_mention" | "comment_mention" | "task_assigned" | "record_assigned";
   actor_id: string | null;
   actor_name: string;
   conversation_id: string | null;

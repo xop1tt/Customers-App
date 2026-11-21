@@ -72,6 +72,8 @@ describe("упоминания", () => {
     expect(notificationText({ kind: "mention", actor_name: "Вера" })).toBe("Вера упоминает вас в обсуждении");
     expect(notificationText({ kind: "added_to_group", actor_name: "Глеб" })).toBe("Глеб добавляет вас в обсуждение");
     expect(notificationText({ kind: "note_mention", actor_name: "Глеб" })).toBe("Глеб упоминает вас в заметке");
+    expect(notificationText({ kind: "task_assigned", actor_name: "Вера" })).toBe("Вера назначает вам задачу");
+    expect(notificationText({ kind: "record_assigned", actor_name: "Вера" })).toBe("Вера передаёт вам запись");
     expect(notificationText({ kind: "comment_mention", actor_name: "Глеб" })).toBe("Глеб упоминает вас в комментарии");
   });
 });
