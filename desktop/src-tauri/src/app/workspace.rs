@@ -34,7 +34,20 @@ pub struct CrmState {
     chat_cursor: Option<(String, i64)>,
     /// Канал Realtime пользователя (закрывается вместе с сессией).
     live: Option<LiveChannel>,
+    /// Толчок «в CRM есть изменения» уже ждёт своей синхронизации (ADR-097): следующие толчки сливаются с ним.
+    nudged: bool,
+    /// Сервер отказал в загрузке файла: место под вложения Workspace занято (ADR-097). Пока не прошло
+    /// QUOTA_RETRY, файлы не отправляются заново (каждый — до 5 МБ).
+    quota_full_at: Option<std::time::Instant>,
 }
+
+/// Через сколько снова пробовать загрузить файлы после отказа «место закончилось».
+const QUOTA_RETRY: Duration = Duration::from_secs(600);
+
+/// Задержка синхронизации после толчка Realtime: изменения коллег приходят пачкой, а 100 устройств не должны
+/// прийти за ними в одну и ту же секунду (база — 1 с, плюс случайные до 2 с).
+const NUDGE_DELAY_MS: u64 = 1000;
+const NUDGE_JITTER_MS: f64 = 2000.0;
 
 /// Открытый канал Realtime: задача держит соединение, `on` — открыт ли он прямо сейчас.
 pub struct LiveChannel {
@@ -1277,6 +1290,22 @@ impl Core {
         Ok(row)
     }
 
+    /// Вложение с проверкой места в облаке (ADR-097): облачный Workspace на связи — сначала спрашиваем сервер,
+    /// хватит ли места; нет связи или сервер старый — сохраняем, сервер проверит при загрузке файла.
+    pub async fn ws_attach_add_checked(self: &Arc<Self>, entity_type: &str, entity_id: &str, name: &str, mime: &str, data_base64: &str) -> CmdResult<Value> {
+        let size = data_base64.trim().len() / 4 * 3;
+        let s = self.require()?;
+        let remote = self.ws_catalog(&s).ok().and_then(|c| c.active_info().filter(|w| w.remote).map(|w| w.id.clone()));
+        if let (Some(ws), Some(cloud)) = (remote, self.env.cloud.clone()) {
+            if let Ok(u) = sync::rpc(&cloud, "attachment_usage", json!({"p_workspace": ws})).await {
+                if let Some(msg) = quota_refusal(u["used"].as_u64(), u["limit"].as_u64(), size as u64) {
+                    return Err(CmdError::new("attachmentQuota", msg));
+                }
+            }
+        }
+        self.ws_attach_add(entity_type, entity_id, name, mime, data_base64)
+    }
+
     /// Сохраняет вложение в файл, выбранный пользователем.
     pub async fn ws_attach_save(self: &Arc<Self>, id: &str, path: &str) -> CmdResult<String> {
         use base64::Engine;
@@ -1311,17 +1340,23 @@ impl Core {
     }
 
     /// После выгрузки очереди: файлы, чьи метаданные сервер уже принял, уходят в облако (повтор при следующей синхронизации).
-    async fn upload_blobs(&self, cloud: &crate::cloud::auth::CloudAuth, store: &Store) {
+    /// Возвращает `true`, если сервер отказал: место под вложения Workspace закончилось.
+    async fn upload_blobs(&self, cloud: &crate::cloud::auth::CloudAuth, store: &Store) -> bool {
         use base64::Engine;
         let pending = store.lock().unwrap().blobs_to_upload();
         for (id, data) in pending {
             let ws = store.lock().unwrap().workspace_id.clone();
             let body = json!({"attachment_id": id, "workspace_id": ws, "data": base64::engine::general_purpose::STANDARD.encode(&data)});
             let r = cloud.authorized("POST", "/rest/v1/attachment_blobs", Some(&body), &[("Prefer", "return=minimal,resolution=ignore-duplicates")]).await;
-            if matches!(r, Ok((s, _)) if (200..300).contains(&s)) {
-                let _ = store.lock().unwrap().mark_blob_uploaded(&id);
+            match r {
+                Ok((s, _)) if (200..300).contains(&s) => {
+                    let _ = store.lock().unwrap().mark_blob_uploaded(&id);
+                }
+                Ok((_, body)) if is_quota_error(&body) => return true,
+                _ => {}
             }
         }
+        false
     }
 
     // ------------------------------------------------------------ присутствие
@@ -1598,7 +1633,18 @@ impl Core {
         }
         let on = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let env = self.env.clone();
+        // Слабые ссылки: задача канала живёт внутри сессии и не должна удерживать ядро и сессию.
+        let (core, session) = (Arc::downgrade(self), Arc::downgrade(s));
         let on_event: Arc<dyn Fn(String, Value) + Send + Sync> = Arc::new(move |event, payload| {
+            if event == "crm" || event == "resync" {
+                if let (Some(core), Some(session)) = (core.upgrade(), session.upgrade()) {
+                    // resync: канал переподключился, толчки за время обрыва могли потеряться.
+                    core.ws_nudged(&session, if event == "crm" { payload["workspace_id"].as_str() } else { None });
+                }
+                if event == "crm" {
+                    return;
+                }
+            }
             env.emit("chat-live", json!({"event": event, "payload": payload}));
         });
         let task = tokio::spawn(crate::cloud::realtime::run(cloud.clone(), me.clone(), on.clone(), on_event));
@@ -1607,6 +1653,31 @@ impl Core {
     }
 
     // ------------------------------------------------------------ синхронизация
+
+    /// Толчок Realtime: коллега выгрузил изменения CRM в этот Workspace. Содержимого в толчке нет — после
+    /// короткой задержки идёт обычная синхронизация с правами пользователя (RLS решает, что он увидит).
+    /// `workspace`: о каком Workspace толчок (`None` — об активном, после переподключения канала).
+    fn ws_nudged(self: &Arc<Self>, s: &Arc<Session>, workspace: Option<&str>) {
+        let active = self.ws_catalog(s).ok().and_then(|c| c.active_info().filter(|w| w.remote).map(|w| w.id.clone()));
+        if !nudge_applies(active.as_deref(), workspace) {
+            return;
+        }
+        {
+            let mut st = s.workspace.lock().unwrap();
+            if st.nudged {
+                return;
+            }
+            st.nudged = true;
+        }
+        let (core, session) = (self.clone(), s.clone());
+        let delay = nudge_delay(rand::random::<f64>());
+        let handle = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(delay)).await;
+            session.workspace.lock().unwrap().nudged = false;
+            core.ws_sync_soon(&session);
+        });
+        s.tasks.lock().unwrap().push(handle);
+    }
 
     fn ws_sync_soon(self: &Arc<Self>, s: &Arc<Session>) {
         let Ok(cloud) = self.active_cloud(s) else { return };
@@ -1627,13 +1698,27 @@ impl Core {
             tokio::time::sleep(Duration::from_millis(300)).await;
             loop {
                 let result = CrmSync::new(cloud.clone(), store.clone(), core.env.device_id.clone()).sync().await;
+                let mut quota_full = false;
                 if result.is_ok() {
-                    core.upload_blobs(&cloud, &store).await;
+                    let waiting = session.workspace.lock().unwrap().quota_full_at.is_some_and(|t| t.elapsed() < QUOTA_RETRY);
+                    quota_full = waiting || core.upload_blobs(&cloud, &store).await;
                 }
                 let again = {
                     let mut st = session.workspace.lock().unwrap();
                     match &result {
+                        Ok(_) if quota_full => {
+                            let expired = match st.quota_full_at {
+                                Some(t) => t.elapsed() >= QUOTA_RETRY,
+                                None => true,
+                            };
+                            if expired {
+                                st.quota_full_at = Some(std::time::Instant::now());
+                            }
+                            st.last_error = Some(QUOTA_FULL.into());
+                            st.last_sync = Some(stamp(crate::time::now()));
+                        }
                         Ok(_) => {
+                            st.quota_full_at = None;
                             st.last_error = None;
                             st.last_sync = Some(stamp(crate::time::now()));
                         }
@@ -1781,6 +1866,38 @@ pub(crate) fn chat_alerts(fresh: &Value, notes: &[Value]) -> Vec<(String, String
         }
     }
     out
+}
+
+const QUOTA_FULL: &str = "Место под вложения в этом Workspace закончилось (300 МБ): новые файлы остаются только на этом устройстве. Удалите ненужные вложения — файлы загрузятся сами.";
+
+/// Ответ сервера на загрузку файла: «место под вложения закончилось» (код 53400, ADR-097).
+fn is_quota_error(body: &[u8]) -> bool {
+    let v: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+    v["code"] == "53400" || v["message"].as_str().is_some_and(|m| m.contains("attachment quota exceeded"))
+}
+
+/// Текст отказа, если файл размером `size` не помещается; без ответа сервера — не отказываем.
+fn quota_refusal(used: Option<u64>, limit: Option<u64>, size: u64) -> Option<String> {
+    let (used, limit) = (used?, limit?);
+    if used + size <= limit {
+        return None;
+    }
+    let mb = |b: u64| (b as f64 / 1_048_576.0).round() as u64;
+    Some(format!("Место под вложения в этом Workspace закончилось: занято {} из {} МБ. Удалите ненужные вложения и попробуйте снова.", mb(used), mb(limit)))
+}
+
+/// Толчок касается только активного облачного Workspace; толчок без Workspace (переподключение) — его же.
+fn nudge_applies(active: Option<&str>, workspace: Option<&str>) -> bool {
+    match (active, workspace) {
+        (None, _) => false,
+        (Some(_), None) => true,
+        (Some(a), Some(w)) => a == w,
+    }
+}
+
+/// Задержка синхронизации по толчку для случайного числа `r` из [0, 1).
+fn nudge_delay(r: f64) -> u64 {
+    NUDGE_DELAY_MS + (r.clamp(0.0, 1.0) * NUDGE_JITTER_MS) as u64
 }
 
 #[cfg(test)]
@@ -1951,6 +2068,28 @@ mod team_tests {
         assert!(!ok(json!({"p_body": "x", "p_attachments": vec![json!({"type": "deal", "id": id}); 11]})));
         let a = chat_alerts(&json!([{"kind": "direct", "author_name": "Борис", "body": "", "mentioned": false}]), &[]);
         assert_eq!(a[0].1, "Карточка CRM");
+    }
+
+    #[test]
+    fn attachment_quota_is_explained_before_and_after_upload() {
+        assert_eq!(quota_refusal(Some(10), Some(100), 90), None);
+        assert_eq!(quota_refusal(None, None, u64::MAX), None, "без ответа сервера файл сохраняется, сервер проверит позже");
+        let msg = quota_refusal(Some(300 * 1_048_576 - 1), Some(300 * 1_048_576), 2).unwrap();
+        assert!(msg.contains("занято 300 из 300 МБ"), "{msg}");
+        assert!(is_quota_error(br#"{"code":"53400","message":"attachment quota exceeded"}"#));
+        assert!(!is_quota_error(br#"{"code":"42501","message":"new row violates row-level security policy"}"#));
+        assert!(!is_quota_error(b"not json"));
+    }
+
+    #[test]
+    fn crm_nudge_syncs_only_the_active_cloud_workspace_with_spread() {
+        assert!(nudge_applies(Some("w1"), Some("w1")));
+        assert!(nudge_applies(Some("w1"), None), "переподключение канала сверяет активный Workspace");
+        assert!(!nudge_applies(Some("w1"), Some("w2")), "толчок другого Workspace не трогает активный");
+        assert!(!nudge_applies(None, Some("w1")), "локальный Workspace толчки не ждёт");
+        assert_eq!(nudge_delay(0.0), 1000);
+        assert_eq!(nudge_delay(0.999), 2998);
+        assert!((0..100).map(|i| nudge_delay(i as f64 / 100.0)).collect::<std::collections::BTreeSet<_>>().len() > 50, "устройства приходят вразброс");
     }
 
     #[test]

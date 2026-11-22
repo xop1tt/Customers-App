@@ -438,7 +438,6 @@ sync_cmds! {
     ws_card(entity: String, id: String) -> Value = |c: &Arc<Core>, e: String, id: String| c.ws_card(&e, &id);
     ws_save(entity: String, id: Option<String>, fields: serde_json::Map<String, Value>) -> Value = |c: &Arc<Core>, e: String, id: Option<String>, f| c.ws_save(&e, id.as_deref(), f);
     ws_delete(entity: String, id: String) -> Value = |c: &Arc<Core>, e: String, id: String| c.ws_delete(&e, &id);
-    ws_attach_add(entity_type: String, entity_id: String, name: String, mime: String, data: String) -> Value = |c: &Arc<Core>, t: String, i: String, n: String, m: String, d: String| c.ws_attach_add(&t, &i, &n, &m, &d);
     ws_restore(entity: String, id: String) -> Value = |c: &Arc<Core>, e: String, id: String| c.ws_restore(&e, &id);
     ws_duplicates(entity: String, fields: serde_json::Map<String, Value>, except: Option<String>) -> Value = |c: &Arc<Core>, e: String, f, x: Option<String>| c.ws_duplicates(&e, f, x.as_deref());
     ws_merge(request: crate::workspace::merge::MergeRequest) -> Value = |c: &Arc<Core>, r| c.ws_merge(r);
@@ -468,6 +467,10 @@ pub async fn ws_upload_local(core: C<'_>, cloud: Option<String>) -> CmdResult<Va
 #[tauri::command]
 pub async fn ws_presence(core: C<'_>, entity_type: Option<String>, entity_id: Option<String>) -> CmdResult<Value> {
     core.inner().ws_presence(entity_type, entity_id).await
+}
+#[tauri::command]
+pub async fn ws_attach_add(core: C<'_>, entity_type: String, entity_id: String, name: String, mime: String, data: String) -> CmdResult<Value> {
+    core.inner().ws_attach_add_checked(&entity_type, &entity_id, &name, &mime, &data).await
 }
 #[tauri::command]
 pub async fn ws_attach_save(core: C<'_>, id: String, path: String) -> CmdResult<String> {
