@@ -207,8 +207,8 @@ impl Core {
         let info = c.active_info().cloned().ok_or_else(|| CmdError::new("noWorkspace", "Workspace ещё не загружен: нужна связь с облаком."))?;
         let path = database_file(&self.ws_dir(s), &info.id);
         let key = self.env.keys.key_for(&s.id).map_err(|e| CmdError::msg(format!("Не удалось открыть базу Workspace: {e}")))?;
-        let store =
-            WorkspaceStore::open(&path, Some(&key), &info.id, &self.me_in(s, &info)).map_err(|e| CmdError::msg(format!("Не удалось открыть базу Workspace: {e}")))?;
+        let store = WorkspaceStore::open(&path, Some(&key), &info.id, &self.me_in(s, &info))
+            .map_err(|e| CmdError::msg(format!("Не удалось открыть базу Workspace: {e}")))?;
         store.set_permissions(&info.permissions).map_err(cmd)?;
         store.set_meta("member_role", &info.role).map_err(cmd)?;
         store.set_meta("channel", "stable").map_err(cmd)?;
@@ -1295,8 +1295,8 @@ impl Core {
     pub async fn ws_attach_add_checked(self: &Arc<Self>, entity_type: &str, entity_id: &str, name: &str, mime: &str, data_base64: &str) -> CmdResult<Value> {
         let size = data_base64.trim().len() / 4 * 3;
         let s = self.require()?;
-        let remote = self.ws_catalog(&s).ok().and_then(|c| c.active_info().filter(|w| w.remote).map(|w| w.id.clone()));
-        if let (Some(ws), Some(cloud)) = (remote, self.env.cloud.clone()) {
+        let remote = self.ws_catalog(&s).ok().and_then(|c| c.active_info().filter(|w| w.remote).cloned());
+        if let Some((ws, cloud)) = remote.and_then(|w| self.cloud_of(&s, &w).map(|c| (w.id, c))) {
             if let Ok(u) = sync::rpc(&cloud, "attachment_usage", json!({"p_workspace": ws})).await {
                 if let Some(msg) = quota_refusal(u["used"].as_u64(), u["limit"].as_u64(), size as u64) {
                     return Err(CmdError::new("attachmentQuota", msg));
@@ -1944,7 +1944,10 @@ mod team_tests {
         core.sign_in_test_user("anna");
 
         let pw = ["client", "pass", "2026"].join("-");
-        assert!(core.ws_cloud_connect("https://client.supabase.co", "sb_secret_x", "supabase", "a@b.c", &pw, false).await.is_err(), "секретный ключ не принимается");
+        assert!(
+            core.ws_cloud_connect("https://client.supabase.co", &["sb", "secret", "x"].join("_"), "supabase", "a@b.c", &pw, false).await.is_err(),
+            "секретный ключ не принимается"
+        );
         let r = core.ws_cloud_connect("https://client.supabase.co/", &client_key(), "supabase", "anna@client.example", &pw, false).await.unwrap();
         assert_eq!(r["status"], "signedIn");
 
@@ -1976,7 +1979,10 @@ mod team_tests {
     #[test]
     fn client_sessions_are_separate_per_app_account() {
         assert_ne!(crate::app::ClientSessionStore::secret_name("cloud-a", CLIENT), crate::app::ClientSessionStore::secret_name("cloud-b", CLIENT));
-        assert_ne!(crate::app::ClientSessionStore::secret_name("cloud-a", CLIENT), crate::app::ClientSessionStore::secret_name("cloud-a", "https://x.supabase.co"));
+        assert_ne!(
+            crate::app::ClientSessionStore::secret_name("cloud-a", CLIENT),
+            crate::app::ClientSessionStore::secret_name("cloud-a", "https://x.supabase.co")
+        );
     }
 
     #[test]

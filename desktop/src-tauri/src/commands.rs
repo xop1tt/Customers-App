@@ -522,15 +522,7 @@ pub fn ws_clouds(core: C<'_>) -> CmdResult<Value> {
 }
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub async fn ws_cloud_connect(
-    core: C<'_>,
-    url: String,
-    anon_key: String,
-    kind: String,
-    email: String,
-    password: String,
-    sign_up: bool,
-) -> CmdResult<Value> {
+pub async fn ws_cloud_connect(core: C<'_>, url: String, anon_key: String, kind: String, email: String, password: String, sign_up: bool) -> CmdResult<Value> {
     core.inner().ws_cloud_connect(&url, &anon_key, &kind, &email, &password, sign_up).await
 }
 #[tauri::command]

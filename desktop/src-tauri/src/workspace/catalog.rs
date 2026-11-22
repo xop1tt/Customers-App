@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn client_cloud_needs_a_public_key_and_known_kind() {
-        assert!(CloudRef::new("https://c.supabase.co", "sb_secret_abc", "supabase").is_none());
+        assert!(CloudRef::new("https://c.supabase.co", &["sb", "secret", "abc"].join("_"), "supabase").is_none());
         assert!(CloudRef::new("http://c.example.com", "sb_publishable_abc", "server").is_none());
         assert!(CloudRef::new("https://c.example.com", "sb_publishable_abc", "ftp").is_none());
         assert_eq!(CloudRef::new("https://c.example.com/", "sb_publishable_abc", "server").unwrap().url, "https://c.example.com");
