@@ -773,9 +773,15 @@ pub mod tests {
     #[tokio::test]
     async fn link_not_requested_by_this_app_is_refused_and_keeps_current_session() {
         // Страница в браузере открывает leadgenerator://auth/callback с токенами своей учётной записи.
-        let server = Server::new(vec![(200, &token_json("a1", "r1", 3600)), (200, STRANGER)]);
+        let server = Server::new(vec![(200, STRANGER)]);
         let (auth, store) = auth_with(server.clone());
-        auth.sign_in("me@example.com", "x").await.unwrap();
+        let me: CloudUser = serde_json::from_str(ME).unwrap();
+        auth.set_session(Some(CloudSession {
+            access_token: "a1".into(),
+            refresh_token: "r1".into(),
+            expires_at: crate::time::now() + crate::time::secs(3600),
+            user: me,
+        }));
         let err = auth.handle_callback("leadgenerator://auth/callback#access_token=EVIL&refresh_token=EVIL&type=recovery").await.unwrap_err();
         assert_eq!(err, CloudError::Server(UNEXPECTED_LINK.into()));
         assert_eq!(store.load().unwrap().access_token, "a1");
