@@ -734,7 +734,14 @@ export interface MarketManifest {
   window?: { url: string };
 }
 export interface MarketInstall { version: string; manifest: MarketManifest; enabled: boolean; installed_at: string; update_available: boolean }
-export interface MarketVersion { id: string; version: string; status: "pending" | "approved" | "rejected" | "superseded"; review_note: string | null; created_at: string; manifest: MarketManifest }
+/** Замечание автопроверки (lib/connectors.ts и private.market_checks на сервере). */
+export interface MarketCheck { id: string; label: string; level: "ok" | "warn" | "fail"; detail: string }
+export interface MarketVersion {
+  id: string; version: string; status: "pending" | "approved" | "rejected" | "superseded"; review_note: string | null; created_at: string; manifest: MarketManifest;
+  /** Отчёт серверной автопроверки при подаче (ADR-095); у версий, поданных раньше, — пусто. */
+  checks?: MarketCheck[];
+  reviewed_at?: string | null;
+}
 export interface MarketApp {
   id: string;
   slug: string;
@@ -763,8 +770,26 @@ export interface MarketCompany {
   note: string | null;
   submitted_at: string | null;
 }
-export interface MarketCompanyReview { user_id: string; company: MarketCompany }
-export interface MarketReview { version_id: string; version: string; manifest: MarketManifest; created_at: string; live_manifest: MarketManifest | null; developer_email: string | null; app: MarketApp }
+export interface MarketCompanyReview { user_id: string; account_email?: string | null; company: MarketCompany }
+export type MarketAuditAction = "version_approved" | "version_rejected" | "app_suspended" | "app_restored" | "company_verified" | "company_rejected" | "moderator_added" | "moderator_removed";
+export interface MarketReview {
+  version_id: string; version: string; manifest: MarketManifest; created_at: string; live_manifest: MarketManifest | null; developer_email: string | null; app: MarketApp;
+  /** ADR-095: что опубликовано сейчас, автопроверка при подаче и сейчас, компания и прошлые решения. Старый сервер их не присылает. */
+  live_version?: string | null;
+  checks?: MarketCheck[];
+  server_checks?: MarketCheck[];
+  company?: MarketCompany | null;
+  history?: { action: MarketAuditAction; note: string | null; created_at: string; version: string | null }[];
+}
+/** Запись журнала решений модераторов (только модераторам). */
+export interface MarketAuditEntry {
+  id: number; created_at: string; action: MarketAuditAction; actor_email: string | null; subject_email: string | null;
+  app_id: string | null; version_id: string | null; note: string | null;
+  details: { app_name?: string; version?: string; developer_name?: string; developer_email?: string; legal_name?: string; email?: string; scopes?: string[]; checks?: MarketCheck[] };
+}
+export interface MarketModerator { user_id: string; email: string | null; added_at: string; added_by_email: string | null; me: boolean }
+export interface MarketNotice { id: number; kind: Exclude<MarketAuditAction, "moderator_added" | "moderator_removed">; app_id: string | null; title: string; note: string | null; created_at: string; read: boolean }
+export interface MarketNotices { unread: number; items: MarketNotice[] }
 export interface MarketInstalled { app_id: string; name: string; icon: string; actions: MarketAction[]; scopes: string[] }
 export interface MarketSubmission {
   id?: string;
