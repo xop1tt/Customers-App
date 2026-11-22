@@ -130,6 +130,9 @@ impl MailAction {
     }
 }
 
+/// Ответ на ссылку входа, которую это приложение не запрашивало (или запрашивало до перезапуска).
+pub const UNEXPECTED_LINK: &str = "эту ссылку приложение не запрашивало. Если письмо ваше, введите в приложении код из него";
+
 pub struct CloudAuth {
     pub config: CloudConfig,
     transport: Arc<dyn HttpTransport>,
@@ -137,7 +140,14 @@ pub struct CloudAuth {
     device_id: String,
     session: Mutex<Option<CloudSession>>,
     refresh_lock: tokio::sync::Mutex<()>,
+    /// Адреса, на которые это приложение само запросило письмо со ссылкой, и время запроса. Ссылка
+    /// `leadgenerator://auth/callback#access_token=…` принимается, только если её учётная запись есть в этом
+    /// списке: иначе любая страница в браузере могла бы подсунуть приложению сессию чужой учётной записи.
+    expected_links: Mutex<Vec<(String, Timestamp)>>,
 }
+
+/// Сколько ждать ссылку из письма после запроса (ссылки Supabase живут не дольше суток).
+pub const LINK_WAIT_SECS: i64 = 24 * 3600;
 
 fn redirect_param(redirect: &str) -> String {
     percent_encoding::utf8_percent_encode(redirect, percent_encoding::NON_ALPHANUMERIC).to_string()
@@ -150,7 +160,7 @@ fn json_text(data: &[u8]) -> Value {
 impl CloudAuth {
     pub fn new(config: CloudConfig, transport: Arc<dyn HttpTransport>, store: Arc<dyn SessionStore>, device_id: String) -> Self {
         let session = Mutex::new(store.load());
-        Self { config, transport, store, device_id, session, refresh_lock: tokio::sync::Mutex::new(()) }
+        Self { config, transport, store, device_id, session, refresh_lock: tokio::sync::Mutex::new(()), expected_links: Mutex::new(Vec::new()) }
     }
 
     pub fn device_id(&self) -> &str {
@@ -163,6 +173,26 @@ impl CloudAuth {
 
     pub fn user(&self) -> Option<CloudUser> {
         self.session().map(|s| s.user)
+    }
+
+    /// Приложение запросило письмо со ссылкой на этот адрес.
+    fn expect_link(&self, email: &str) {
+        let now = crate::time::now();
+        let mut list = self.expected_links.lock().unwrap();
+        list.retain(|(e, at)| e != email && now.duration_since(*at) < crate::time::secs(LINK_WAIT_SECS));
+        list.push((email.to_lowercase(), now));
+    }
+
+    /// Ждёт ли приложение ссылку для этой учётной записи (её текущий или новый адрес). Найденный адрес
+    /// вычёркивается: одна запрошенная ссылка — один вход.
+    fn take_expected_link(&self, user: &CloudUser) -> bool {
+        let now = crate::time::now();
+        let mut list = self.expected_links.lock().unwrap();
+        list.retain(|(_, at)| now.duration_since(*at) < crate::time::secs(LINK_WAIT_SECS));
+        let mine: Vec<String> = [Some(user.email.as_str()), user.new_email.as_deref()].into_iter().flatten().map(str::to_lowercase).collect();
+        let before = list.len();
+        list.retain(|(e, _)| !mine.contains(e));
+        list.len() != before
     }
 
     fn set_session(&self, s: Option<CloudSession>) {
@@ -256,6 +286,7 @@ impl CloudAuth {
             return Err(CloudError::WeakPassword(Some(p)));
         }
         self.gate(MailAction::Signup, &email).await?;
+        self.expect_link(&email);
         let mut body = json!({"email": email, "password": password, "options": {"email_redirect_to": self.config.redirect}});
         if let Some(name) = username.map(str::trim).filter(|n| !n.is_empty()) {
             body["data"] = json!({"display_name": name});
@@ -271,6 +302,7 @@ impl CloudAuth {
     pub async fn resend_confirmation(&self, raw_email: &str) -> CloudResult<()> {
         let email = Self::valid_email(raw_email)?;
         self.gate(MailAction::Signup, &email).await?;
+        self.expect_link(&email);
         let body = json!({"type": "signup", "email": email, "options": {"email_redirect_to": self.config.redirect}});
         self.auth("POST", "/resend", Some(&body), None).await?;
         Ok(())
@@ -381,6 +413,7 @@ impl CloudAuth {
     pub async fn request_password_reset(&self, raw_email: &str) -> CloudResult<()> {
         let email = Self::valid_email(raw_email)?;
         self.gate(MailAction::Recovery, &email).await?;
+        self.expect_link(&email);
         self.auth("POST", &format!("/recover?redirect_to={}", redirect_param(self.config.redirect)), Some(&json!({"email": email})), None).await?;
         Ok(())
     }
@@ -438,6 +471,8 @@ impl CloudAuth {
             Ok(_) => {}
         }
         self.gate(MailAction::EmailChange, &current).await?;
+        self.expect_link(&current);
+        self.expect_link(&new);
         let (status, data) =
             self.authorized("PUT", &format!("/auth/v1/user?redirect_to={}", redirect_param(self.config.redirect)), Some(&json!({"email": new})), &[]).await?;
         if !(200..300).contains(&status) {
@@ -452,6 +487,8 @@ impl CloudAuth {
         let u = self.user().ok_or(CloudError::SessionExpired)?;
         let new = u.new_email.ok_or(CloudError::SessionExpired)?;
         self.gate(MailAction::EmailChange, &u.email).await?;
+        self.expect_link(&u.email);
+        self.expect_link(&new);
         self.auth("POST", "/resend", Some(&json!({"type": "email_change", "email": new})), None).await?;
         Ok(())
     }
@@ -498,11 +535,17 @@ impl CloudAuth {
                 .and_then(|v| v.parse::<f64>().ok())
                 .and_then(|t| crate::time::from_unix(t as i64))
                 .unwrap_or_else(|| crate::time::now() + crate::time::secs(params.get("expires_in").and_then(|v| v.parse::<i64>().ok()).unwrap_or(3600)));
-            self.set_session(Some(CloudSession { access_token: access.clone(), refresh_token: refresh.clone(), expires_at: exp, user: CloudUser::default() }));
-            if let Err(e) = self.reload_user().await {
-                self.set_session(None);
-                return Err(e);
+            // Сначала узнаём, чья это сессия, и только потом сохраняем её: текущий вход не трогается,
+            // пока ссылка не признана своей.
+            let (status, data) = self.request("GET", "/auth/v1/user", None, Some(access), &[]).await?;
+            if !(200..300).contains(&status) {
+                return Err(CloudError::from_auth(status, &data));
             }
+            let user: CloudUser = serde_json::from_slice(&data).map_err(|_| CloudError::Server("неожиданный ответ сервера".into()))?;
+            if user.id.is_empty() || !self.take_expected_link(&user) {
+                return Err(CloudError::Server(UNEXPECTED_LINK.into()));
+            }
+            self.set_session(Some(CloudSession { access_token: access.clone(), refresh_token: refresh.clone(), expires_at: exp, user }));
             return Ok(CallbackResult::SignedIn { kind: params.get("type").cloned().unwrap_or_default() });
         }
         if let Some(m) = params.get("message") {
@@ -707,6 +750,7 @@ pub mod tests {
     async fn email_callback_signs_in_and_loads_user() {
         let server = Server::new(vec![(200, r#"{"id":"u1","email":"me@example.com","email_confirmed_at":"2026-01-01T00:00:00Z"}"#)]);
         let (auth, store) = auth_with(server.clone());
+        auth.expect_link("me@example.com");
         let r = auth.handle_callback("leadgenerator://auth/callback#access_token=AT&refresh_token=RT&expires_in=3600&type=signup").await.unwrap();
         assert_eq!(r, CallbackResult::SignedIn { kind: "signup".into() });
         assert_eq!(store.load().unwrap().user.email, "me@example.com");
@@ -720,6 +764,63 @@ pub mod tests {
             CallbackResult::Message("Confirm link in second email".into())
         );
         assert!(auth.handle_callback("leadgenerator://auth/callback").await.is_err());
+        assert_eq!(server.paths()[0], "GET /auth/v1/user");
+    }
+
+    const ME: &str = r#"{"id":"u1","email":"me@example.com","email_confirmed_at":"2026-01-01T00:00:00Z"}"#;
+    const STRANGER: &str = r#"{"id":"u9","email":"attacker@example.com","email_confirmed_at":"2026-01-01T00:00:00Z"}"#;
+
+    #[tokio::test]
+    async fn link_not_requested_by_this_app_is_refused_and_keeps_current_session() {
+        // Страница в браузере открывает leadgenerator://auth/callback с токенами своей учётной записи.
+        let server = Server::new(vec![(200, &token_json("a1", "r1", 3600)), (200, STRANGER)]);
+        let (auth, store) = auth_with(server.clone());
+        auth.sign_in("me@example.com", "x").await.unwrap();
+        let err = auth.handle_callback("leadgenerator://auth/callback#access_token=EVIL&refresh_token=EVIL&type=recovery").await.unwrap_err();
+        assert_eq!(err, CloudError::Server(UNEXPECTED_LINK.into()));
+        assert_eq!(store.load().unwrap().access_token, "a1");
+        assert_eq!(auth.session().unwrap().access_token, "a1");
+    }
+
+    #[tokio::test]
+    async fn link_for_another_account_than_requested_is_refused() {
+        let server = Server::new(vec![(200, STRANGER)]);
+        let (auth, store) = auth_with(server);
+        auth.expect_link("me@example.com");
+        assert!(auth.handle_callback("leadgenerator://auth/callback#access_token=EVIL&refresh_token=EVIL&type=signup").await.is_err());
+        assert!(store.load().is_none());
+    }
+
+    #[tokio::test]
+    async fn requested_link_is_accepted_once() {
+        let server = Server::new(vec![(200, ME), (200, ME)]);
+        let (auth, store) = auth_with(server);
+        auth.expect_link("Me@Example.com");
+        let url = "leadgenerator://auth/callback#access_token=AT&refresh_token=RT&type=recovery";
+        assert_eq!(auth.handle_callback(url).await.unwrap(), CallbackResult::SignedIn { kind: "recovery".into() });
+        assert_eq!(store.load().unwrap().refresh_token, "RT");
+        store.save(None);
+        assert_eq!(auth.handle_callback(url).await.unwrap_err(), CloudError::Server(UNEXPECTED_LINK.into()));
+        assert!(store.load().is_none());
+    }
+
+    #[tokio::test]
+    async fn email_change_link_matches_new_address() {
+        let server = Server::new(vec![(200, r#"{"id":"u1","email":"new@example.com"}"#)]);
+        let (auth, _) = auth_with(server);
+        auth.expect_link("old@example.com");
+        auth.expect_link("new@example.com");
+        let r = auth.handle_callback("leadgenerator://auth/callback#access_token=AT&refresh_token=RT&type=email_change").await.unwrap();
+        assert_eq!(r, CallbackResult::SignedIn { kind: "email_change".into() });
+    }
+
+    #[tokio::test]
+    async fn requesting_mail_arms_the_link() {
+        let server = Server::new(vec![(200, "{}"), (200, "{}"), (200, ME)]);
+        let (auth, _) = auth_with(server);
+        auth.request_password_reset("me@example.com").await.unwrap();
+        let r = auth.handle_callback("leadgenerator://auth/callback#access_token=AT&refresh_token=RT&type=recovery").await.unwrap();
+        assert_eq!(r, CallbackResult::SignedIn { kind: "recovery".into() });
     }
 
     #[tokio::test]
