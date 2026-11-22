@@ -265,7 +265,7 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
     return marketCall(String(args.action), (args.args ?? {}) as Record<string, unknown>,
       { cloud: ws.isCloud, me: ws.me, wsId: remote ? ws.active : null, perms: ws.permissions, moderator: ws.isCloud });
   }
-  if (["ws_team", "ws_update_member", "ws_chat", "ws_chat_poll"].includes(cmd)) {
+  if (["ws_team", "ws_update_member", "ws_chat", "ws_chat_poll", "ws_departments", "ws_save_department", "ws_delete_department", "ws_set_member_department"].includes(cmd)) {
     const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
     const me = session();
     if (cmd === "ws_chat" && args.action === "chat_post") {

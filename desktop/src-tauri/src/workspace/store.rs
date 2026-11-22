@@ -184,6 +184,28 @@ impl WorkspaceStore {
             }
         }
         self.conn.execute_batch(&sql)?;
+        // База с прошлой версии приложения: новые поля сущностей добавляются столбцами, а таблица загружается
+        // с сервера заново, чтобы новые поля пришли и у старых записей (например, отдел, ADR-096).
+        for e in ENTITIES {
+            let have: BTreeSet<String> = {
+                let mut st = self.conn.prepare(&format!("PRAGMA table_info({})", e.table))?;
+                let names = st.query_map([], |r| r.get::<_, String>(1))?;
+                names.collect::<Result<_, _>>()?
+            };
+            let mut added = false;
+            for f in e.fields.iter().filter(|f| !have.contains(f.name)) {
+                let ty = match f.kind {
+                    Kind::Num => "REAL",
+                    Kind::Bool => "INTEGER",
+                    _ => "TEXT",
+                };
+                self.conn.execute_batch(&format!("ALTER TABLE {} ADD COLUMN {} {ty}", e.table, f.name))?;
+                added = true;
+            }
+            if added {
+                self.conn.execute("DELETE FROM sync_cursor WHERE table_name=?1", [e.table])?;
+            }
+        }
         if self.meta("schema_version").is_none() {
             self.set_meta("schema_version", &SCHEMA_VERSION.to_string())?;
         }
@@ -461,25 +483,56 @@ impl WorkspaceStore {
                     return denied("общие коллекции меняет менеджер или администратор");
                 }
             }
-            Class::Records => match current {
-                None => {
-                    if !self.can("records.create") {
-                        return denied("создание записей");
+            Class::Records => {
+                // Значения своих полей и контакты сделки меняет тот, кто может менять саму карточку (ADR-094).
+                if let Some(parent) = self.parent_card(e.table, current, fields)? {
+                    if !self.may_edit(&parent) {
+                        return denied("изменение чужой карточки");
                     }
                 }
-                Some(cur) => {
-                    let own = [&cur["created_by"], &cur["owner_id"], &cur["assignee_id"]].iter().any(|v| v.as_str() == Some(me));
-                    if !(self.can("records.edit") || (self.can("records.edit_own") && own)) {
-                        return denied("изменение чужих записей");
+                match current {
+                    None => {
+                        if !self.can("records.create") {
+                            return denied("создание записей");
+                        }
                     }
-                    let author_may = matches!(e.table, "notes" | "comments" | "activities") && cur["created_by"].as_str() == Some(me);
-                    if touches_delete && !self.can("records.delete") && !author_may {
-                        return denied("удаление записей");
+                    Some(cur) => {
+                        let parent_ok = matches!(e.table, "custom_field_values" | "deal_contacts");
+                        if !parent_ok && !self.may_edit(cur) {
+                            return denied("изменение чужих записей");
+                        }
+                        let author_may = (matches!(e.table, "notes" | "comments") && cur["created_by"].as_str() == Some(me)) || parent_ok;
+                        if touches_delete && !self.can("records.delete") && !author_may {
+                            return denied("удаление записей");
+                        }
                     }
                 }
-            },
+            }
         }
         Ok(())
+    }
+
+    /// Правило сервера `private.can_edit`: любые записи с records.edit; с records.edit_own — где я ответственный
+    /// или исполнитель, а свою запись без ответственного — как автор.
+    fn may_edit(&self, row: &Value) -> bool {
+        let me = Some(self.user_id.as_str());
+        let owner = row["owner_id"].as_str();
+        let own = owner == me || row["assignee_id"].as_str() == me || (owner.is_none() && row["created_by"].as_str() == me);
+        self.can("records.edit") || (self.can("records.edit_own") && own)
+    }
+
+    /// Карточка, к которой относится значение своего поля или контакт сделки.
+    fn parent_card(&self, table: &str, current: Option<&Value>, fields: &Map<String, Value>) -> AppResult<Option<Value>> {
+        let pick = |k: &str| fields.get(k).or(current.map(|c| &c[k])).and_then(Value::as_str).map(str::to_string);
+        let (parent_table, parent_id) = match table {
+            "custom_field_values" => (pick("entity_type").and_then(|t| schema::by_type(&t)).map(|e| e.table), pick("entity_id")),
+            "deal_contacts" => (Some("deals"), pick("deal_id")),
+            _ => return Ok(None),
+        };
+        match (parent_table, parent_id) {
+            (Some(t), Some(id)) => Ok(Some(self.get(t, &id)?.unwrap_or(Value::Null))),
+            _ => Ok(Some(Value::Null)),
+        }
     }
 
     fn check_required(&self, e: &Entity, creating: bool, row: &Map<String, Value>) -> AppResult<()> {
@@ -719,6 +772,59 @@ impl WorkspaceStore {
                 )?;
             }
             Ok(rows.len())
+        })
+    }
+
+    /// Курсор журнала, у которого нет своей таблицы на устройстве (например, `crm_scope_events`).
+    pub fn set_cursor(&self, name: &str, seq: i64) -> AppResult<()> {
+        self.conn.execute(
+            "INSERT INTO sync_cursor(table_name, server_seq) VALUES(?1, ?2) ON CONFLICT(table_name) DO UPDATE SET server_seq=max(server_seq, excluded.server_seq)",
+            params![name, seq],
+        )?;
+        Ok(())
+    }
+
+    /// Права или отдел изменились: записи загружаются заново с начала, чтобы пришли ставшие видимыми.
+    pub fn reset_record_cursors(&self) -> AppResult<()> {
+        for e in ENTITIES.iter().filter(|e| e.class == Class::Records) {
+            self.conn.execute("DELETE FROM sync_cursor WHERE table_name=?1", [e.table])?;
+        }
+        Ok(())
+    }
+
+    /// id записей таблицы, которые уже есть на сервере (неотправленные новые не считаются).
+    pub fn synced_ids(&self, table: &str) -> AppResult<Vec<String>> {
+        let e = schema::entity(table).ok_or_else(|| err(format!("Неизвестная сущность: {table}")))?;
+        let mut st = self.conn.prepare(&format!("SELECT id FROM {} WHERE sync_state <> 'pending'", e.table))?;
+        let rows = st.query_map([], |r| r.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Записи стали не видны (другой отдел, другие права): локальные копии удаляются вместе с заметками,
+    /// звонками, вложениями, значениями полей и контактами сделки. Задачи, где я исполнитель, остаются.
+    pub fn forget_hidden(&self, table: &str, ids: &[String]) -> AppResult<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let e = schema::entity(table).ok_or_else(|| err(format!("Неизвестная сущность: {table}")))?;
+        let me = self.user_id.clone();
+        self.transaction(|c| {
+            let mut n = 0;
+            for id in ids {
+                n += c.execute(&format!("DELETE FROM {} WHERE id=?1", e.table), [id])?;
+                c.execute("DELETE FROM sync_outbox WHERE entity=?1 AND entity_id=?2", params![e.table, id])?;
+                if e.entity_type.is_some() {
+                    for child in ["notes", "comments", "activities", "attachments", "custom_field_values"] {
+                        c.execute(&format!("DELETE FROM {child} WHERE entity_id=?1"), [id])?;
+                    }
+                    c.execute("DELETE FROM tasks WHERE entity_id=?1 AND coalesce(assignee_id, '') <> ?2", params![id, me])?;
+                }
+                if e.table == "deals" {
+                    c.execute("DELETE FROM deal_contacts WHERE deal_id=?1", [id])?;
+                    c.execute("DELETE FROM deal_stage_history WHERE deal_id=?1", [id])?;
+                }
+            }
+            Ok(n)
         })
     }
 

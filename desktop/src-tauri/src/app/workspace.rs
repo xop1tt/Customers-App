@@ -564,9 +564,39 @@ impl Core {
 
     /// Сохраняет записи в файл CSV или XLSX. С `collection` выгружается то, что показывает коллекция
     /// (её фильтры и `query` пользователя), без неё — записи таблицы `entity` по `query`.
+    /// Облачный Workspace: сервер проверяет `records.export` и пишет выгрузку в журнал действий (ADR-094);
+    /// без ответа сервера файл не сохраняется.
+    pub async fn ws_export_checked(self: &Arc<Self>, request: crate::workspace::export::Request, path: &Path) -> CmdResult<Value> {
+        let s = self.require()?;
+        let Some(active) = self.ws_catalog(&s)?.active_info().filter(|w| w.remote).cloned() else {
+            return self.ws_export(request, path);
+        };
+        let format = request.format.clone();
+        let (bytes, count, table) = self.export_bytes(request)?;
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        sync::rpc(&cloud, "log_export", json!({"p_workspace": active.id, "p_entity": table, "p_count": count, "p_format": format})).await.map_err(
+            |e| match e {
+                CloudError::Server(m) if m.starts_with("permission denied") => CmdError::msg("Недостаточно прав для экспорта записей."),
+                CloudError::Network(_) => {
+                    CmdError::msg("Нет связи с облаком. Выгрузку облачного рабочего пространства подтверждает сервер: повторите, когда связь появится.")
+                }
+                e => cloud_err(e),
+            },
+        )?;
+        std::fs::write(path, bytes).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
+        Ok(json!({"count": count}))
+    }
+
+    /// Выгрузка локального Workspace (облачный — через `ws_export_checked`).
     pub fn ws_export(&self, request: crate::workspace::export::Request, path: &Path) -> CmdResult<Value> {
+        let (bytes, count, _) = self.export_bytes(request)?;
+        std::fs::write(path, bytes).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
+        Ok(json!({"count": count}))
+    }
+
+    fn export_bytes(&self, request: crate::workspace::export::Request) -> CmdResult<(Vec<u8>, usize, String)> {
         let lang = crate::tray_text::Lang::parse(&request.lang);
-        let (bytes, count) = self.with_crm(|st| {
+        self.with_crm(|st| {
             let (table, q) = match request.collection.as_deref() {
                 Some(id) => {
                     let (_, table, q) = Self::collection_query(st, id, request.query)?;
@@ -574,10 +604,9 @@ impl Core {
                 }
                 None => (request.entity, request.query),
             };
-            crate::workspace::export::file(st, &table, &q, &request.fields, &request.format, lang)
-        })?;
-        std::fs::write(path, bytes).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
-        Ok(json!({"count": count}))
+            let (bytes, count) = crate::workspace::export::file(st, &table, &q, &request.fields, &request.format, lang)?;
+            Ok((bytes, count, table))
+        })
     }
 
     /// Порядок коллекций в левой панели — свой у каждого пользователя.
@@ -816,10 +845,14 @@ impl Core {
             return Ok(json!({"roles": [], "catalog": []}));
         };
         let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let roles = sync::select(&cloud, &format!("roles?select=key,name,rank,is_system,workspace_id,role_permissions(permission_key)&or=(workspace_id.is.null,workspace_id.eq.{})&order=rank.desc", active.id))
+        let roles = sync::select(&cloud, &format!("roles?select=id,key,name,rank,is_system,workspace_id,role_permissions(permission_key)&or=(workspace_id.is.null,workspace_id.eq.{})&order=rank.desc", active.id))
             .await
             .map_err(cloud_err)?;
         let catalog = sync::select(&cloud, "permissions?select=key,description&order=key").await.map_err(cloud_err)?;
+        // Видимость записей роли в этом Workspace (ADR-096); сервер без отделов — у всех ролей «всё».
+        let scopes = sync::select(&cloud, &format!("role_scopes?workspace_id=eq.{}&select=role_id,scope", active.id)).await.unwrap_or(Value::Null);
+        let scope_of =
+            |id: &Value| scopes.as_array().and_then(|a| a.iter().find(|s| &s["role_id"] == id)).and_then(|s| s["scope"].as_str()).unwrap_or("all").to_string();
         // Своя роль с тем же ключом заменяет системный шаблон.
         let mut by_key: std::collections::BTreeMap<String, Value> = Default::default();
         for r in roles.as_array().cloned().unwrap_or_default() {
@@ -827,7 +860,10 @@ impl Core {
             let own = !r["workspace_id"].is_null();
             if own || !by_key.contains_key(&key) {
                 let perms: Vec<Value> = r["role_permissions"].as_array().map(|a| a.iter().map(|p| p["permission_key"].clone()).collect()).unwrap_or_default();
-                by_key.insert(key.clone(), json!({"key": key, "name": r["name"], "rank": r["rank"], "system": r["is_system"], "permissions": perms}));
+                by_key.insert(
+                    key.clone(),
+                    json!({"key": key, "name": r["name"], "rank": r["rank"], "system": r["is_system"], "permissions": perms, "scope": scope_of(&r["id"])}),
+                );
             }
         }
         let mut list: Vec<Value> = by_key.into_values().collect();
@@ -846,6 +882,61 @@ impl Core {
         }
         self.ws_rpc("save_role", json!({"p_key": key, "p_name": name, "p_rank": rank, "p_permissions": permissions}), true).await?;
         self.ws_roles().await
+    }
+
+    /// Какие записи видит роль: all, department, own (ADR-096).
+    pub async fn ws_set_role_scope(self: &Arc<Self>, key: &str, scope: &str) -> CmdResult<Value> {
+        if !matches!(scope, "all" | "department" | "own") {
+            return Err(CmdError::msg("Видимость — «все записи», «свой отдел» или «только свои»."));
+        }
+        self.ws_rpc("set_role_scope", json!({"p_key": key, "p_scope": scope}), true).await?;
+        self.ws_roles().await
+    }
+
+    // ------------------------------------------------------------ отделы (ADR-096)
+
+    /// Отделы активного облачного Workspace (дерево по `parent_id`). Локальный — пусто.
+    pub async fn ws_departments(self: &Arc<Self>) -> CmdResult<Value> {
+        let s = self.require()?;
+        let Some(active) = self.remote_active(&s)? else {
+            return Ok(json!([]));
+        };
+        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
+        let path = format!("departments?workspace_id=eq.{}&deleted_at=is.null&select=id,name,parent_id,head_id,position&order=position,name", active.id);
+        match sync::select(&cloud, &path).await {
+            Ok(v) => Ok(v),
+            Err(CloudError::Server(m)) if m.contains("departments") || m == "HTTP 404" => Ok(json!([])),
+            Err(e) => Err(cloud_err(e)),
+        }
+    }
+
+    /// Создать (`id` пусто) или изменить отдел.
+    pub async fn ws_save_department(self: &Arc<Self>, id: Option<String>, name: &str, parent: Option<String>, head: Option<String>) -> CmdResult<Value> {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 120 {
+            return Err(CmdError::msg("Название отдела — от 1 до 120 символов."));
+        }
+        for v in [&id, &parent, &head].into_iter().flatten() {
+            check_uuid(v)?;
+        }
+        let r = self.ws_rpc("save_department", json!({"p_id": id, "p_name": name, "p_parent": parent, "p_head": head}), true).await?;
+        Ok(json!({"id": r}))
+    }
+
+    /// Закрыть отдел: сотрудники, подотделы и записи переходят в вышестоящий.
+    pub async fn ws_delete_department(self: &Arc<Self>, id: &str) -> CmdResult<()> {
+        check_uuid(id)?;
+        self.ws_rpc("delete_department", json!({"p_id": id}), true).await?;
+        Ok(())
+    }
+
+    pub async fn ws_set_member_department(self: &Arc<Self>, user: &str, department: Option<String>) -> CmdResult<()> {
+        check_uuid(user)?;
+        if let Some(d) = &department {
+            check_uuid(d)?;
+        }
+        self.ws_rpc("set_member_department", json!({"p_user": user, "p_department": department}), true).await?;
+        Ok(())
     }
 
     pub async fn ws_delete_role(self: &Arc<Self>, key: &str) -> CmdResult<Value> {
@@ -1515,6 +1606,8 @@ pub(crate) fn chat_alerts(fresh: &Value, notes: &[Value]) -> Vec<(String, String
             Some("added_to_group") => out.push((format!("{actor} добавляет вас в обсуждение"), excerpt)),
             Some("note_mention") => out.push((format!("{actor} упоминает вас в заметке"), excerpt)),
             Some("comment_mention") => out.push((format!("{actor} упоминает вас в комментарии"), excerpt)),
+            Some("task_assigned") => out.push((format!("{actor} назначает вам задачу"), excerpt)),
+            Some("record_assigned") => out.push((format!("{actor} передаёт вам запись"), excerpt)),
             _ => {}
         }
     }
@@ -1639,6 +1732,8 @@ mod team_tests {
             json!({"kind": "added_to_group", "actor_name": "Глеб", "excerpt": "Отдел продаж"}),
             json!({"kind": "note_mention", "actor_name": "Глеб", "excerpt": "проверь счёт"}),
             json!({"kind": "mention", "actor_name": "Вера", "excerpt": "уже в сообщениях"}),
+            json!({"kind": "task_assigned", "actor_name": "Вера", "excerpt": "Подготовить КП"}),
+            json!({"kind": "record_assigned", "actor_name": "Вера", "excerpt": "ООО Вектор"}),
         ];
         let a = chat_alerts(&fresh, &notes);
         assert_eq!(a[0], ("Борис".to_string(), "Привет".to_string()));
@@ -1647,7 +1742,9 @@ mod team_tests {
         assert_eq!(a[3], ("Новые сообщения".to_string(), "И ещё 2".to_string()));
         assert_eq!(a[4].0, "Глеб добавляет вас в обсуждение");
         assert_eq!(a[5].0, "Глеб упоминает вас в заметке");
-        assert_eq!(a.len(), 6, "упоминание в чате уже показано как сообщение");
+        assert_eq!(a[6], ("Вера назначает вам задачу".to_string(), "Подготовить КП".to_string()));
+        assert_eq!(a[7].0, "Вера передаёт вам запись");
+        assert_eq!(a.len(), 8, "упоминание в чате уже показано как сообщение");
         assert!(chat_alerts(&json!([]), &[]).is_empty());
     }
 }

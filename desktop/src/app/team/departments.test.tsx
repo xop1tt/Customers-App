@@ -6,7 +6,7 @@ vi.hoisted(() => { window.history.replaceState({}, "", "/?team"); });
 
 import { resetChatMock } from "../../api/chatMock";
 import { resetWsMock, setWsMockRole } from "../../api/wsMock";
-import { departmentError, departmentsOf, renamePlan, sameDepartment, teamOf } from "../../lib/departments";
+import { departmentError, departmentPath, departmentsOf, membersOfDepartment, renamePlan, sameDepartment, subDepartments, teamOf } from "../../lib/departments";
 import type { TeamMember } from "../../api/types";
 import { getState, openCollection, openRecord, setState } from "../../state/store";
 import { App } from "../App";
@@ -44,11 +44,25 @@ describe("lib/departments", () => {
   });
 });
 
+describe("дерево отделов (ADR-096)", () => {
+  const d = (id: string, name: string, parent_id: string | null = null) => ({ id, name, parent_id, head_id: null, position: 0 });
+  it("подотделы, путь и сотрудники отдела по id или названию", () => {
+    const deps = [d("s", "Продажи"), d("m", "Москва", "s"), d("k", "Казань", "s"), d("x", "Маркетинг")];
+    expect(subDepartments(deps, null).map((x) => x.name)).toEqual(["Маркетинг", "Продажи"]);
+    expect(subDepartments(deps, "s").map((x) => x.name)).toEqual(["Казань", "Москва"]);
+    expect(departmentPath(deps, "m")).toBe("Продажи › Москва");
+    const t = [m("a", "Москва", { department_id: "m" }), m("b", "москва"), m("c", "Продажи", { department_id: "m" }), m("e", "")];
+    expect(membersOfDepartment(t, deps[1]!).map((x) => x.user_id).sort()).toEqual(["a", "b", "c"]);
+    expect(membersOfDepartment(t, deps[0]!)).toEqual([]);
+  });
+});
+
 describe("вкладка «Отделы»", () => {
   it("показывает отделы и переименовывает их у участников", async () => {
     render(<App />);
     setWsMockRole("owner");
     await waitFor(() => expect(getState().chat?.available).toBe(true));
+    setState({ ws: await (await import("../../api")).api.wsState() });
     fireEvent.click(within(screen.getByRole("navigation", { name: "Модули" })).getByRole("button", { name: /^Команда/ }));
     const n = await screen.findByLabelText("Навигация");
     fireEvent.click(await within(n).findByRole("button", { name: /Сотрудники/ }));
@@ -60,10 +74,10 @@ describe("вкладка «Отделы»", () => {
     expect(within(sec).queryByRole("list", { name: /Сотрудники отдела/ })).toBeNull();
     fireEvent.click(within(cards).getByText("Продажи"));
     expect(await within(sec).findByRole("list", { name: "Сотрудники отдела Продажи" })).toBeInTheDocument();
-    fireEvent.click(within(sec).getAllByRole("button", { name: "Переименовать…" })[0]!);
+    fireEvent.click(within(sec).getAllByRole("button", { name: "Изменить…" })[0]!);
     const input = await screen.findByLabelText("Название отдела");
     fireEvent.change(input, { target: { value: "Коммерция" } });
-    fireEvent.click(screen.getByRole("button", { name: "Переименовать" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
     // Назад к выбору отделов: там уже новое название.
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const back = screen.queryByRole("button", { name: "Ко всем отделам" });

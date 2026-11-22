@@ -47,6 +47,7 @@ function FieldInput({ f, e, value, lk, onCommit, disabled, pipeline }: { f: Fiel
     case "currency": return select(CURRENCIES.map((c) => ({ value: c, label: c })), false);
     case "company": return select([...lk.companies.values()].filter((c) => !c.deleted_at).map((c) => ({ value: c.id, label: String(c.name ?? "") })));
     case "pipeline": return select([...lk.pipelines.values()].map((p) => ({ value: p.id, label: String(p.name ?? "") })), false);
+    case "department": return select((lk.departments ?? []).map((d) => ({ value: d.id, label: d.name })));
     case "stage": return select(stagesOf(lk, pipeline).map((s) => ({ value: s.id, label: String(s.name ?? "") })), false);
     case "long": return <TextArea value={text} onChange={setText} onBlur={commit} disabled={disabled} rows={3} />;
     default:
@@ -70,6 +71,8 @@ function Fields({ e, rec, lk, editable, onChange }: { e: EntityMeta; rec: Record
     <div className="crm-fields">
       {e.fields.map((f) => {
         if (f.name === "lost_reason" && rec.status !== "lost") return null;
+        // Отделы есть только в облачном рабочем пространстве, где их создали (ADR-096).
+        if (f.kind === "department" && !lk.departments?.length) return null;
         return (
           <Field key={f.name} label={f.label + (f.required ? " *" : "")}>
             <FieldInput f={f} e={e} value={rec[f.name]} lk={lk} disabled={!editable} pipeline={rec.pipeline_id}

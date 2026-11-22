@@ -81,6 +81,8 @@ export function notificationText(n: Pick<AppNotification, "kind" | "actor_name">
     case "added_to_group": return `${n.actor_name} добавляет вас в обсуждение`;
     case "note_mention": return `${n.actor_name} упоминает вас в заметке`;
     case "comment_mention": return `${n.actor_name} упоминает вас в комментарии`;
+    case "task_assigned": return `${n.actor_name} назначает вам задачу`;
+    case "record_assigned": return `${n.actor_name} передаёт вам запись`;
   }
 }
 

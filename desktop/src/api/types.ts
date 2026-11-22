@@ -486,7 +486,11 @@ export interface WsMember {
 }
 
 export interface WsPresence { user_id: string; entity_type: string | null; entity_id: string | null; seen_at: string }
-export interface WsRole { key: string; name: string; rank: number; system: boolean; permissions: string[] }
+/** Какие записи видит роль (ADR-096): все, свой отдел с подотделами (и записи без отдела), только свои. */
+export type RecordScope = "all" | "department" | "own";
+export interface WsRole { key: string; name: string; rank: number; system: boolean; permissions: string[]; scope?: RecordScope }
+/** Отдел Workspace (ADR-096): дерево по `parent_id`, руководитель — `head_id`. */
+export interface Department { id: string; name: string; parent_id: string | null; head_id: string | null; position: number }
 export interface WsRoles { roles: WsRole[]; catalog: { key: string; description: string }[] }
 
 export interface WsState {
@@ -618,6 +622,8 @@ export interface TeamMember {
   joined_at: string | null;
   title: string;
   department: string;
+  /** Отдел-сущность (ADR-096); `department` — его название. */
+  department_id?: string | null;
   manager_id: string | null;
   /** Дата прихода в компанию (ГГГГ-ММ-ДД); по умолчанию — дата входа в рабочее пространство. */
   hired_on: string | null;
@@ -679,7 +685,7 @@ export interface ChatFresh { seq: number; conversation_id: string; kind: "direct
 export interface AppNotification {
   id: string;
   seq: number;
-  kind: "mention" | "added_to_group" | "note_mention" | "comment_mention";
+  kind: "mention" | "added_to_group" | "note_mention" | "comment_mention" | "task_assigned" | "record_assigned";
   actor_id: string | null;
   actor_name: string;
   conversation_id: string | null;

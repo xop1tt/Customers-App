@@ -31,7 +31,10 @@
 ```sql
 private.is_member(ws uuid) → boolean      -- активный участник
 private.has_perm(ws uuid, perm text) → boolean
-private.can_edit(ws uuid, owner uuid, author uuid, assignee uuid) → boolean   -- edit или edit_own
+private.can_edit(ws uuid, author uuid, owner uuid, assignee uuid) → boolean   -- edit, или edit_own: ответственный,
+                                                                              -- исполнитель, автор без ответственного
+private.can_write(ws uuid) → boolean                -- edit или edit_own (новая строка после правки)
+private.can_edit_entity(ws uuid, type text, id uuid) → boolean   -- can_edit родительской карточки
 ```
 
 Для каждой CRM-таблицы `t`:
@@ -40,11 +43,16 @@ private.can_edit(ws uuid, owner uuid, author uuid, assignee uuid) → boolean   
 |---|---|
 | select | `using (private.has_perm(workspace_id, 'records.view'))` |
 | insert | `with check (private.has_perm(workspace_id, 'records.create') and created_by = auth.uid())` |
-| update | `using (private.can_edit(workspace_id, owner_id, created_by, …))` `with check` то же; триггер запрещает менять `workspace_id`, `id`, `created_*` |
+| update | `using (private.can_edit(workspace_id, created_by, owner_id, assignee_id))`, `with check (private.can_write(workspace_id))` — ответственный может передать запись коллеге; триггер запрещает менять `workspace_id`, `id`, `created_*` |
 | delete (физический) | политики нет — только мягкое удаление полем `deleted_at` (требует `records.delete`, проверяет триггер) |
 
+Видимость записей (ADR-096): select-политики компаний, контактов, лидов, сделок и задач — `private.can_see(ws, department_id,
+created_by, owner_id, assignee_id)` по `role_scopes` (`all` / `department` / `own`), дочерние записи — `private.can_see_entity`
+по карточке. Журнал `crm_scope_events` (только id) нужен устройствам, чтобы удалить ставшие невидимыми записи.
+
 Особые таблицы: `collections` (личные видит только автор: `visibility = 'workspace' or owner_id = auth.uid()`),
-`audit_log` (select — `audit.view`, insert — только definer-функции), `workspace_members` / `roles` / приглашения
+`custom_field_values` и `deal_contacts` (запись — по `can_edit_entity` карточки, ADR-094), `sync_conflicts`
+(конфликты личных коллекций видит только их участник), `audit_log` (select — `audit.view`, insert — только definer-функции), `workspace_members` / `roles` / приглашения
 (select — `members.view`, запись — только RPC), `user_profiles` (select — общий Workspace с пользователем или он сам,
 update — только свой).
 

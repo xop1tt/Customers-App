@@ -454,7 +454,6 @@ sync_cmds! {
     ws_collections() -> Value = |c: &Arc<Core>| c.ws_collections();
     ws_collection_items(id: String, query: Option<Query>) -> Value = |c: &Arc<Core>, id: String, q: Option<Query>| c.ws_collection_items(&id, q.unwrap_or_default());
     ws_export_fields(entity: String, lang: String) -> Value = |c: &Arc<Core>, e: String, l: String| c.ws_export_fields(&e, &l);
-    ws_export(request: crate::workspace::export::Request, path: String) -> Value = |c: &Arc<Core>, r, p: String| c.ws_export(r, &PathBuf::from(p));
     ws_reorder_collections(ids: Vec<String>) -> () = |c: &Arc<Core>, ids: Vec<String>| c.ws_reorder_collections(ids);
     ws_hide_collection(id: String, hidden: bool) -> () = |c: &Arc<Core>, id: String, h: bool| c.ws_hide_collection(&id, h);
     ws_conflicts() -> Value = |c: &Arc<Core>| c.ws_conflicts();
@@ -483,6 +482,26 @@ pub async fn ws_save_role(core: C<'_>, key: String, name: String, rank: i64, per
     core.inner().ws_save_role(&key, &name, rank, permissions).await
 }
 #[tauri::command]
+pub async fn ws_set_role_scope(core: C<'_>, key: String, scope: String) -> CmdResult<Value> {
+    core.inner().ws_set_role_scope(&key, &scope).await
+}
+#[tauri::command]
+pub async fn ws_departments(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_departments().await
+}
+#[tauri::command]
+pub async fn ws_save_department(core: C<'_>, id: Option<String>, name: String, parent: Option<String>, head: Option<String>) -> CmdResult<Value> {
+    core.inner().ws_save_department(id, &name, parent, head).await
+}
+#[tauri::command]
+pub async fn ws_delete_department(core: C<'_>, id: String) -> CmdResult<()> {
+    core.inner().ws_delete_department(&id).await
+}
+#[tauri::command]
+pub async fn ws_set_member_department(core: C<'_>, user: String, department: Option<String>) -> CmdResult<()> {
+    core.inner().ws_set_member_department(&user, department).await
+}
+#[tauri::command]
 pub async fn ws_delete_role(core: C<'_>, key: String) -> CmdResult<Value> {
     core.inner().ws_delete_role(&key).await
 }
@@ -502,6 +521,11 @@ pub async fn ws_refresh(core: C<'_>) -> CmdResult<Value> {
 pub async fn ws_sync_now(core: C<'_>) -> CmdResult<Value> {
     core.inner().ws_sync_now().await
 }
+#[tauri::command]
+pub async fn ws_export(core: C<'_>, request: crate::workspace::export::Request, path: String) -> CmdResult<Value> {
+    core.inner().ws_export_checked(request, &PathBuf::from(path)).await
+}
+
 #[tauri::command]
 pub async fn ws_invite(core: C<'_>, email: String, role: String) -> CmdResult<Value> {
     core.inner().ws_invite(&email, &role).await
