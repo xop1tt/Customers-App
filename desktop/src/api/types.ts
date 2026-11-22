@@ -473,6 +473,24 @@ export interface WorkspaceInfo {
   /** Workspace в Supabase; иначе — только на этом устройстве. */
   remote: boolean;
   defaultCurrency: string;
+  /** Облако клиента (свой Supabase или свой сервер); нет — общее облако Customers. */
+  cloud?: CloudRef;
+}
+
+/** Облако клиента: адрес проекта Supabase и публичный ключ (ADR-098). */
+export interface CloudRef {
+  url: string;
+  anonKey: string;
+  kind: "supabase" | "server";
+}
+
+/** Подключённое облако клиента на этом устройстве. */
+export interface ClientCloud {
+  url: string;
+  kind: "supabase" | "server";
+  signedIn: boolean;
+  email: string | null;
+  workspaces: number;
 }
 
 export interface WsMember {

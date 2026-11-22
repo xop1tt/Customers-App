@@ -112,6 +112,8 @@ export const mockQueued = () => queued;
 export const DEMO_EMAIL = "alex@customers.demo";
 const incoming: { id: string; workspaceName: string; role: string; roleName: string; invitedByName: string; createdAt: string; expiresAt: string }[] = [];
 let active: string | null = null;
+/** Облака клиента в демо: вход всегда успешен, подтверждение регистрации — код 123456. */
+const clouds: { url: string; kind: "supabase" | "server"; signedIn: boolean; email: string | null; anonKey: string }[] = [];
 
 function ensure(): Ws {
   if (!workspaces.length) {
@@ -479,9 +481,46 @@ export async function wsCall(cmd: string, args: Record<string, unknown>, leads: 
     case "ws_create_workspace": {
       const name = s("name").trim();
       if (!name || name.length > 120) fail("Название — от 1 до 120 символов.");
+      const url = (args.cloud as string | null) ?? null;
+      const target = url ? clouds.find((c) => c.url === url) : undefined;
+      if (url && !target) fail("Это облако не подключено.");
+      if (target && !target.signedIn) fail("Войдите в облако, чтобы создать в нём Workspace.");
       const id = `ws-${uid()}`;
-      workspaces.push({ info: info(id, name, "owner", false, 1), members: [member(ME, "Алексей", "owner")], tables: seed(id, false), prefs: new Map(), conflicts: [] });
+      const wsInfo = { ...info(id, name, "owner", false, 1), ...(target ? { cloud: { url: target.url, anonKey: target.anonKey, kind: target.kind } } : {}) };
+      workspaces.push({ info: wsInfo, members: [member(ME, "Алексей", "owner")], tables: seed(id, false), prefs: new Map(), conflicts: [] });
       active = id;
+      return state();
+    }
+    case "ws_clouds":
+      return clouds.map((c) => ({ url: c.url, kind: c.kind, signedIn: c.signedIn, email: c.email, workspaces: workspaces.filter((w) => w.info.cloud?.url === c.url).length }));
+    case "ws_cloud_connect": {
+      const url = s("url").trim().replace(/\/+$/, "");
+      const key = s("anonKey").trim();
+      if (!/^https:\/\/[^/\s]+$/.test(url) || !(key.startsWith("sb_publishable_") || key.split(".").length === 3)) {
+        fail("Проверьте адрес облака (https://…) и публичный ключ (sb_publishable_… или anon).");
+      }
+      const kind = s("kind") === "server" ? "server" : "supabase";
+      const signUp = args.signUp === true;
+      const existing = clouds.find((c) => c.url === url);
+      const entry = existing ?? { url, kind, signedIn: false, email: null, anonKey: key };
+      if (!existing) clouds.push(entry);
+      entry.email = s("email").trim();
+      entry.signedIn = !signUp;
+      return { status: signUp ? "confirm" : "signedIn" };
+    }
+    case "ws_cloud_verify": {
+      const c = clouds.find((x) => x.url === s("url"));
+      if (!c) return fail("Это облако не подключено.");
+      if (s("code").trim() !== "123456") fail("Неверный код.");
+      c.signedIn = true;
+      return state();
+    }
+    case "ws_cloud_disconnect": {
+      const url = s("url");
+      const at = clouds.findIndex((c) => c.url === url);
+      if (at >= 0) clouds.splice(at, 1);
+      for (let i = workspaces.length - 1; i >= 0; i--) if (workspaces[i]?.info.cloud?.url === url) workspaces.splice(i, 1);
+      if (!workspaces.some((w) => w.info.id === active)) active = workspaces[0]?.info.id ?? null;
       return state();
     }
     case "ws_rename_workspace":

@@ -125,6 +125,7 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
         events,
         opener: Arc::new(TauriOpener(app.clone())),
         cloud,
+        clouds: Default::default(),
         version,
         device_id,
         bundle_id: app.config().identifier.clone(),
