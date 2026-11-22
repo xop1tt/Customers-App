@@ -47,6 +47,8 @@ private.can_edit_entity(ws uuid, type text, id uuid) → boolean   -- can_edit �
 | delete (физический) | политики нет — только мягкое удаление полем `deleted_at` (требует `records.delete`, проверяет триггер) |
 
 Видимость записей (ADR-096): select-политики компаний, контактов, лидов, сделок и задач — `private.can_see(ws, department_id,
+
+Содержимое вложений (ADR-097): `attachment_blobs` читается только при видимом вложении (RLS `attachments` внутри политики), записывается только автором вложения и только в его Workspace; размер файла не больше объявленного, место — 300 МБ на Workspace плюс докупленное (`private.attachment_quota`, клиентам недоступна). Толчки Realtime `crm` не содержат данных: только `workspace_id`.
 created_by, owner_id, assignee_id)` по `role_scopes` (`all` / `department` / `own`), дочерние записи — `private.can_see_entity`
 по карточке. Журнал `crm_scope_events` (только id) нужен устройствам, чтобы удалить ставшие невидимыми записи.
 
