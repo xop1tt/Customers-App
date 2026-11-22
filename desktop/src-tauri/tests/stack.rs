@@ -305,7 +305,7 @@ async fn workspace_crm_sync_rights_and_conflicts() {
     assert_eq!((idle.pushed, idle.pulled), (0, 0));
 }
 
-/// Отделы (ADR-095): запись ушла в чужой отдел — исчезает с устройства сотрудника; вернулась — приходит снова;
+/// Отделы (ADR-096): запись ушла в чужой отдел — исчезает с устройства сотрудника; вернулась — приходит снова;
 /// видимость роли сменилась — устройство перепроверяет всё.
 #[tokio::test]
 async fn departments_hide_and_return_records_on_devices() {

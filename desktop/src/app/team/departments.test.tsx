@@ -44,7 +44,7 @@ describe("lib/departments", () => {
   });
 });
 
-describe("дерево отделов (ADR-095)", () => {
+describe("дерево отделов (ADR-096)", () => {
   const d = (id: string, name: string, parent_id: string | null = null) => ({ id, name, parent_id, head_id: null, position: 0 });
   it("подотделы, путь и сотрудники отдела по id или названию", () => {
     const deps = [d("s", "Продажи"), d("m", "Москва", "s"), d("k", "Казань", "s"), d("x", "Маркетинг")];

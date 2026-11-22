@@ -1,4 +1,4 @@
-// Видимость записей роли (ADR-095) в редакторе ролей на демо-ядре облачной команды.
+// Видимость записей роли (ADR-096) в редакторе ролей на демо-ядре облачной команды.
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../api";

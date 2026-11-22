@@ -1,4 +1,4 @@
-// Отделы. На сервере отдел — сущность с деревом и руководителем (ADR-095); у сотрудника есть `department_id` и
+// Отделы. На сервере отдел — сущность с деревом и руководителем (ADR-096); у сотрудника есть `department_id` и
 // название `department`. Группировка по названию (`departmentsOf`) осталась для сводок и фильтров.
 
 import type { Department as DepartmentEntity, TeamMember } from "../api/types";

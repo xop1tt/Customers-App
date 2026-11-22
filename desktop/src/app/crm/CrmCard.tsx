@@ -71,7 +71,7 @@ function Fields({ e, rec, lk, editable, onChange }: { e: EntityMeta; rec: Record
     <div className="crm-fields">
       {e.fields.map((f) => {
         if (f.name === "lost_reason" && rec.status !== "lost") return null;
-        // Отделы есть только в облачном рабочем пространстве, где их создали (ADR-095).
+        // Отделы есть только в облачном рабочем пространстве, где их создали (ADR-096).
         if (f.kind === "department" && !lk.departments?.length) return null;
         return (
           <Field key={f.name} label={f.label + (f.required ? " *" : "")}>

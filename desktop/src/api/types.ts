@@ -486,10 +486,10 @@ export interface WsMember {
 }
 
 export interface WsPresence { user_id: string; entity_type: string | null; entity_id: string | null; seen_at: string }
-/** Какие записи видит роль (ADR-095): все, свой отдел с подотделами (и записи без отдела), только свои. */
+/** Какие записи видит роль (ADR-096): все, свой отдел с подотделами (и записи без отдела), только свои. */
 export type RecordScope = "all" | "department" | "own";
 export interface WsRole { key: string; name: string; rank: number; system: boolean; permissions: string[]; scope?: RecordScope }
-/** Отдел Workspace (ADR-095): дерево по `parent_id`, руководитель — `head_id`. */
+/** Отдел Workspace (ADR-096): дерево по `parent_id`, руководитель — `head_id`. */
 export interface Department { id: string; name: string; parent_id: string | null; head_id: string | null; position: number }
 export interface WsRoles { roles: WsRole[]; catalog: { key: string; description: string }[] }
 
@@ -622,7 +622,7 @@ export interface TeamMember {
   joined_at: string | null;
   title: string;
   department: string;
-  /** Отдел-сущность (ADR-095); `department` — его название. */
+  /** Отдел-сущность (ADR-096); `department` — его название. */
   department_id?: string | null;
   manager_id: string | null;
   /** Дата прихода в компанию (ГГГГ-ММ-ДД); по умолчанию — дата входа в рабочее пространство. */

@@ -17,7 +17,7 @@ const iso = (minAgo = 0) => new Date(Date.now() - minAgo * 60_000).toISOString()
 const fail = (message: string, code = ""): never => { throw { code, message }; };
 
 const profiles = new Map<string, Profile>();
-/** Отделы как на сервере (ADR-095): дерево, руководитель; отдел сотрудника — по названию в карточке. */
+/** Отделы как на сервере (ADR-096): дерево, руководитель; отдел сотрудника — по названию в карточке. */
 const depts: Department[] = [];
 const convs: Conv[] = [];
 const msgs: Msg[] = [];

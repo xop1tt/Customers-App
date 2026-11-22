@@ -185,7 +185,7 @@ impl WorkspaceStore {
         }
         self.conn.execute_batch(&sql)?;
         // База с прошлой версии приложения: новые поля сущностей добавляются столбцами, а таблица загружается
-        // с сервера заново, чтобы новые поля пришли и у старых записей (например, отдел, ADR-095).
+        // с сервера заново, чтобы новые поля пришли и у старых записей (например, отдел, ADR-096).
         for e in ENTITIES {
             let have: BTreeSet<String> = {
                 let mut st = self.conn.prepare(&format!("PRAGMA table_info({})", e.table))?;

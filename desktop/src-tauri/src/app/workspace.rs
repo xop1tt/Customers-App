@@ -849,7 +849,7 @@ impl Core {
             .await
             .map_err(cloud_err)?;
         let catalog = sync::select(&cloud, "permissions?select=key,description&order=key").await.map_err(cloud_err)?;
-        // Видимость записей роли в этом Workspace (ADR-095); сервер без отделов — у всех ролей «всё».
+        // Видимость записей роли в этом Workspace (ADR-096); сервер без отделов — у всех ролей «всё».
         let scopes = sync::select(&cloud, &format!("role_scopes?workspace_id=eq.{}&select=role_id,scope", active.id)).await.unwrap_or(Value::Null);
         let scope_of =
             |id: &Value| scopes.as_array().and_then(|a| a.iter().find(|s| &s["role_id"] == id)).and_then(|s| s["scope"].as_str()).unwrap_or("all").to_string();
@@ -884,7 +884,7 @@ impl Core {
         self.ws_roles().await
     }
 
-    /// Какие записи видит роль: all, department, own (ADR-095).
+    /// Какие записи видит роль: all, department, own (ADR-096).
     pub async fn ws_set_role_scope(self: &Arc<Self>, key: &str, scope: &str) -> CmdResult<Value> {
         if !matches!(scope, "all" | "department" | "own") {
             return Err(CmdError::msg("Видимость — «все записи», «свой отдел» или «только свои»."));
@@ -893,7 +893,7 @@ impl Core {
         self.ws_roles().await
     }
 
-    // ------------------------------------------------------------ отделы (ADR-095)
+    // ------------------------------------------------------------ отделы (ADR-096)
 
     /// Отделы активного облачного Workspace (дерево по `parent_id`). Локальный — пусто.
     pub async fn ws_departments(self: &Arc<Self>) -> CmdResult<Value> {

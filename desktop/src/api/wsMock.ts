@@ -34,7 +34,7 @@ const PERM_TEXT: Record<string, string> = {
 };
 interface CustomRole { key: string; name: string; rank: number; permissions: string[] }
 const customRoles = new Map<string, CustomRole[]>();
-/** Видимость записей роли в Workspace (ADR-095): «ws:key» → scope. */
+/** Видимость записей роли в Workspace (ADR-096): «ws:key» → scope. */
 const roleScopes = new Map<string, "all" | "department" | "own">();
 
 interface Ws { info: WorkspaceInfo; members: WsMember[]; tables: Map<string, Row[]>; prefs: Map<string, { position: number; hidden: boolean }>; conflicts: WsConflict[] }

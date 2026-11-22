@@ -110,7 +110,7 @@ function RemoveStage({ stage, others, onClose, onDone }: { stage: CrmRecord; oth
   );
 }
 
-/** Видимость записей роли (ADR-095). */
+/** Видимость записей роли (ADR-096). */
 const SCOPES: { value: RecordScope; label: string }[] = [
   { value: "all", label: "Все записи" },
   { value: "department", label: "Свой отдел и подотделы" },
