@@ -387,7 +387,11 @@ pub fn crash_report_text(core: C<'_>, path: Option<String>) -> String {
     let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_default();
     let user = std::env::var("USER").or_else(|_| std::env::var("USERNAME")).unwrap_or_default();
     let mut text = format!("Customers {}, {} {}\n", core.env.version, std::env::consts::OS, std::env::consts::ARCH);
-    if let Some(p) = path {
+    // Читаются только отчёты о сбоях из тех же папок, что показывает crash_reports, а не любой файл.
+    let home_dir = PathBuf::from(&home);
+    let system = if cfg!(target_os = "macos") { reports::system_report_dirs(&home_dir) } else { vec![] };
+    let allowed = reports::find(&system, Some(&core.env.paths.crashes()), None);
+    if let Some(p) = path.filter(|p| allowed.iter().any(|f| f.path == std::path::Path::new(p))) {
         if let Ok(raw) = std::fs::read_to_string(&p) {
             text.push('\n');
             text.push_str(&reports::summary(&raw, 25, 4000));
