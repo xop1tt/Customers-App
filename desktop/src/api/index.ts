@@ -7,7 +7,7 @@ import type {
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
   SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
   CrmRecord, WsAuditItem, WsAuditQuery, WsCard, WsCollection, WsConflict, WsConverted, WsInvitation, WsIncoming, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll, Department, RecordScope,
-  AiCaps, AiChatReply, ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
+  ClientCloud, AiCaps, AiChatReply, ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
 } from "./types";
 
 const ids = (ids: string[]) => ({ ids });
@@ -112,7 +112,12 @@ export const api = {
   wsSwitch: (id: string) => call<WsState>("ws_switch", { id }),
   wsRefresh: () => call<WsState>("ws_refresh"),
   wsSyncNow: () => call<WsState>("ws_sync_now"),
-  wsCreateWorkspace: (name: string) => call<WsState>("ws_create_workspace", { name }),
+  wsCreateWorkspace: (name: string, cloud?: string) => call<WsState>("ws_create_workspace", { name, cloud: cloud ?? null }),
+  wsClouds: () => call<ClientCloud[]>("ws_clouds"),
+  wsCloudConnect: (url: string, anonKey: string, kind: "supabase" | "server", email: string, password: string, signUp: boolean) =>
+    call<{ status: "signedIn" | "confirm" }>("ws_cloud_connect", { url, anonKey, kind, email, password, signUp }),
+  wsCloudVerify: (url: string, email: string, code: string) => call<WsState>("ws_cloud_verify", { url, email, code }),
+  wsCloudDisconnect: (url: string) => call<WsState>("ws_cloud_disconnect", { url }),
   wsRenameWorkspace: (name: string) => call<WsState>("ws_rename_workspace", { name }),
   wsSetLocalDetails: (name: string, currency: string) => call<WsState>("ws_set_local_details", { name, currency }),
   wsList: (entity: string, query?: WsQuery) => call<{ items: CrmRecord[]; total: number }>("ws_list", { entity, query: query ?? null }),
@@ -154,7 +159,7 @@ export const api = {
   wsAcceptInvitation: (token: string) => call<WsState>("ws_accept_invitation", { token }),
   wsSetMemberRole: (user: string, role: string) => call<WsState>("ws_set_member_role", { user, role }),
   wsRemoveMember: (user: string) => call<WsState>("ws_remove_member", { user }),
-  wsUploadLocal: () => call<{ workspace: string; copied: number; skipped: number; state: WsState }>("ws_upload_local"),
+  wsUploadLocal: (cloud?: string) => call<{ workspace: string; copied: number; skipped: number; state: WsState }>("ws_upload_local", { cloud: cloud ?? null }),
   wsPresence: (entityType?: string, entityId?: string) => call<WsPresence[]>("ws_presence", { entityType: entityType ?? null, entityId: entityId ?? null }),
   wsAttachAdd: (entityType: string, entityId: string, name: string, mime: string, data: string) => call<CrmRecord>("ws_attach_add", { entityType, entityId, name, mime, data }),
   wsAttachSave: (id: string, path: string) => call<string>("ws_attach_save", { id, path }),

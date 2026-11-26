@@ -72,6 +72,11 @@ pub async fn select(auth: &CloudAuth, path: &str) -> CloudResult<Value> {
 /// Список своих Workspace; при первом входе 2.0 создаётся личный (идемпотентно).
 pub async fn workspaces(auth: &CloudAuth) -> CloudResult<Vec<WorkspaceInfo>> {
     rpc(auth, "ensure_personal_workspace", json!({})).await?;
+    client_workspaces(auth).await
+}
+
+/// Workspace облака клиента (ADR-098): без личного Workspace, он есть только в общем облаке.
+pub async fn client_workspaces(auth: &CloudAuth) -> CloudResult<Vec<WorkspaceInfo>> {
     let list = rpc(auth, "my_workspaces", json!({})).await?;
     Ok(list
         .as_array()
@@ -88,6 +93,7 @@ pub async fn workspaces(auth: &CloudAuth) -> CloudResult<Vec<WorkspaceInfo>> {
                     members: w["members"].as_i64().unwrap_or(1),
                     remote: true,
                     default_currency: w["default_currency"].as_str().unwrap_or("RUB").trim().to_string(),
+                    cloud: None,
                 })
                 .filter(|w| !w.id.is_empty())
                 .collect()

@@ -461,8 +461,8 @@ sync_cmds! {
 }
 
 #[tauri::command]
-pub async fn ws_upload_local(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_upload_local().await
+pub async fn ws_upload_local(core: C<'_>, cloud: Option<String>) -> CmdResult<Value> {
+    core.inner().ws_upload_local(cloud.as_deref()).await
 }
 #[tauri::command]
 pub async fn ws_presence(core: C<'_>, entity_type: Option<String>, entity_id: Option<String>) -> CmdResult<Value> {
@@ -513,8 +513,25 @@ pub async fn ws_delete_stage(core: C<'_>, stage: String, move_to: String) -> Cmd
     core.inner().ws_delete_stage(&stage, &move_to).await
 }
 #[tauri::command]
-pub async fn ws_create_workspace(core: C<'_>, name: String) -> CmdResult<Value> {
-    core.inner().ws_create_workspace(&name).await
+pub async fn ws_create_workspace(core: C<'_>, name: String, cloud: Option<String>) -> CmdResult<Value> {
+    core.inner().ws_create_workspace(&name, cloud.as_deref()).await
+}
+#[tauri::command]
+pub fn ws_clouds(core: C<'_>) -> CmdResult<Value> {
+    core.inner().ws_clouds()
+}
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn ws_cloud_connect(core: C<'_>, url: String, anon_key: String, kind: String, email: String, password: String, sign_up: bool) -> CmdResult<Value> {
+    core.inner().ws_cloud_connect(&url, &anon_key, &kind, &email, &password, sign_up).await
+}
+#[tauri::command]
+pub async fn ws_cloud_verify(core: C<'_>, url: String, email: String, code: String) -> CmdResult<Value> {
+    core.inner().ws_cloud_verify(&url, &email, &code).await
+}
+#[tauri::command]
+pub async fn ws_cloud_disconnect(core: C<'_>, url: String) -> CmdResult<Value> {
+    core.inner().ws_cloud_disconnect(&url).await
 }
 #[tauri::command]
 pub async fn ws_refresh(core: C<'_>) -> CmdResult<Value> {

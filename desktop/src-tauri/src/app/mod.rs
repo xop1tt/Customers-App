@@ -98,6 +98,33 @@ impl SessionStore for SecretSessionStore {
     }
 }
 
+/// Сессия облака клиента: свой секрет на пару «учётная запись приложения + адрес облака», чтобы другая
+/// учётная запись на этом компьютере не получила чужой вход, подключив то же облако.
+pub struct ClientSessionStore {
+    pub secrets: Arc<dyn SecretStore>,
+    pub name: String,
+}
+
+impl ClientSessionStore {
+    pub fn secret_name(account: &str, url: &str) -> String {
+        use sha2::Digest;
+        let h = sha2::Sha256::digest(format!("{account}\n{url}").as_bytes());
+        format!("cloud.client.{}", h.iter().take(12).map(|b| format!("{b:02x}")).collect::<String>())
+    }
+}
+
+impl SessionStore for ClientSessionStore {
+    fn load(&self) -> Option<CloudSession> {
+        self.secrets.get(&self.name).ok().flatten().and_then(|t| CloudSession::from_json(&t))
+    }
+    fn save(&self, session: Option<&CloudSession>) {
+        let _ = match session {
+            Some(s) => self.secrets.set(&self.name, &s.to_json()),
+            None => self.secrets.delete(&self.name),
+        };
+    }
+}
+
 /// Случайный идентификатор этого компьютера для лимитов писем. Хранится в защищённом хранилище.
 pub fn device_id(secrets: &dyn SecretStore) -> String {
     if let Some(v) = secrets.get("cloud.device").ok().flatten().filter(|v| !v.is_empty()) {
@@ -118,6 +145,8 @@ pub struct Env {
     pub events: Arc<dyn Events>,
     pub opener: Arc<dyn Opener>,
     pub cloud: Option<Arc<CloudAuth>>,
+    /// Облака клиентов (ADR-098), открываются по требованию: ключ — имя секрета сессии.
+    pub clouds: Mutex<std::collections::HashMap<String, Arc<CloudAuth>>>,
     pub errors: ErrorLog,
     pub version: AppVersion,
     pub device_id: String,
@@ -134,6 +163,27 @@ pub struct Env {
 impl Env {
     pub fn emit(&self, name: &str, payload: Value) {
         self.events.emit(name, payload);
+    }
+
+    /// Клиент облака клиента для учётной записи приложения `account`. Адрес и ключ проверяются заново.
+    pub fn client_cloud(&self, account: &str, cloud: &crate::workspace::catalog::CloudRef) -> Option<Arc<CloudAuth>> {
+        let name = ClientSessionStore::secret_name(account, &cloud.url);
+        let mut map = self.clouds.lock().unwrap();
+        if let Some(c) = map.get(&name) {
+            return Some(c.clone());
+        }
+        let config = crate::cloud::config::CloudConfig::new(&cloud.url, &cloud.anon_key)?;
+        let store = Arc::new(ClientSessionStore { secrets: self.secrets.clone(), name: name.clone() });
+        let auth = Arc::new(CloudAuth::new(config, self.transport.clone(), store, self.device_id.clone()));
+        map.insert(name, auth.clone());
+        Some(auth)
+    }
+
+    /// Забыть вход в облако клиента на этом устройстве.
+    pub fn forget_client_cloud(&self, account: &str, url: &str) {
+        let name = ClientSessionStore::secret_name(account, url);
+        self.clouds.lock().unwrap().remove(&name);
+        let _ = self.secrets.delete(&name);
     }
 
     pub fn device_prefs(&self) -> DevicePrefs {
@@ -233,6 +283,7 @@ pub mod testing {
             events: events.clone(),
             opener: opener.clone(),
             cloud,
+            clouds: Default::default(),
             version: AppVersion::parse("1.1.0").unwrap(),
             device_id: "DEVICE-1".into(),
             bundle_id: "local.leadgenerator.app".into(),
