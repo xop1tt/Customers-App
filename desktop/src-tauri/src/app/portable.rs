@@ -310,7 +310,7 @@ mod tests {
 
     #[tokio::test]
     async fn portable_copy_opens_on_another_account_only_with_the_recovery_key() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = Core::new(f.env.clone());
         core.sign_in_test_user("anna");
         company(&core, "Ромашка");
@@ -340,7 +340,7 @@ mod tests {
         }
 
         // Другая учётная запись (другой ключ устройства): чужой ключ — понятная ошибка, данные не тронуты.
-        core.logout();
+        core.close_current();
         core.sign_in_test_user("boris");
         company(&core, "Чужая");
         assert_eq!(core.portable_state().unwrap()["hasKey"], false);
@@ -377,7 +377,7 @@ mod tests {
 
     #[tokio::test]
     async fn foreign_files_are_refused() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = Core::new(f.env.clone());
         core.sign_in_test_user("anna");
         let key = core.create_portable_key(false).unwrap();

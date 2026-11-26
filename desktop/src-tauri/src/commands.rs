@@ -30,73 +30,11 @@ macro_rules! sync_cmds {
 
 sync_cmds! {
     boot_info() -> Value = |c: &Arc<Core>| to_value(c.boot_info());
-    logout() -> () = |c: &Arc<Core>| { c.logout(); Ok(()) };
 }
 
 #[tauri::command]
-pub async fn cloud_sign_in(core: C<'_>, email: String, password: String) -> CmdResult<()> {
-    core.inner().cloud_sign_in(&email, &password).await
-}
-#[tauri::command]
-pub async fn cloud_sign_up(core: C<'_>, email: String, password: String, confirm: String, username: String) -> CmdResult<Option<String>> {
-    core.inner().cloud_sign_up(&email, &password, &confirm, &username).await
-}
-#[tauri::command]
 pub fn set_profile(core: C<'_>, name: Option<String>, avatar: Option<String>) -> CmdResult<SessionInfo> {
     core.inner().set_profile(name.as_deref(), avatar.as_deref())
-}
-#[tauri::command]
-pub async fn cloud_confirm(core: C<'_>, email: String, code: String) -> CmdResult<()> {
-    core.inner().cloud_confirm(&email, &code).await
-}
-#[tauri::command]
-pub async fn cloud_resend_confirmation(core: C<'_>, email: String) -> CmdResult<()> {
-    core.cloud_resend_confirmation(&email).await
-}
-#[tauri::command]
-pub async fn cloud_request_reset(core: C<'_>, email: String) -> CmdResult<String> {
-    core.cloud_request_reset(&email).await
-}
-#[tauri::command]
-pub async fn cloud_finish_reset(core: C<'_>, email: String, code: String, password: String, confirm: String) -> CmdResult<()> {
-    core.inner().cloud_finish_reset(&email, &code, &password, &confirm).await
-}
-#[tauri::command]
-pub async fn cloud_set_password_after_recovery(core: C<'_>, password: String, confirm: String) -> CmdResult<()> {
-    core.inner().cloud_set_password_after_recovery(&password, &confirm).await
-}
-#[tauri::command]
-pub async fn change_cloud_password(core: C<'_>, current: String, new: String, confirm: String) -> CmdResult<()> {
-    core.change_cloud_password(&current, &new, &confirm).await
-}
-#[tauri::command]
-pub async fn change_cloud_email(core: C<'_>, email: String, password: String) -> CmdResult<()> {
-    core.change_cloud_email(&email, &password).await
-}
-#[tauri::command]
-pub async fn confirm_cloud_email(core: C<'_>, email: String, code: String) -> CmdResult<()> {
-    core.confirm_cloud_email(&email, &code).await
-}
-#[tauri::command]
-pub async fn resend_cloud_email_change(core: C<'_>) -> CmdResult<()> {
-    core.resend_cloud_email_change().await
-}
-#[tauri::command]
-pub async fn delete_cloud_account(core: C<'_>, password: String) -> CmdResult<String> {
-    core.inner().delete_cloud_account(&password).await
-}
-#[tauri::command]
-pub async fn cloud_stats(core: C<'_>) -> CmdResult<BTreeMap<String, i64>> {
-    core.cloud_stats().await
-}
-#[tauri::command]
-pub async fn handle_auth_url(core: C<'_>, url: String) -> CmdResult<Value> {
-    use crate::app::session::CallbackOutcome::*;
-    Ok(match core.inner().handle_auth_url(&url).await? {
-        NewPassword => json!({"kind": "newPassword"}),
-        SignedIn => json!({"kind": "signedIn"}),
-        Message(m) => json!({"kind": "message", "message": m}),
-    })
 }
 
 // ---------------------------------------------------------------- данные
@@ -138,7 +76,6 @@ pub fn device_prefs(core: C<'_>) -> Value {
 #[tauri::command]
 pub fn patch_device_prefs(core: C<'_>, app: tauri::AppHandle, changes: Value) -> Value {
     core.env.patch_device(&changes);
-    core.push_interface_prefs(&changes);
     crate::shell::apply_device_changes(&app, &core, &changes);
     core.env.device.lock().unwrap().to_json()
 }
@@ -149,7 +86,7 @@ pub fn set_ui_language(app: tauri::AppHandle, language: String) {
     crate::shell::set_ui_language(&app, &language);
 }
 
-// ---------------------------------------------------------------- поиск и синхронизация
+// ---------------------------------------------------------------- поиск
 
 sync_cmds! {
     search_overview() -> Value = |c: &Arc<Core>| c.search_overview();
@@ -159,12 +96,6 @@ sync_cmds! {
     run_search(only: Option<Vec<String>>) -> () = |c: &Arc<Core>, only: Option<Vec<String>>| c.run_search(true, only.map(|v| v.into_iter().collect::<HashSet<_>>()), false);
     stop_search() -> () = |c: &Arc<Core>| c.stop_search();
     search_status() -> Value = |c: &Arc<Core>| to_value(c.search_status()?);
-    sync_status() -> Value = |c: &Arc<Core>| to_value(c.sync_status()?);
-}
-
-#[tauri::command]
-pub async fn sync_now(core: C<'_>) -> CmdResult<()> {
-    core.inner().sync_everything_command().await
 }
 
 // ---------------------------------------------------------------- интеграции
@@ -459,154 +390,15 @@ sync_cmds! {
     ws_export_fields(entity: String, lang: String) -> Value = |c: &Arc<Core>, e: String, l: String| c.ws_export_fields(&e, &l);
     ws_reorder_collections(ids: Vec<String>) -> () = |c: &Arc<Core>, ids: Vec<String>| c.ws_reorder_collections(ids);
     ws_hide_collection(id: String, hidden: bool) -> () = |c: &Arc<Core>, id: String, h: bool| c.ws_hide_collection(&id, h);
-    ws_conflicts() -> Value = |c: &Arc<Core>| c.ws_conflicts();
-    ws_resolve_conflict(id: String, take_lost: bool) -> () = |c: &Arc<Core>, id: String, t: bool| c.ws_resolve_conflict(&id, t);
-    ws_dismiss_rejected() -> usize = |c: &Arc<Core>| c.ws_dismiss_rejected();
-}
-
-#[tauri::command]
-pub async fn ws_upload_local(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_upload_local().await
-}
-#[tauri::command]
-pub async fn ws_presence(core: C<'_>, entity_type: Option<String>, entity_id: Option<String>) -> CmdResult<Value> {
-    core.inner().ws_presence(entity_type, entity_id).await
-}
-#[tauri::command]
-pub async fn ws_attach_add(core: C<'_>, entity_type: String, entity_id: String, name: String, mime: String, data: String) -> CmdResult<Value> {
-    core.inner().ws_attach_add_checked(&entity_type, &entity_id, &name, &mime, &data).await
-}
-#[tauri::command]
-pub async fn ws_attach_save(core: C<'_>, id: String, path: String) -> CmdResult<String> {
-    core.inner().ws_attach_save(&id, &path).await
-}
-#[tauri::command]
-pub async fn ws_roles(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_roles().await
-}
-#[tauri::command]
-pub async fn ws_save_role(core: C<'_>, key: String, name: String, rank: i64, permissions: Vec<String>) -> CmdResult<Value> {
-    core.inner().ws_save_role(&key, &name, rank, permissions).await
-}
-#[tauri::command]
-pub async fn ws_set_role_scope(core: C<'_>, key: String, scope: String) -> CmdResult<Value> {
-    core.inner().ws_set_role_scope(&key, &scope).await
-}
-#[tauri::command]
-pub async fn ws_departments(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_departments().await
-}
-#[tauri::command]
-pub async fn ws_save_department(core: C<'_>, id: Option<String>, name: String, parent: Option<String>, head: Option<String>) -> CmdResult<Value> {
-    core.inner().ws_save_department(id, &name, parent, head).await
-}
-#[tauri::command]
-pub async fn ws_delete_department(core: C<'_>, id: String) -> CmdResult<()> {
-    core.inner().ws_delete_department(&id).await
-}
-#[tauri::command]
-pub async fn ws_set_member_department(core: C<'_>, user: String, department: Option<String>) -> CmdResult<()> {
-    core.inner().ws_set_member_department(&user, department).await
-}
-#[tauri::command]
-pub async fn ws_delete_role(core: C<'_>, key: String) -> CmdResult<Value> {
-    core.inner().ws_delete_role(&key).await
-}
-#[tauri::command]
-pub async fn ws_delete_stage(core: C<'_>, stage: String, move_to: String) -> CmdResult<Value> {
-    core.inner().ws_delete_stage(&stage, &move_to).await
-}
-#[tauri::command]
-pub async fn ws_create_workspace(core: C<'_>, name: String) -> CmdResult<Value> {
-    core.inner().ws_create_workspace(&name).await
-}
-#[tauri::command]
-pub async fn ws_refresh(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_refresh().await
-}
-#[tauri::command]
-pub async fn ws_sync_now(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_sync_now().await
-}
-#[tauri::command]
-pub async fn ws_export(core: C<'_>, request: crate::workspace::export::Request, path: String) -> CmdResult<Value> {
-    core.inner().ws_export_checked(request, &PathBuf::from(path)).await
-}
-
-#[tauri::command]
-pub async fn ws_invite(core: C<'_>, email: String, role: String) -> CmdResult<Value> {
-    core.inner().ws_invite(&email, &role).await
-}
-#[tauri::command]
-pub async fn ws_invitations(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_invitations().await
-}
-#[tauri::command]
-pub async fn ws_revoke_invitation(core: C<'_>, id: String) -> CmdResult<Value> {
-    core.inner().ws_revoke_invitation(&id).await
-}
-#[tauri::command]
-pub async fn ws_resend_invitation(core: C<'_>, id: String) -> CmdResult<Value> {
-    core.inner().ws_resend_invitation(&id).await
-}
-#[tauri::command]
-pub async fn ws_audit(core: C<'_>, actor: Option<String>, action: Option<String>, entity_id: Option<String>, offset: Option<i64>) -> CmdResult<Value> {
-    core.inner().ws_audit(actor, action, entity_id, offset).await
-}
-#[tauri::command]
-pub async fn ws_transfer_ownership(core: C<'_>, user: String) -> CmdResult<Value> {
-    core.inner().ws_transfer_ownership(&user).await
-}
-#[tauri::command]
-pub async fn ws_delete_workspace(core: C<'_>, confirm_name: String) -> CmdResult<Value> {
-    core.inner().ws_delete_workspace(&confirm_name).await
-}
-#[tauri::command]
-pub async fn ws_accept_invitation(core: C<'_>, token: String) -> CmdResult<Value> {
-    core.inner().ws_accept_invitation(&token).await
-}
-#[tauri::command]
-pub async fn ws_set_member_role(core: C<'_>, user: String, role: String) -> CmdResult<Value> {
-    core.inner().ws_set_member_role(&user, &role).await
-}
-#[tauri::command]
-pub async fn ws_remove_member(core: C<'_>, user: String) -> CmdResult<Value> {
-    core.inner().ws_remove_member(&user).await
-}
-#[tauri::command]
-pub async fn ws_leave(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_leave().await
-}
-#[tauri::command]
-pub fn ws_set_local_details(core: C<'_>, name: String, currency: String) -> CmdResult<Value> {
-    core.inner().ws_set_local_details(&name, &currency)
-}
-#[tauri::command]
-pub async fn ws_rename_workspace(core: C<'_>, name: String) -> CmdResult<Value> {
-    core.inner().ws_rename_workspace(&name).await
-}
-
-// ---------------------------------------------------------------- сотрудники, чат и уведомления
-
-#[tauri::command]
-pub async fn ws_team(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_team().await
-}
-#[tauri::command]
-pub async fn ws_update_member(core: C<'_>, user: String, fields: serde_json::Map<String, Value>) -> CmdResult<Value> {
-    core.inner().ws_update_member(&user, fields).await
-}
-#[tauri::command]
-pub async fn ws_chat(core: C<'_>, action: String, args: Option<serde_json::Map<String, Value>>) -> CmdResult<Value> {
-    core.inner().ws_chat(&action, args.unwrap_or_default()).await
-}
-#[tauri::command]
-pub async fn ws_chat_poll(core: C<'_>) -> CmdResult<Value> {
-    core.inner().ws_chat_poll().await
-}
-#[tauri::command]
-pub async fn ws_market(core: C<'_>, action: String, args: Option<serde_json::Map<String, Value>>) -> CmdResult<Value> {
-    core.inner().ws_market(&action, args.unwrap_or_default()).await
+    ws_create_workspace(name: String) -> Value = |c: &Arc<Core>, n: String| c.ws_create_workspace(&n);
+    ws_rename_workspace(name: String) -> Value = |c: &Arc<Core>, n: String| c.ws_rename_workspace(&n);
+    ws_set_local_details(name: String, currency: String) -> Value = |c: &Arc<Core>, n: String, cur: String| c.ws_set_local_details(&n, &cur);
+    ws_delete_stage(stage: String, move_to: String) -> Value = |c: &Arc<Core>, st: String, to: String| c.ws_delete_stage(&st, &to);
+    ws_attach_add(entity_type: String, entity_id: String, name: String, mime: String, data: String) -> Value =
+        |c: &Arc<Core>, t: String, id: String, n: String, m: String, d: String| c.ws_attach_add(&t, &id, &n, &m, &d);
+    ws_attach_save(id: String, path: String) -> String = |c: &Arc<Core>, id: String, p: String| c.ws_attach_save(&id, &p);
+    ws_export(request: crate::workspace::export::Request, path: String) -> Value =
+        |c: &Arc<Core>, r: crate::workspace::export::Request, p: String| c.ws_export(r, &PathBuf::from(p));
 }
 
 // ------------------------------------------------------------------ «Интеграции» и «Ai»

@@ -94,14 +94,13 @@ impl Core {
             }
         };
         if changed {
-            s.with_store(|st| st.set_synced_value("search.settings", &new.encoded()))?;
+            s.with_store(|st| st.set_value("search.settings", &new.encoded()))?;
             self.env.emit("search-settings", Value::Null);
-            self.sync_soon(&s);
         }
         Ok(())
     }
 
-    /// Настройки, пришедшие из облака (или сохранённые в базе), — в модель, без повторной выгрузки.
+    /// Настройки, сохранённые в базе (после восстановления копии), — в модель.
     pub fn reload_synced_settings(&self, s: &Session) {
         let (settings, auto) =
             s.with_store(|st| (SearchSettings::stored(st.value("search.settings").as_deref()), st.value("search.auto").and_then(|v| v.parse::<u32>().ok())));
@@ -123,7 +122,6 @@ impl Core {
             self.env.emit("search-settings", Value::Null);
             self.env.emit("account-prefs", s.prefs.lock().unwrap().to_json());
         }
-        self.apply_synced_prefs(s);
     }
 
     pub fn reset_source_memory(&self, source: &str) -> CmdResult<()> {
@@ -193,9 +191,6 @@ impl Core {
         }
         self.env.emit("search-state", serde_json::to_value(s.search_status()).unwrap_or(Value::Null));
         self.env.emit("data-changed", Value::Null);
-        if report.added() > 0 || report.updated() > 0 {
-            self.sync_soon(s);
-        }
         // При работе в фоне приложение может не перезапускаться днями: копия раз в сутки и после поиска.
         self.daily_backup_if_needed(s);
         let failed = !report.failed().is_empty();
@@ -261,7 +256,6 @@ impl Core {
             }
         }));
         drop(tasks);
-        self.start_sync(s);
     }
 }
 
@@ -297,7 +291,7 @@ mod tests {
 
     #[tokio::test]
     async fn search_adds_leads_reports_and_notifies() {
-        let f = fixture(false, vec![Ok(HttpResponse::new(200, RSS_XML))]);
+        let f = fixture(vec![Ok(HttpResponse::new(200, RSS_XML))]);
         let core = Core::new(f.env.clone());
         core.sign_in_test_user("anna");
         core.set_search_settings(&rss_settings()).unwrap();
@@ -320,7 +314,7 @@ mod tests {
 
     #[tokio::test]
     async fn disabled_sources_give_a_clear_message_and_vk_needs_a_token() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = Core::new(f.env.clone());
         core.sign_in_test_user("anna");
         let s = core.session().unwrap();
@@ -346,18 +340,18 @@ mod tests {
 
     #[tokio::test]
     async fn settings_are_stored_in_the_database_and_survive_reopen() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = Core::new(f.env.clone());
         core.sign_in_test_user("anna");
         core.set_search_settings(&rss_settings()).unwrap();
-        core.logout();
+        core.close_current();
         core.sign_in_test_user("anna");
         assert!(core.session().unwrap().settings.lock().unwrap().rss.enabled);
     }
 
     #[tokio::test]
     async fn only_one_search_runs_at_a_time_and_stop_cancels() {
-        let f = fixture(false, vec![Ok(HttpResponse::new(200, RSS_XML))]);
+        let f = fixture(vec![Ok(HttpResponse::new(200, RSS_XML))]);
         let core = Core::new(f.env.clone());
         core.sign_in_test_user("anna");
         core.set_search_settings(&rss_settings()).unwrap();

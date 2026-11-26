@@ -375,13 +375,10 @@ mod tests {
 
     #[tokio::test]
     async fn check_finds_a_newer_release_and_stays_quiet_when_up_to_date() {
-        let f = fixture(
-            false,
-            vec![
-                Ok(HttpResponse::new(200, release("v1.1.0", installer_name(), &"0".repeat(64)))),
-                Ok(HttpResponse::new(200, release("v9.9.9", installer_name(), &"0".repeat(64)))),
-            ],
-        );
+        let f = fixture(vec![
+            Ok(HttpResponse::new(200, release("v1.1.0", installer_name(), &"0".repeat(64)))),
+            Ok(HttpResponse::new(200, release("v9.9.9", installer_name(), &"0".repeat(64)))),
+        ]);
         let core = super::super::session::Core::new(f.env.clone());
         let info = core.check_updates(true).await.unwrap();
         assert_eq!(info.phase, Phase::UpToDate);
@@ -394,7 +391,7 @@ mod tests {
 
     #[tokio::test]
     async fn manual_check_reports_errors_but_automatic_stays_silent() {
-        let f = fixture(false, vec![Ok(HttpResponse::new(500, "")), Ok(HttpResponse::new(500, ""))]);
+        let f = fixture(vec![Ok(HttpResponse::new(500, "")), Ok(HttpResponse::new(500, ""))]);
         let core = super::super::session::Core::new(f.env.clone());
         assert!(core.check_updates(false).await.is_ok());
         assert_eq!(core.update_info().phase, Phase::Idle);
@@ -406,7 +403,7 @@ mod tests {
     #[test]
     fn background_tasks_start_on_the_main_thread_like_in_the_app() {
         // Запуск приложения: setup идёт на главном потоке, где нет контекста tokio. Без входа в общий runtime это паника.
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = super::super::session::Core::new(f.env.clone());
         let _runtime = crate::shell::enter_async_runtime();
         core.start_update_loop();
@@ -414,7 +411,7 @@ mod tests {
 
     #[test]
     fn whats_new_decision_follows_last_seen_version() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = super::super::session::Core::new(f.env.clone());
         f.env.patch_device(&json!({"lastSeenVersion": "1.0.0"}));
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
@@ -435,7 +432,7 @@ mod tests {
 
     #[test]
     fn first_install_records_version_without_showing() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = super::super::session::Core::new(f.env.clone());
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         assert_eq!(rt.block_on(core.whats_new()).unwrap()["show"], false);
@@ -444,7 +441,7 @@ mod tests {
 
     #[test]
     fn staged_update_survives_restart_only_if_newer_and_present() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = super::super::session::Core::new(f.env.clone());
         let dir = f.env.paths.updates();
         std::fs::create_dir_all(&dir).unwrap();
@@ -467,7 +464,7 @@ mod tests {
     #[tokio::test]
     async fn recent_releases_are_cached() {
         let one = json!([{"tag_name": "v1.1.0", "name": "Customers 1.1.0", "body": "- a", "html_url": "u", "assets": []}]).to_string();
-        let f = fixture(false, vec![Ok(HttpResponse::new(200, one))]);
+        let f = fixture(vec![Ok(HttpResponse::new(200, one))]);
         let core = super::super::session::Core::new(f.env.clone());
         let a = core.recent_releases().await.unwrap();
         assert_eq!(a[0]["current"], true);

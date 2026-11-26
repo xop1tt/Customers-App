@@ -81,6 +81,8 @@ pub struct DevicePrefs {
     pub reports_last_seen: Option<String>,
     /// Старые настройки (UserDefaults macOS) уже перенесены.
     pub legacy_imported: bool,
+    /// Учётная запись этого компьютера (`local-<uuid>` или папка прежней облачной записи `cloud-<uuid>`), ADR-100.
+    pub local_account: Option<String>,
 }
 
 impl Default for DevicePrefs {
@@ -124,6 +126,7 @@ impl Default for DevicePrefs {
             reports_include_log: true,
             reports_last_seen: None,
             legacy_imported: false,
+            local_account: None,
         }
     }
 }
@@ -167,7 +170,7 @@ fn normalized_hours(h: u32) -> u32 {
     }
 }
 
-/// Настройки одной учётной записи, которые не синхронизируются через облако.
+/// Настройки одной учётной записи (файл prefs.json в её папке).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AccountPrefs {

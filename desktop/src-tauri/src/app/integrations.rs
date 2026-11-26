@@ -631,7 +631,7 @@ mod tests {
 
     #[tokio::test]
     async fn webdav_drive_connects_and_uploads_a_backup() {
-        let f = fixture(false, vec![Ok(HttpResponse::new(207, "")), Ok(HttpResponse::new(201, "")), Ok(HttpResponse::new(201, ""))]);
+        let f = fixture(vec![Ok(HttpResponse::new(207, "")), Ok(HttpResponse::new(201, "")), Ok(HttpResponse::new(201, ""))]);
         let core = signed_in(&f);
         assert!(core.drives_state().unwrap().drives.iter().all(|d| !d.connected));
         let msg = core.connect_webdav("webdav", "https://cloud.example/dav", "anna", "pw").await.unwrap();
@@ -651,7 +651,7 @@ mod tests {
 
     #[tokio::test]
     async fn webdav_rejects_bad_credentials_and_insecure_addresses() {
-        let f = fixture(false, vec![Ok(HttpResponse::new(401, ""))]);
+        let f = fixture(vec![Ok(HttpResponse::new(401, ""))]);
         let core = signed_in(&f);
         let e = core.connect_webdav("webdav", "https://cloud.example/dav", "anna", "bad").await.unwrap_err();
         assert!(e.message.contains("неверный логин или пароль"));
@@ -662,7 +662,7 @@ mod tests {
 
     #[tokio::test]
     async fn oauth_drive_needs_a_key_which_can_be_added_and_removed() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = signed_in(&f);
         let state = core.drives_state().unwrap();
         let google = state.drives.iter().find(|d| d.service == "googleDrive").unwrap();
@@ -679,7 +679,7 @@ mod tests {
 
     #[tokio::test]
     async fn mail_settings_password_and_send_checks() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = signed_in(&f);
         assert_eq!(core.mail_state().unwrap()["delivery"], "mailApp");
         let account = MailAccount::preset("anna@yandex.ru", "Анна");
@@ -701,7 +701,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_and_mail_app_open_links_and_write_history() {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = signed_in(&f);
         let s = core.session().unwrap();
         let mut d = crate::models::LeadData::new(crate::models::LeadKind::Order, "fl_ru", "1", "Заказ");
@@ -720,7 +720,7 @@ mod tests {
 
     #[tokio::test]
     async fn webhook_export_uses_ledger_and_reports() {
-        let f = fixture(false, vec![Ok(HttpResponse::new(200, r#"{"id":"r1"}"#)), Ok(HttpResponse::new(200, r#"{"id":"r2"}"#))]);
+        let f = fixture(vec![Ok(HttpResponse::new(200, r#"{"id":"r1"}"#)), Ok(HttpResponse::new(200, r#"{"id":"r2"}"#))]);
         let core = signed_in(&f);
         let s = core.session().unwrap();
         let mut ids = vec![];

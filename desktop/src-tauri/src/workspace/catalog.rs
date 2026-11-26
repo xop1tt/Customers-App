@@ -22,7 +22,7 @@ pub struct WorkspaceInfo {
     pub permissions: Vec<String>,
     #[serde(default = "one")]
     pub members: i64,
-    /// Workspace в Supabase (иначе — только на этом устройстве).
+    /// Копия облачного Workspace прежних версий; с ADR-100 при открытии становится локальной.
     #[serde(default)]
     pub remote: bool,
     #[serde(default = "rub")]

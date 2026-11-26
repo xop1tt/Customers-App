@@ -435,7 +435,7 @@ mod tests {
 
     #[tokio::test]
     async fn settings_are_stored_per_user_and_sending_needs_a_connected_service() {
-        let f = fixture(false, vec![Ok(HttpResponse::new(200, "ok"))]);
+        let f = fixture(vec![Ok(HttpResponse::new(200, "ok"))]);
         let core = signed_in(&f);
         assert_eq!(core.hub_load().unwrap(), json!({}));
         assert!(core.hub_send("slack", "x", None).await.is_err(), "не подключена");
@@ -452,12 +452,12 @@ mod tests {
 
     #[tokio::test]
     async fn failed_messages_do_not_leak_the_secret_address() {
-        let f = fixture(false, vec![Ok(HttpResponse::new(404, "no_service"))]);
+        let f = fixture(vec![Ok(HttpResponse::new(404, "no_service"))]);
         let core = signed_in(&f);
         let cfg = json!({"webhook": "https://hooks.slack.com/services/T/B/SECRET"});
         let e = core.hub_send("slack", "x", Some(cfg)).await.unwrap_err();
         assert!(e.message.contains("404") && !e.message.contains("SECRET"));
-        let f = fixture(false, vec![Ok(HttpResponse::new(200, r#"{"ok":false}"#))]);
+        let f = fixture(vec![Ok(HttpResponse::new(200, r#"{"ok":false}"#))]);
         let core = signed_in(&f);
         let cfg = json!({"token": test_token(), "chat": "@news"});
         assert!(core.hub_send("telegram", "x", Some(cfg)).await.is_err(), "Telegram отвечает 200 с ok:false");
@@ -488,10 +488,10 @@ mod tests {
     #[tokio::test]
     async fn capabilities_come_from_the_server_then_from_the_name() {
         // Ollama: /v1/models без подробностей, /api/show знает про зрение, звук — нет.
-        let f = fixture(
-            false,
-            vec![Ok(HttpResponse::new(200, r#"{"data":[{"id":"gemma3:4b"}]}"#)), Ok(HttpResponse::new(200, r#"{"capabilities":["completion","vision"]}"#))],
-        );
+        let f = fixture(vec![
+            Ok(HttpResponse::new(200, r#"{"data":[{"id":"gemma3:4b"}]}"#)),
+            Ok(HttpResponse::new(200, r#"{"capabilities":["completion","vision"]}"#)),
+        ]);
         let core = signed_in(&f);
         let caps = core.ai_capabilities("http://localhost:11434/v1", "", "gemma3:4b").await.unwrap();
         assert_eq!(caps, AiCaps { vision: Some(true), audio: Some(false) });
@@ -499,10 +499,7 @@ mod tests {
         assert_eq!(reqs.len(), 2, "всё узнали — дальше не спрашиваем");
         assert_eq!(reqs[1].url, "http://localhost:11434/api/show");
         // Сервер молчит (ошибки и пустые ответы): остаётся догадка по названию.
-        let f = fixture(
-            false,
-            vec![Ok(HttpResponse::new(500, "")), Ok(HttpResponse::new(404, "")), Ok(HttpResponse::new(404, "")), Ok(HttpResponse::new(404, ""))],
-        );
+        let f = fixture(vec![Ok(HttpResponse::new(500, "")), Ok(HttpResponse::new(404, "")), Ok(HttpResponse::new(404, "")), Ok(HttpResponse::new(404, ""))]);
         let core = signed_in(&f);
         let caps = core.ai_capabilities("http://localhost:1234/v1", "", "qwen2-audio-7b").await.unwrap();
         assert_eq!(caps, AiCaps { vision: None, audio: Some(true) });
@@ -514,10 +511,11 @@ mod tests {
     async fn local_model_lists_models_and_answers() {
         let models = r#"{"data":[{"id":"qwen2.5-7b"},{"id":"llama3.1"},{"id":"llama3.1"}]}"#;
         let answer = r#"{"choices":[{"message":{"role":"assistant","content":"Готово"}}]}"#;
-        let f = fixture(
-            false,
-            vec![Ok(HttpResponse::new(200, models)), Ok(HttpResponse::new(200, answer)), Ok(HttpResponse::new(401, r#"{"error":{"message":"bad key"}}"#))],
-        );
+        let f = fixture(vec![
+            Ok(HttpResponse::new(200, models)),
+            Ok(HttpResponse::new(200, answer)),
+            Ok(HttpResponse::new(401, r#"{"error":{"message":"bad key"}}"#)),
+        ]);
         let core = signed_in(&f);
         assert_eq!(core.ai_models("http://localhost:1234/v1", "").await.unwrap(), vec!["llama3.1", "qwen2.5-7b"]);
         let r = core.ai_chat("http://localhost:1234/v1", "k", json!({"model": "llama3.1", "messages": [], "stream": true})).await.unwrap();

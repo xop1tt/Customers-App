@@ -2,9 +2,7 @@
 //! Всё, что зависит от окна, здесь; остальное приложение этого не знает.
 
 use crate::app::session::Core;
-use crate::app::{device_id, Env, Events, Opener, SecretSessionStore};
-use crate::cloud::auth::CloudAuth;
-use crate::cloud::config::CloudConfig;
+use crate::app::{Env, Events, Opener};
 use crate::identity::{self, APP};
 use crate::paths::AppPaths;
 use crate::prefs::PrefsFile;
@@ -105,13 +103,6 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
     let transport: Arc<dyn crate::search::http::HttpTransport> = Arc::new(ReqwestTransport::new());
     #[cfg(e2e)]
     let transport = crate::e2e::wrap_transport(transport);
-    let device_id = device_id(secrets.as_ref());
-    #[cfg(e2e)]
-    let cloud_config = crate::e2e::cloud_config().or_else(CloudConfig::embedded);
-    #[cfg(not(e2e))]
-    let cloud_config = CloudConfig::embedded();
-    let cloud =
-        cloud_config.map(|config| Arc::new(CloudAuth::new(config, transport.clone(), Arc::new(SecretSessionStore(secrets.clone())), device_id.clone())));
     let events: Arc<dyn crate::app::Events> = Arc::new(TauriEvents(app.clone()));
     let bundle = app_bundle();
     let can_update = !cfg!(debug_assertions) && if cfg!(target_os = "macos") { bundle.is_some() } else { cfg!(windows) };
@@ -124,9 +115,7 @@ pub fn build_env(app: &AppHandle) -> Result<Arc<Env>, String> {
         transport,
         events,
         opener: Arc::new(TauriOpener(app.clone())),
-        cloud,
         version,
-        device_id,
         bundle_id: app.config().identifier.clone(),
         app_bundle: bundle,
         can_update,
@@ -158,7 +147,7 @@ pub fn set_ui_language(app: &AppHandle, code: &str) {
     refresh_tray(app);
 }
 
-fn build_tray_menu(app: &AppHandle, lang: Lang, status: &str, searching: bool, cloud: bool) -> tauri::Result<Menu<tauri::Wry>> {
+fn build_tray_menu(app: &AppHandle, lang: Lang, status: &str, searching: bool) -> tauri::Result<Menu<tauri::Wry>> {
     let t = tray_text::text(lang);
     let status_item = MenuItem::with_id(app, "status", status, false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", t.open, true, None::<&str>)?;
@@ -170,28 +159,22 @@ fn build_tray_menu(app: &AppHandle, lang: Lang, status: &str, searching: bool, c
     let quit = MenuItem::with_id(app, "quit", t.quit, true, None::<&str>)?;
     let sep = || PredefinedMenuItem::separator(app);
     let (s1, s2, s3) = (sep()?, sep()?, sep()?);
-    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&status_item, &s1, &open, &search, &new];
-    let sync = MenuItem::with_id(app, "sync", t.sync, true, None::<&str>)?;
-    if cloud {
-        items.push(&sync);
-    }
-    items.extend([&s2 as &dyn tauri::menu::IsMenuItem<tauri::Wry>, &updates, &settings, &s3, &quit]);
-    Menu::with_items(app, &items)
+    Menu::with_items(app, &[&status_item, &s1, &open, &search, &new, &s2, &updates, &settings, &s3, &quit])
 }
 
-/// Пересобирает меню и подсказку по состоянию: идёт ли поиск, сколько новых лидов, вошёл ли пользователь (тогда в меню есть «Синхронизировать»).
+/// Пересобирает меню и подсказку по состоянию: идёт ли поиск, сколько новых лидов.
 pub fn refresh_tray(app: &AppHandle) {
     let app = app.clone();
     // Вызывается из обработчиков событий, где могут быть заняты замки: работаем в отдельном потоке.
     std::thread::spawn(move || {
         let Some(core) = app.try_state::<Arc<Core>>() else { return };
         let lang = ui_lang();
-        let (searching, new_leads, cloud) = match core.session() {
-            Some(s) => (s.search_status().running, s.with_store(|st| st.new_lead_count()), true),
-            None => (false, 0, false),
+        let (searching, new_leads) = match core.session() {
+            Some(s) => (s.search_status().running, s.with_store(|st| st.new_lead_count())),
+            None => (false, 0),
         };
         let status = tray_text::status(lang, searching, new_leads);
-        let key = format!("{lang:?}|{status}|{cloud}");
+        let key = format!("{lang:?}|{status}");
         {
             let mut last = TRAY_KEY.lock().unwrap();
             if *last == key {
@@ -200,7 +183,7 @@ pub fn refresh_tray(app: &AppHandle) {
             *last = key;
         }
         if let Some(tray) = app.tray_by_id("tray") {
-            if let Ok(menu) = build_tray_menu(&app, lang, &status, searching, cloud) {
+            if let Ok(menu) = build_tray_menu(&app, lang, &status, searching) {
                 let _ = tray.set_menu(Some(menu));
             }
             let _ = tray.set_tooltip(Some(tray_text::tooltip(lang, new_leads)));
@@ -215,7 +198,7 @@ fn setup_tray(app: &AppHandle, core: Arc<Core>) -> tauri::Result<()> {
         *UI_LANG.lock().unwrap() = Lang::parse(&pref);
     }
     let lang = ui_lang();
-    let menu = build_tray_menu(app, lang, &tray_text::status(lang, false, 0), false, false)?;
+    let menu = build_tray_menu(app, lang, &tray_text::status(lang, false, 0), false)?;
     let mut builder = TrayIconBuilder::with_id("tray").tooltip(tray_text::text(lang).tooltip).menu(&menu).show_menu_on_left_click(false);
     // macOS: прозрачный «шаблонный» значок, система сама делает его светлым или тёмным под строку меню.
     #[cfg(target_os = "macos")]
@@ -244,12 +227,6 @@ fn setup_tray(app: &AppHandle, core: Arc<Core>) -> tauri::Result<()> {
             "settings" => {
                 show_main(app);
                 let _ = app.emit("tray-action", json!({"action": "settings"}));
-            }
-            "sync" => {
-                let core = core.clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = core.sync_everything_command().await;
-                });
             }
             "updates" => {
                 let core = core.clone();
@@ -300,24 +277,6 @@ fn follow_system_theme(app: &AppHandle) {
                 let dark = !matches!(theme, tauri::Theme::Light);
                 let _ = app2.run_on_main_thread(move || set_dock_icon(dark));
             }
-        });
-    }
-}
-
-/// Ссылка возврата из браузера (подтверждение почты, восстановление пароля).
-fn handle_deep_links(app: &AppHandle, core: &Arc<Core>, urls: Vec<String>) {
-    let prefix = format!("{}://", APP.url_scheme);
-    for url in urls.into_iter().filter(|u| u.starts_with(&prefix)) {
-        show_main(app);
-        let (core, app) = (core.clone(), app.clone());
-        tauri::async_runtime::spawn(async move {
-            let payload = match core.handle_auth_url(&url).await {
-                Ok(crate::app::session::CallbackOutcome::NewPassword) => json!({"kind": "newPassword"}),
-                Ok(crate::app::session::CallbackOutcome::SignedIn) => json!({"kind": "signedIn"}),
-                Ok(crate::app::session::CallbackOutcome::Message(m)) => json!({"kind": "message", "message": m}),
-                Err(e) => json!({"kind": "error", "message": e.message}),
-            };
-            let _ = app.emit("auth-callback", payload);
         });
     }
 }
@@ -379,13 +338,10 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         webview_autofill::enable(&w);
     }
 
-    // Ссылки возврата: приложение уже открыто (macOS) или запущено второй копией (Windows, через single-instance).
+    // Ссылка схемы приложения (прежние письма облака, ADR-100) просто открывает окно.
     {
-        let (h, c) = (handle.clone(), core.clone());
-        app.deep_link().on_open_url(move |event| handle_deep_links(&h, &c, event.urls().iter().map(|u| u.to_string()).collect()));
-        if let Ok(Some(urls)) = app.deep_link().get_current() {
-            handle_deep_links(&handle, &core, urls.iter().map(|u| u.to_string()).collect());
-        }
+        let h = handle.clone();
+        app.deep_link().on_open_url(move |_| show_main(&h));
         #[cfg(any(windows, target_os = "linux"))]
         let _ = app.deep_link().register_all();
     }

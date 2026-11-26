@@ -58,7 +58,7 @@ pub trait SearchMemory: Send + Sync {
 }
 
 fn encode_cursor<T: Serialize>(v: &T) -> Option<String> {
-    serde_json::to_value(v).ok().map(|v| crate::cloud::types::canonical_json(&v))
+    serde_json::to_value(v).ok().map(|v| crate::jsonfmt::canonical_json(&v))
 }
 
 fn decode_cursor<T: for<'de> Deserialize<'de>>(s: Option<&str>) -> Option<T> {

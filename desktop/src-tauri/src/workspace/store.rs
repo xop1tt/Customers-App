@@ -1,9 +1,7 @@
 //! База Workspace на устройстве: `<папка учётной записи>/workspaces/<workspace_id>.db` (SQLCipher, ключ учётной записи).
 //!
-//! Каждое изменение записывается в таблицу сущности и в очередь `sync_outbox` одной транзакцией
-//! (docs/SYNC_ARCHITECTURE.md §2.1): изменение нельзя потерять при сбое, а повтор отправки идёт с тем же `op_id`.
-//! Те же проверки, что делает сервер (обязательные поля, перечисления, ссылки только внутри Workspace, права роли),
-//! выполняются здесь до записи — интерфейс не ждёт сети, а сервер остаётся последней проверкой.
+//! Все проверки (обязательные поля, перечисления, ссылки только внутри Workspace, права роли) выполняются здесь
+//! до записи. С ADR-100 база — единственная копия данных: облака и синхронизации нет.
 
 use super::query::{self, Query};
 use super::schema::{self, Class, Entity, Kind, ENTITIES, REFERENCES};
@@ -99,6 +97,9 @@ pub struct WorkspaceStore {
     path: PathBuf,
     pub workspace_id: String,
     pub user_id: String,
+    /// Писать изменения в очередь `sync_outbox`. С ADR-100 отправлять их некуда: приложение выключает очередь
+    /// (`without_outbox`), очередь остаётся только для тестов формата.
+    outbox: bool,
 }
 
 /// Встроенная `lower()` SQLite приводит к нижнему регистру только латиницу, поэтому поиск «ромашка» не находил
@@ -122,7 +123,7 @@ impl WorkspaceStore {
         let conn = db::open_connection(path, false, key)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
         unicode_lower(&conn)?;
-        let store = Self { conn, path: path.to_path_buf(), workspace_id: workspace_id.to_string(), user_id: user_id.to_string() };
+        let store = Self { conn, path: path.to_path_buf(), workspace_id: workspace_id.to_string(), user_id: user_id.to_string(), outbox: true };
         store.create_schema()?;
         match store.meta("workspace_id") {
             Some(ws) if ws != workspace_id => return Err(err("Файл базы принадлежит другому Workspace.")),
@@ -436,7 +437,9 @@ impl WorkspaceStore {
                 "upsert"
             };
             let base = current.as_ref().and_then(|r| r["version"].as_i64()).unwrap_or(0);
-            enqueue(c, e.table, &id, kind, &clean, &now_s, base)?;
+            if self.outbox {
+                enqueue(c, e.table, &id, kind, &clean, &now_s, base)?;
+            }
             if e.table == "deals" && clean.contains_key("stage_id") {
                 c.execute(
                     "INSERT INTO deal_stage_history(id, deal_id, from_stage_id, to_stage_id, changed_by, changed_at, local) VALUES(?1,?2,?3,?4,?5,?6,1)",
@@ -453,6 +456,31 @@ impl WorkspaceStore {
         let mut m = Map::new();
         m.insert("deleted_at".into(), json!(stamp(crate::time::now())));
         self.save(table, Some(id), &m)
+    }
+
+    /// Удаление этапа воронки: все сделки этапа (и архивные, и в корзине) переходят на этап `move_to` той же
+    /// воронки, затем этап удаляется. Возвращает число перенесённых сделок.
+    pub fn delete_stage(&self, stage: &str, move_to: &str) -> AppResult<usize> {
+        if stage == move_to {
+            return Err(err("Выберите другой этап для переноса сделок."));
+        }
+        let from = self.get("pipeline_stages", stage)?.filter(|s| s["deleted_at"].is_null()).ok_or_else(|| err("Этап не найден."))?;
+        let to = self.get("pipeline_stages", move_to)?.filter(|s| s["deleted_at"].is_null()).ok_or_else(|| err("Этап для переноса не найден."))?;
+        if from["pipeline_id"] != to["pipeline_id"] {
+            return Err(err("Этап для переноса — из другой воронки."));
+        }
+        let ids: Vec<String> = {
+            let mut st = self.conn.prepare("SELECT id FROM deals WHERE stage_id=?1")?;
+            let rows = st.query_map([stage], |r| r.get(0))?;
+            rows.collect::<Result<_, _>>()?
+        };
+        let mut f = Map::new();
+        f.insert("stage_id".into(), json!(move_to));
+        for id in &ids {
+            self.save("deals", Some(id), &f)?;
+        }
+        self.delete("pipeline_stages", stage)?;
+        Ok(ids.len())
     }
 
     pub fn restore(&self, table: &str, id: &str) -> AppResult<Value> {
@@ -645,6 +673,13 @@ impl WorkspaceStore {
     pub fn mark_blob_uploaded(&self, id: &str) -> AppResult<()> {
         self.conn.execute("UPDATE attachment_blobs SET uploaded=1 WHERE id=?1", [id])?;
         Ok(())
+    }
+
+    /// Без облака (ADR-100): изменения больше не копятся в очереди, а накопленное прежней версией удаляется.
+    pub fn without_outbox(mut self) -> AppResult<Self> {
+        self.conn.execute("DELETE FROM sync_outbox", [])?;
+        self.outbox = false;
+        Ok(self)
     }
 
     pub fn pending_count(&self) -> i64 {

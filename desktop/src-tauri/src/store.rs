@@ -2,15 +2,15 @@
 //! никогда не затирает избранное, архив, заметки и удаления. Схема совместима с базами macOS и
 //! Windows версий: они открываются без преобразования.
 
-use crate::cloud::types::*;
 use crate::db::{self, DbKey, FileState};
 use crate::error::{AppError, AppResult};
+use crate::jsonfmt::*;
 use crate::models::*;
 use crate::time::Timestamp;
 use crate::util::{self, format_date, format_precise, normalize, parse_date, source_title};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -98,21 +98,10 @@ CREATE TABLE IF NOT EXISTS sync_dirty (
 );
 ";
 
-/// Ключи kv, которые уходят в облако. Значения — JSON-текст.
-pub const SYNCED_KEYS: [&str; 7] = ["search.settings", "draft.signature", "search.auto", "profile.name", "profile.avatar", "account.prefs", "interface.prefs"];
-const LEAD_FIELDS: [&str; 6] = ["data", "favorite", "archived", "deleted", "seen", "note"];
-
-/// Время изменения для перенесённых данных: раньше любых изменений в облаке (2000-01-01).
-pub fn import_stamp() -> Timestamp {
-    Timestamp::constant(946_684_800, 0)
-}
-
 pub struct LeadStore {
     conn: Connection,
     path: PathBuf,
     key: Option<DbKey>,
-    /// Записывать изменения в журнал синхронизации (включено для облачных учётных записей).
-    sync_tracking: bool,
 }
 
 fn b(v: bool) -> i64 {
@@ -127,9 +116,8 @@ impl LeadStore {
             fs::create_dir_all(parent)?;
         }
         let conn = Self::open_file(path, key.as_ref())?;
-        let mut s = LeadStore { conn, path: path.to_path_buf(), key, sync_tracking: false };
+        let mut s = LeadStore { conn, path: path.to_path_buf(), key };
         s.prepare_schema()?;
-        s.sync_tracking = s.value("sync.enabled").as_deref() == Some("1");
         Ok(s)
     }
 
@@ -168,18 +156,8 @@ impl LeadStore {
     pub fn key(&self) -> Option<&DbKey> {
         self.key.as_ref()
     }
-    pub fn sync_tracking(&self) -> bool {
-        self.sync_tracking
-    }
     pub fn conn(&self) -> &Connection {
         &self.conn
-    }
-
-    /// Включить журнал изменений для облака. Флаг хранится в самой базе, поэтому его видят все соединения.
-    pub fn enable_sync_tracking(&mut self) -> AppResult<()> {
-        self.set_value("sync.enabled", "1")?;
-        self.sync_tracking = true;
-        Ok(())
     }
 
     pub fn file_size(&self) -> u64 {
@@ -235,7 +213,6 @@ impl LeadStore {
                 "UPDATE leads SET fingerprint=?1, kind=?2, source=?3, title=?4, score=?5, relevance=?6, updated_at=?7, data_json=?8 WHERE lead_id=?9",
                 params![fingerprint, data.kind.as_str(), data.source, data.title, data.score, data.relevance.as_str(), now, canonical_json(&new_value), id],
             )?;
-            self.mark_dirty("lead", id, &["data"], None)?;
             return Ok(SaveOutcome::Updated);
         }
         if !fingerprint.is_empty() && self.exists("SELECT 1 FROM leads WHERE fingerprint=?1 LIMIT 1", [fingerprint]) {
@@ -247,7 +224,6 @@ impl LeadStore {
             params![id, fingerprint, data.kind.as_str(), data.source, data.title, data.score, data.relevance.as_str(), discovered, now, canonical_json(&data.to_value()), now],
         )?;
         self.log_event(id, &format!("Найден поиском ({})", source_title(&data.source)))?;
-        self.mark_dirty("lead", id, &["data"], None)?;
         Ok(SaveOutcome::Added)
     }
 
@@ -443,19 +419,16 @@ impl LeadStore {
 
     // ------------------------------------------------------------ действия пользователя
 
-    fn update_many(&self, ids: &[String], sql: &str, flag: Option<i64>, event: Option<&str>, field: &str) -> AppResult<()> {
+    fn update_many(&self, ids: &[String], sql: &str, flag: Option<i64>, event: Option<&str>) -> AppResult<()> {
         if ids.is_empty() {
             return Ok(());
         }
         self.transaction(|| {
             for id in ids {
-                let changed = match flag {
+                match flag {
                     Some(f) => self.conn.execute(sql, params![f, id])?,
                     None => self.conn.execute(sql, params![id])?,
                 };
-                if changed > 0 {
-                    self.mark_dirty("lead", id, &[field], None)?;
-                }
                 if let Some(e) = event {
                     self.log_event(id, e)?;
                 }
@@ -470,27 +443,20 @@ impl LeadStore {
             "UPDATE leads SET favorite=?1 WHERE lead_id=?2",
             Some(b(on)),
             Some(if on { "Добавлен в избранное" } else { "Убран из избранного" }),
-            "favorite",
         )
     }
 
     pub fn set_archived(&self, ids: &[String], on: bool) -> AppResult<()> {
-        self.update_many(
-            ids,
-            "UPDATE leads SET archived=?1 WHERE lead_id=?2",
-            Some(b(on)),
-            Some(if on { "Перенесён в архив" } else { "Возвращён из архива" }),
-            "archived",
-        )
+        self.update_many(ids, "UPDATE leads SET archived=?1 WHERE lead_id=?2", Some(b(on)), Some(if on { "Перенесён в архив" } else { "Возвращён из архива" }))
     }
 
     /// Удалённые лиды остаются в базе скрытыми, чтобы следующий поиск не вернул их.
     pub fn delete(&self, ids: &[String]) -> AppResult<()> {
-        self.update_many(ids, "UPDATE leads SET deleted=1 WHERE lead_id=?1", None, Some("Удалён"), "deleted")
+        self.update_many(ids, "UPDATE leads SET deleted=1 WHERE lead_id=?1", None, Some("Удалён"))
     }
 
     pub fn mark_seen(&self, ids: &[String]) -> AppResult<()> {
-        self.update_many(ids, "UPDATE leads SET seen=1 WHERE lead_id=?1 AND seen=0", None, None, "seen")
+        self.update_many(ids, "UPDATE leads SET seen=1 WHERE lead_id=?1 AND seen=0", None, None)
     }
 
     pub fn mark_all_seen(&self) -> AppResult<()> {
@@ -514,14 +480,12 @@ impl LeadStore {
             obj.insert("crm".into(), mark.clone());
         }
         self.conn.execute("UPDATE leads SET data_json=?1, updated_at=?2 WHERE lead_id=?3", params![canonical_json(&v), util::now_string(), id])?;
-        self.mark_dirty("lead", id, &["data"], None)
+        Ok(())
     }
 
     pub fn set_note(&self, id: &str, note: &str) -> AppResult<()> {
         self.transaction(|| {
-            if self.conn.execute("UPDATE leads SET note=?1 WHERE lead_id=?2 AND note<>?1", params![note, id])? > 0 {
-                self.mark_dirty("lead", id, &["note"], None)?;
-            }
+            self.conn.execute("UPDATE leads SET note=?1 WHERE lead_id=?2 AND note<>?1", params![note, id])?;
             Ok(())
         })
     }
@@ -546,21 +510,11 @@ impl LeadStore {
         if value.is_empty() {
             return Ok(());
         }
-        let added = self
-            .conn
-            .execute("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)", params![kind.as_str(), value, util::now_string()])?;
-        if added > 0 {
-            self.mark_dirty("exclusion", &format!("{}|{}", kind.as_str(), value), &["deleted"], None)?;
-        }
+        self.conn.execute("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)", params![kind.as_str(), value, util::now_string()])?;
         self.apply_exclusions()
     }
 
     pub fn remove_exclusion(&self, id: i64) -> AppResult<()> {
-        let row: Option<(String, String)> =
-            self.conn.query_row("SELECT kind, value FROM exclusions WHERE id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
-        if let Some((k, v)) = row {
-            self.mark_dirty("exclusion", &format!("{k}|{v}"), &["deleted"], None)?;
-        }
         self.conn.execute("DELETE FROM exclusions WHERE id=?1", [id])?;
         self.apply_exclusions()
     }
@@ -632,9 +586,6 @@ impl LeadStore {
                         "INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)",
                         params![kind.as_str(), norm, util::now_string()],
                     )?;
-                    if added > 0 {
-                        self.mark_dirty("exclusion", &format!("{}|{}", kind.as_str(), norm), &["deleted"], None)?;
-                    }
                     count += added;
                 }
             }
@@ -696,13 +647,6 @@ impl LeadStore {
         // Незашифрованная копия прежней версии здесь же переписывается в зашифрованную.
         self.conn = Self::open_file(&current, self.key.as_ref())?;
         self.prepare_schema()?;
-        // Восстановленная копия — осознанный выбор пользователя: её состояние уходит в облако как
-        // новое изменение, а всё, что появилось в облаке позже, загрузится заново.
-        if self.sync_tracking {
-            self.set_value("sync.enabled", "1")?;
-            self.mark_everything_dirty(crate::time::now())?;
-            self.reset_sync_cursors()?;
-        }
         Ok(())
     }
 
@@ -728,263 +672,8 @@ impl LeadStore {
         drop(self.conn);
     }
 
-    // ------------------------------------------------------------ журнал синхронизации
-
     pub fn stamp(d: Timestamp) -> String {
         format_precise(&d)
-    }
-
-    pub(crate) fn mark_dirty(&self, entity: &str, key: &str, fields: &[&str], at: Option<&str>) -> AppResult<()> {
-        if !self.sync_tracking {
-            return Ok(());
-        }
-        let stamp = at.map(str::to_string).unwrap_or_else(|| Self::stamp(crate::time::now()));
-        for f in fields {
-            self.conn.execute(
-                "INSERT INTO sync_dirty(entity, key, field, changed_at) VALUES(?1,?2,?3,?4) ON CONFLICT(entity, key, field) DO UPDATE SET changed_at=excluded.changed_at",
-                params![entity, key, f, stamp],
-            )?;
-        }
-        Ok(())
-    }
-
-    /// Отметить все данные как изменённые — для первой выгрузки (перенос локальной базы в облако).
-    pub fn mark_everything_dirty(&self, at: Timestamp) -> AppResult<()> {
-        let ts = Self::stamp(at);
-        self.transaction(|| {
-            let ids: Vec<String> = {
-                let mut st = self.conn.prepare("SELECT lead_id FROM leads")?;
-                let rows = st.query_map([], |r| r.get(0))?;
-                rows.collect::<Result<_, _>>()?
-            };
-            for id in ids {
-                self.mark_dirty("lead", &id, &LEAD_FIELDS, Some(&ts))?;
-            }
-            for e in self.exclusions()? {
-                self.mark_dirty("exclusion", &format!("{}|{}", e.kind.as_str(), e.value), &["deleted"], Some(&ts))?;
-            }
-            for k in SYNCED_KEYS {
-                if self.value(k).is_some() {
-                    self.mark_dirty("setting", k, &["value"], Some(&ts))?;
-                }
-            }
-            Ok(())
-        })
-    }
-
-    /// Есть ли в журнале неотправленная правка этой записи.
-    pub fn has_pending(&self, entity: &str, key: &str) -> bool {
-        self.exists("SELECT 1 FROM sync_dirty WHERE entity=?1 AND key=?2", [entity, key])
-    }
-
-    pub fn pending_sync_count(&self) -> i64 {
-        self.conn.query_row("SELECT COUNT(DISTINCT entity || key) FROM sync_dirty", [], |r| r.get(0)).unwrap_or(0)
-    }
-
-    pub fn pending_changes(&self, limit: i64) -> AppResult<PendingChanges> {
-        let mut out = PendingChanges::default();
-        let mut grouped: HashMap<String, HashMap<String, BTreeMap<String, String>>> = HashMap::new();
-        {
-            let mut st = self.conn.prepare(
-                "SELECT entity, key, field, changed_at FROM sync_dirty WHERE (entity, key) IN \
-                 (SELECT entity, key FROM sync_dirty GROUP BY entity, key ORDER BY MIN(changed_at) LIMIT ?1)",
-            )?;
-            let rows = st.query_map([limit], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?)))?;
-            for r in rows {
-                let (e, k, f, at) = r?;
-                grouped.entry(e).or_default().entry(k).or_default().insert(f, at);
-            }
-        }
-        if let Some(leads) = grouped.get("lead") {
-            for (id, ts) in leads {
-                let row = self
-                    .conn
-                    .query_row(
-                        "SELECT lead_id, fingerprint, kind, source, title, score, relevance, discovered_at, data_json, favorite, archived, deleted, seen, note FROM leads WHERE lead_id=?1",
-                        [id],
-                        |r| {
-                            Ok((
-                                r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?,
-                                r.get::<_, f64>(5)?, r.get::<_, String>(6)?, r.get::<_, Option<String>>(7)?, r.get::<_, String>(8)?,
-                                r.get::<_, i64>(9)?, r.get::<_, i64>(10)?, r.get::<_, i64>(11)?, r.get::<_, i64>(12)?, r.get::<_, Option<String>>(13)?,
-                            ))
-                        },
-                    )
-                    .optional()?;
-                let parsed = row.as_ref().and_then(|r| serde_json::from_str::<Value>(&r.7).ok());
-                let (Some(r), Some(data)) = (row, parsed) else {
-                    // Лида больше нет локально — изменение отправлять некуда.
-                    self.conn.execute("DELETE FROM sync_dirty WHERE entity='lead' AND key=?1", [id])?;
-                    continue;
-                };
-                out.leads.push(LeadChange {
-                    lead_id: id.clone(),
-                    fingerprint: r.0,
-                    kind: r.1,
-                    source: r.2,
-                    title: r.3,
-                    score: r.4,
-                    relevance: r.5,
-                    discovered_at: r.6.as_deref().and_then(parse_date).map(|d| format_date(&d)).unwrap_or_else(util::now_string),
-                    data,
-                    favorite: r.8 != 0,
-                    archived: r.9 != 0,
-                    deleted: r.10 != 0,
-                    seen: r.11 != 0,
-                    note: r.12.unwrap_or_default(),
-                    ts: ts.clone(),
-                });
-            }
-        }
-        if let Some(ex) = grouped.get("exclusion") {
-            for (key, ts) in ex {
-                let Some((kind, value)) = key.split_once('|') else { continue };
-                let Some(at) = ts.get("deleted") else { continue };
-                let exists = self.exists("SELECT 1 FROM exclusions WHERE kind=?1 AND value=?2", [kind, value]);
-                out.exclusions.push(ExclusionChange { kind: kind.into(), value: value.into(), deleted: !exists, changed_at: at.clone() });
-            }
-        }
-        if let Some(st) = grouped.get("setting") {
-            for (key, ts) in st {
-                let Some(at) = ts.get("value") else { continue };
-                let v = self.value(key).and_then(|t| serde_json::from_str::<Value>(&t).ok()).unwrap_or(Value::Null);
-                out.settings.push(SettingChange { key: key.clone(), value: v, changed_at: at.clone() });
-            }
-        }
-        out.leads.sort_by(|a, b| a.lead_id.cmp(&b.lead_id));
-        Ok(out)
-    }
-
-    /// Убрать из журнала отправленные изменения (только если поле не менялось снова).
-    pub fn mark_pushed(&self, c: &PendingChanges) -> AppResult<()> {
-        self.transaction(|| {
-            let clear = |entity: &str, key: &str, field: &str, at: &str| -> AppResult<()> {
-                self.conn.execute("DELETE FROM sync_dirty WHERE entity=?1 AND key=?2 AND field=?3 AND changed_at=?4", params![entity, key, field, at])?;
-                Ok(())
-            };
-            for l in &c.leads {
-                for (f, at) in &l.ts {
-                    clear("lead", &l.lead_id, f, at)?;
-                }
-            }
-            for e in &c.exclusions {
-                clear("exclusion", &format!("{}|{}", e.kind, e.value), "deleted", &e.changed_at)?;
-            }
-            for s in &c.settings {
-                clear("setting", &s.key, "value", &s.changed_at)?;
-            }
-            Ok(())
-        })
-    }
-
-    fn dirty_at(&self, entity: &str, key: &str) -> AppResult<HashMap<String, Timestamp>> {
-        let mut st = self.conn.prepare("SELECT field, changed_at FROM sync_dirty WHERE entity=?1 AND key=?2")?;
-        let rows = st.query_map([entity, key], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
-        let mut out = HashMap::new();
-        for r in rows {
-            let (f, at) = r?;
-            if let Some(d) = parse_date(&at) {
-                out.insert(f, d);
-            }
-        }
-        Ok(out)
-    }
-
-    /// Применяет изменения с сервера. Поле, изменённое здесь позже серверного, не трогается: оно уйдёт
-    /// на сервер при следующей выгрузке. Применённые изменения в журнал не пишутся, поэтому эхо-цикла
-    /// «загрузил → выгрузил» не возникает.
-    pub fn apply_remote(&self, leads: &[RemoteLead], exclusions: &[RemoteExclusion], settings: &[RemoteSetting]) -> AppResult<()> {
-        self.transaction(|| {
-            for r in leads {
-                let local = self.dirty_at("lead", &r.lead_id)?;
-                let remote_wins = |f: &str| -> bool {
-                    match local.get(f) {
-                        None => true,
-                        Some(mine) => {
-                            let theirs = r.field_ts.get(f).and_then(|s| parse_date(s)).unwrap_or(crate::time::NEVER);
-                            theirs > *mine
-                        }
-                    }
-                };
-                // Данные лида храним в том же стабильном виде, что и поиск.
-                let json = canonical_json(&LeadData::from_value(&r.data).to_value());
-                let discovered = parse_date(&r.discovered_at).map(|d| format_date(&d)).unwrap_or_else(util::now_string);
-                let exists = self.exists("SELECT 1 FROM leads WHERE lead_id=?1", [&r.lead_id]);
-                if !exists {
-                    let now = util::now_string();
-                    self.conn.execute(
-                        "INSERT INTO leads(lead_id, fingerprint, kind, source, title, score, relevance, discovered_at, updated_at, data_json, imported_at, favorite, archived, deleted, seen, note) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
-                        params![r.lead_id, r.fingerprint, r.kind, r.source, r.title, r.score, r.relevance, discovered, now, json, now, b(r.favorite), b(r.archived), b(r.deleted), b(r.seen), r.note],
-                    )?;
-                    continue;
-                }
-                if remote_wins("data") {
-                    self.conn.execute(
-                        "UPDATE leads SET fingerprint=?1, kind=?2, source=?3, title=?4, score=?5, relevance=?6, data_json=?7, discovered_at=MIN(discovered_at, ?8) WHERE lead_id=?9",
-                        params![r.fingerprint, r.kind, r.source, r.title, r.score, r.relevance, json, discovered, r.lead_id],
-                    )?;
-                }
-                for (f, v) in [("favorite", b(r.favorite)), ("archived", b(r.archived)), ("deleted", b(r.deleted)), ("seen", b(r.seen))] {
-                    if remote_wins(f) {
-                        self.conn.execute(&format!("UPDATE leads SET {f}=?1 WHERE lead_id=?2"), params![v, r.lead_id])?;
-                    }
-                }
-                if remote_wins("note") {
-                    self.conn.execute("UPDATE leads SET note=?1 WHERE lead_id=?2", params![r.note, r.lead_id])?;
-                }
-            }
-            for e in exclusions {
-                let key = format!("{}|{}", e.kind, e.value);
-                if let Some(mine) = self.dirty_at("exclusion", &key)?.get("deleted") {
-                    if *mine >= parse_date(&e.changed_at).unwrap_or(crate::time::NEVER) {
-                        continue;
-                    }
-                }
-                if e.deleted {
-                    self.conn.execute("DELETE FROM exclusions WHERE kind=?1 AND value=?2", [&e.kind, &e.value])?;
-                } else if ExclusionKind::parse(&e.kind).is_some() {
-                    self.conn.execute("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?1,?2,?3)", params![e.kind, e.value, util::now_string()])?;
-                }
-            }
-            for s in settings.iter().filter(|s| SYNCED_KEYS.contains(&s.key.as_str())) {
-                if let Some(mine) = self.dirty_at("setting", &s.key)?.get("value") {
-                    if *mine >= parse_date(&s.changed_at).unwrap_or(crate::time::NEVER) {
-                        continue;
-                    }
-                }
-                self.set_value(&s.key, &canonical_json(&s.value))?;
-            }
-            Ok(())
-        })?;
-        if !exclusions.is_empty() || !leads.is_empty() {
-            self.apply_exclusions()?;
-        }
-        Ok(())
-    }
-
-    pub fn sync_cursor(&self, table: &str) -> i64 {
-        self.value(&format!("sync.cursor.{table}")).and_then(|s| s.parse().ok()).unwrap_or(0)
-    }
-
-    pub fn set_sync_cursor(&self, table: &str, value: i64) -> AppResult<()> {
-        self.set_value(&format!("sync.cursor.{table}"), &value.to_string())
-    }
-
-    /// Начать синхронизацию заново (например, после восстановления из резервной копии).
-    pub fn reset_sync_cursors(&self) -> AppResult<()> {
-        self.conn.execute("DELETE FROM kv WHERE key LIKE 'sync.cursor.%'", [])?;
-        Ok(())
-    }
-
-    /// Записать синхронизируемую настройку (JSON-текст) и отметить её для выгрузки.
-    pub fn set_synced_value(&self, key: &str, json: &str) -> AppResult<()> {
-        self.transaction(|| {
-            self.set_value(key, json)?;
-            if SYNCED_KEYS.contains(&key) {
-                self.mark_dirty("setting", key, &["value"], None)?;
-            }
-            Ok(())
-        })
     }
 }
 

@@ -550,7 +550,7 @@ fn path_encode(s: &str) -> String {
 
 /// JSON только из ASCII: Dropbox требует экранировать не-ASCII символы в заголовке (\uXXXX).
 pub fn ascii_json(object: &Value) -> String {
-    let text = crate::cloud::types::canonical_json(object);
+    let text = crate::jsonfmt::canonical_json(object);
     let mut out = String::new();
     for unit in text.encode_utf16() {
         if unit < 0x80 {

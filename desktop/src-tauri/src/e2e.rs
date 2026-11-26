@@ -32,13 +32,6 @@ pub fn paths() -> Option<AppPaths> {
     var("CUSTOMERS_E2E_DIR").map(|d| AppPaths::under(&PathBuf::from(d)))
 }
 
-/// Облако проверки. Сборка e2e не получает ключей рабочего проекта: вход возможен только в облако, поэтому на его место
-/// встаёт тестовый сервер (`e2e/mock-server.cjs`, узел `cloud`). Вне прогона проверок (нет подмены адресов) возвращает `None`.
-pub fn cloud_config() -> Option<crate::cloud::config::CloudConfig> {
-    var("CUSTOMERS_E2E_REWRITE")?;
-    crate::cloud::config::CloudConfig::new("https://cloud.e2e.example", &format!("sb_publishable_{}", "e".repeat(30)))
-}
-
 /// Транспорт ядра с подменой адресов: запросы к внешним сервисам уходят на локальный тестовый сервер.
 pub struct RewriteTransport {
     inner: Arc<dyn HttpTransport>,

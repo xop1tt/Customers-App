@@ -7,12 +7,10 @@
 
 use super::session::{Core, Session};
 use super::{CmdError, CmdResult};
-use crate::cloud::error::CloudError;
 use crate::workspace::catalog::{database_file, Catalog, WorkspaceInfo};
 use crate::workspace::convert::{convert_lead, ConvertOptions};
 use crate::workspace::query::Query;
 use crate::workspace::store::{stamp, Member, WorkspaceStore, ALL_PERMISSIONS};
-use crate::workspace::sync::{self, CrmSync};
 use crate::workspace::{dedupe, schema};
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
@@ -23,51 +21,33 @@ use std::time::Duration;
 pub struct CrmState {
     catalog: Option<Catalog>,
     store: Option<Arc<Mutex<WorkspaceStore>>>,
-    running: bool,
-    again: bool,
-    last_error: Option<String>,
-    last_sync: Option<String>,
     reminders: bool,
     notified: std::collections::BTreeSet<String>,
-    /// Курсор опроса чата: (Workspace, последний увиденный номер сообщения или уведомления).
-    chat_cursor: Option<(String, i64)>,
-    /// Канал Realtime пользователя (закрывается вместе с сессией).
-    live: Option<LiveChannel>,
-    /// Толчок «в CRM есть изменения» уже ждёт своей синхронизации (ADR-097): следующие толчки сливаются с ним.
-    nudged: bool,
-    /// Сервер отказал в загрузке файла: место под вложения Workspace занято (ADR-097). Пока не прошло
-    /// QUOTA_RETRY, файлы не отправляются заново (каждый — до 5 МБ).
-    quota_full_at: Option<std::time::Instant>,
-}
-
-/// Через сколько снова пробовать загрузить файлы после отказа «место закончилось».
-const QUOTA_RETRY: Duration = Duration::from_secs(600);
-
-/// Задержка синхронизации после толчка Realtime: изменения коллег приходят пачкой, а 100 устройств не должны
-/// прийти за ними в одну и ту же секунду (база — 1 с, плюс случайные до 2 с).
-const NUDGE_DELAY_MS: u64 = 1000;
-const NUDGE_JITTER_MS: f64 = 2000.0;
-
-/// Открытый канал Realtime: задача держит соединение, `on` — открыт ли он прямо сейчас.
-pub struct LiveChannel {
-    user: String,
-    on: Arc<std::sync::atomic::AtomicBool>,
-    task: tokio::task::JoinHandle<()>,
-}
-
-impl Drop for LiveChannel {
-    fn drop(&mut self) {
-        self.task.abort();
-    }
 }
 
 type Store = Arc<Mutex<WorkspaceStore>>;
 
 const MAX_ATTACHMENT: usize = 5 * 1024 * 1024;
 
-/// Идентификатор пользователя в записях CRM: uuid облачной учётной записи (`cloud-<uuid>`).
+/// Идентификатор пользователя в записях CRM: uuid учётной записи (`local-<uuid>` или прежней `cloud-<uuid>`).
 pub fn user_id(s: &Session) -> String {
-    s.id.strip_prefix("cloud-").unwrap_or(&s.id).to_lowercase()
+    s.id.strip_prefix("cloud-").or_else(|| s.id.strip_prefix("local-")).unwrap_or(&s.id).to_lowercase()
+}
+
+/// Новый Workspace только на этом устройстве: владелец — сам пользователь, все права.
+fn local_workspace(name: &str, personal: bool) -> WorkspaceInfo {
+    WorkspaceInfo {
+        id: uuid::Uuid::new_v4().to_string(),
+        name: name.into(),
+        personal,
+        role: "owner".into(),
+        role_name: "Владелец".into(),
+        rank: 100,
+        permissions: ALL_PERMISSIONS.iter().map(|p| p.to_string()).collect(),
+        members: 1,
+        remote: false,
+        default_currency: "RUB".into(),
+    }
 }
 
 /// Базы Workspace в папке: `<id>.db`, без служебных копий (`before-restore`, `restore-…`).
@@ -87,24 +67,17 @@ fn workspace_files(dir: &Path) -> Vec<(String, PathBuf)> {
     out
 }
 
+/// Название Workspace: от 1 до 120 символов.
+fn checked_title(raw: &str) -> CmdResult<String> {
+    let name = raw.trim();
+    if name.is_empty() || name.chars().count() > 120 {
+        return Err(CmdError::msg("Название — от 1 до 120 символов."));
+    }
+    Ok(name.to_string())
+}
+
 fn cmd(e: impl std::fmt::Display) -> CmdError {
     CmdError::msg(e.to_string())
-}
-
-fn cloud_err(e: CloudError) -> CmdError {
-    if sync::is_not_member(&e) {
-        return CmdError::new("notMember", "Вас удалили из этого Workspace.");
-    }
-    CmdError::from(e)
-}
-
-/// Идентификатор из интерфейса попадает в адрес запроса: допускаем только UUID.
-fn check_uuid(v: &str) -> CmdResult<()> {
-    if v.len() == 36 && v.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
-        Ok(())
-    } else {
-        Err(CmdError::msg("Недопустимый идентификатор."))
-    }
 }
 
 impl Core {
@@ -119,26 +92,63 @@ impl Core {
         }
         let dir = self.ws_dir(s);
         let mut c = Catalog::load(&dir);
-        // В облачной записи без единого Workspace (облако без миграций CRM, нет связи, первый запуск)
-        // тоже создаётся локальный: CRM остаётся доступной, а серверные Workspace добавляются рядом.
+        self.convert_remote(s, &mut c);
+        // Без единого Workspace (первый запуск) создаётся локальный.
         if c.workspaces.is_empty() {
-            c.workspaces.push(WorkspaceInfo {
-                id: uuid::Uuid::new_v4().to_string(),
-                name: "Личное пространство (на этом устройстве)".into(),
-                personal: true,
-                role: "owner".into(),
-                role_name: "Владелец".into(),
-                rank: 100,
-                permissions: ALL_PERMISSIONS.iter().map(|p| p.to_string()).collect(),
-                members: 1,
-                remote: false,
-                default_currency: "RUB".into(),
-            });
+            c.workspaces.push(local_workspace("Личное пространство", true));
         }
         c.fix_active();
         c.save(&dir).map_err(cmd)?;
         s.workspace.lock().unwrap().catalog = Some(c.clone());
         Ok(c)
+    }
+
+    /// ADR-100: облака больше нет. Копии облачных Workspace, скачанные на это устройство, становятся
+    /// локальными: пользователь — их владелец со всеми правами, участники остаются в списке (по ним видны
+    /// ответственные в старых записях), шаблон воронки повторно не засевается. Workspace без скачанной базы
+    /// убирается из списка: данных на устройстве у него нет.
+    fn convert_remote(&self, s: &Session, c: &mut Catalog) {
+        if !c.workspaces.iter().any(|w| w.remote) {
+            return;
+        }
+        let dir = self.ws_dir(s);
+        let key = self.env.keys.key_for(&s.id).ok();
+        let me = user_id(s);
+        c.workspaces.retain_mut(|w| {
+            if !w.remote {
+                return true;
+            }
+            let path = database_file(&dir, &w.id);
+            let Some(key) = key.as_ref().filter(|_| path.exists()) else { return false };
+            let Ok(st) = WorkspaceStore::open(&path, Some(key), &w.id, &me) else { return true };
+            let _ = st.set_meta("seeded", "converted");
+            let _ = st.set_meta("seed_deduped", "converted");
+            let mut members = st.members().unwrap_or_default();
+            members.retain(|m| m.user_id != me);
+            members.insert(
+                0,
+                Member {
+                    user_id: me.clone(),
+                    display_name: s.display_name.clone(),
+                    role: "owner".into(),
+                    role_name: "Владелец".into(),
+                    rank: 100,
+                    avatar_path: None,
+                    email: None,
+                },
+            );
+            let _ = st.replace_members(&members);
+            *w = WorkspaceInfo {
+                id: w.id.clone(),
+                name: w.name.clone(),
+                personal: w.personal,
+                default_currency: w.default_currency.clone(),
+                ..local_workspace("", false)
+            };
+            w.members = members.len() as i64;
+            true
+        });
+        c.fix_active();
     }
 
     fn set_catalog(&self, s: &Session, c: Catalog) -> CmdResult<()> {
@@ -158,15 +168,18 @@ impl Core {
             return Ok(st);
         }
         let c = self.ws_catalog(s)?;
-        let info = c.active_info().cloned().ok_or_else(|| CmdError::new("noWorkspace", "Workspace ещё не загружен: нужна связь с облаком."))?;
+        let info = c.active_info().cloned().ok_or_else(|| CmdError::new("noWorkspace", "Рабочее пространство не выбрано."))?;
         let path = database_file(&self.ws_dir(s), &info.id);
         let key = self.env.keys.key_for(&s.id).map_err(|e| CmdError::msg(format!("Не удалось открыть базу Workspace: {e}")))?;
-        let store =
-            WorkspaceStore::open(&path, Some(&key), &info.id, &user_id(s)).map_err(|e| CmdError::msg(format!("Не удалось открыть базу Workspace: {e}")))?;
+        let store = WorkspaceStore::open(&path, Some(&key), &info.id, &user_id(s))
+            .and_then(WorkspaceStore::without_outbox)
+            .map_err(|e| CmdError::msg(format!("Не удалось открыть базу Workspace: {e}")))?;
         store.set_permissions(&info.permissions).map_err(cmd)?;
         store.set_meta("member_role", &info.role).map_err(cmd)?;
         store.set_meta("channel", "stable").map_err(cmd)?;
-        if !info.remote {
+        if !info.remote && store.meta("seeded").as_deref() == Some("converted") {
+            // Бывший облачный Workspace: участники сохранены при переводе (convert_remote).
+        } else if !info.remote {
             store.seed_local().map_err(cmd)?;
             store.dedupe_local_seed().map_err(cmd)?;
             let me = Member {
@@ -198,33 +211,13 @@ impl Core {
         let s = self.require()?;
         let c = self.ws_catalog(&s)?;
         self.start_reminders(&s);
-        let (pending, rejected, conflicts, members) = match self.ws_store(&s) {
-            Ok(st) => {
-                let g = st.lock().unwrap();
-                (
-                    g.pending_count(),
-                    g.rejected_ops().map(|v| v.len()).unwrap_or(0),
-                    g.conflicts().map(|v| v.len()).unwrap_or(0),
-                    g.members().unwrap_or_default(),
-                )
-            }
-            Err(_) => (0, 0, 0, vec![]),
-        };
-        let st = s.workspace.lock().unwrap();
+        let members = self.ws_store(&s).map(|st| st.lock().unwrap().members().unwrap_or_default()).unwrap_or_default();
         Ok(json!({
-            // Вход только облачный; поле оставлено для интерфейса (демо-режим различает командное и личное пространство).
-            "isCloud": true,
             "me": user_id(&s),
             "workspaces": c.workspaces,
             "active": c.active,
             "permissions": c.active_info().map(|w| w.permissions.clone()).unwrap_or_default(),
             "members": members,
-            "pending": pending,
-            "rejected": rejected,
-            "conflicts": conflicts,
-            "syncing": st.running,
-            "lastSync": st.last_sync,
-            "error": st.last_error,
         }))
     }
 
@@ -238,74 +231,19 @@ impl Core {
         self.set_catalog(&s, c)?;
         s.workspace.lock().unwrap().store = None;
         self.env.emit("workspace-changed", json!({"workspace": id}));
-        self.ws_sync_soon(&s);
         self.ws_state()
     }
 
-    /// Новый Workspace создаётся на сервере (`create_workspace`).
-    pub async fn ws_create_workspace(self: &Arc<Self>, name: &str) -> CmdResult<Value> {
+    /// Новый Workspace на этом устройстве; он сразу становится выбранным.
+    pub fn ws_create_workspace(self: &Arc<Self>, name: &str) -> CmdResult<Value> {
         let s = self.require()?;
-        let name = name.trim();
-        if name.is_empty() || name.chars().count() > 120 {
-            return Err(CmdError::msg("Название — от 1 до 120 символов."));
-        }
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let id = sync::rpc(&cloud, "create_workspace", json!({"p_name": name})).await.map_err(cloud_err)?;
-        self.ws_refresh_inner(&s).await?;
-        let id = id.as_str().unwrap_or_default().to_string();
+        let name = checked_title(name)?;
+        let mut c = self.ws_catalog(&s)?;
+        let w = local_workspace(&name, false);
+        let id = w.id.clone();
+        c.workspaces.push(w);
+        self.set_catalog(&s, c)?;
         self.ws_switch(&id)
-    }
-
-    /// Список Workspace и участники с сервера; Workspace, из которых пользователя удалили, исчезают с устройства.
-    pub async fn ws_refresh(self: &Arc<Self>) -> CmdResult<Value> {
-        let s = self.require()?;
-        self.ws_refresh_inner(&s).await?;
-        self.ws_sync_soon(&s);
-        self.ws_state()
-    }
-
-    async fn ws_refresh_inner(self: &Arc<Self>, s: &Arc<Session>) -> CmdResult<()> {
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let fresh = sync::workspaces(&cloud).await.map_err(cloud_err)?;
-        let mut c = self.ws_catalog(s)?;
-        let before = c.active.clone();
-        let gone = c.replace_remote(fresh);
-        self.set_catalog(s, c.clone())?;
-        if before != c.active || gone.iter().any(|w| Some(&w.id) == before.as_ref()) {
-            s.workspace.lock().unwrap().store = None;
-        }
-        for w in gone {
-            self.drop_workspace_copy(s, &w.id);
-        }
-        if let Some(active) = c.active_info().cloned() {
-            if let Ok(members) = sync::members(&cloud, &active.id).await {
-                let st = self.ws_store(s)?;
-                let g = st.lock().unwrap();
-                g.replace_members(&members).map_err(cmd)?;
-                g.set_permissions(&active.permissions).map_err(cmd)?;
-            }
-        }
-        self.env.emit("workspace-changed", Value::Null);
-        Ok(())
-    }
-
-    /// Доступ к Workspace закрыт: неотправленные изменения сохраняются в файл рядом, база удаляется.
-    fn drop_workspace_copy(&self, s: &Session, id: &str) {
-        let dir = self.ws_dir(s);
-        let path = database_file(&dir, id);
-        if let Ok(key) = self.env.keys.key_for(&s.id) {
-            if let Ok(st) = WorkspaceStore::open(&path, Some(&key), id, &user_id(s)) {
-                let ops = st.all_ops().unwrap_or_default();
-                if !ops.is_empty() {
-                    let _ = std::fs::write(
-                        dir.join(format!("{id}-unsent-{}.json", crate::time::now().strftime("%Y%m%d-%H%M%S"))),
-                        serde_json::to_vec_pretty(&ops).unwrap_or_default(),
-                    );
-                }
-            }
-        }
-        crate::db::remove_database_files(&path);
-        self.env.emit("notify", json!({"kind": "error", "title": "Доступ к Workspace закрыт", "body": "Локальная копия удалена. Неотправленные изменения сохранены в файл в папке учётной записи."}));
     }
 
     // ------------------------------------------------------------ резервные копии баз CRM (пакет A1)
@@ -506,11 +444,8 @@ impl Core {
         self.with_crm(|st| Ok(json!(st.duplicates(entity, &keys, except)?)))
     }
 
-    fn ws_changed(self: &Arc<Self>) {
+    fn ws_changed(&self) {
         self.env.emit("workspace-changed", Value::Null);
-        if let Some(s) = self.session() {
-            self.ws_sync_soon(&s);
-        }
     }
 
     /// Найденный лид → компания, контакт и (по желанию) сделка. Лид получает отметку `data.crm`.
@@ -521,7 +456,6 @@ impl Core {
         let done = convert_lead(&st.lock().unwrap(), &lead, &opts).map_err(cmd)?;
         s.with_store(|ls| ls.set_crm_mark(lead_id, &done.mark())).map_err(cmd)?;
         self.env.emit("data-changed", Value::Null);
-        self.sync_soon(&s);
         self.ws_changed();
         serde_json::to_value(done).map_err(cmd)
     }
@@ -575,31 +509,6 @@ impl Core {
         self.with_crm(|st| Ok(json!(crate::workspace::export::fields(st, entity, crate::tray_text::Lang::parse(lang))?)))
     }
 
-    /// Сохраняет записи в файл CSV или XLSX. С `collection` выгружается то, что показывает коллекция
-    /// (её фильтры и `query` пользователя), без неё — записи таблицы `entity` по `query`.
-    /// Облачный Workspace: сервер проверяет `records.export` и пишет выгрузку в журнал действий (ADR-094);
-    /// без ответа сервера файл не сохраняется.
-    pub async fn ws_export_checked(self: &Arc<Self>, request: crate::workspace::export::Request, path: &Path) -> CmdResult<Value> {
-        let s = self.require()?;
-        let Some(active) = self.ws_catalog(&s)?.active_info().filter(|w| w.remote).cloned() else {
-            return self.ws_export(request, path);
-        };
-        let format = request.format.clone();
-        let (bytes, count, table) = self.export_bytes(request)?;
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        sync::rpc(&cloud, "log_export", json!({"p_workspace": active.id, "p_entity": table, "p_count": count, "p_format": format})).await.map_err(
-            |e| match e {
-                CloudError::Server(m) if m.starts_with("permission denied") => CmdError::msg("Недостаточно прав для экспорта записей."),
-                CloudError::Network(_) => {
-                    CmdError::msg("Нет связи с облаком. Выгрузку облачного рабочего пространства подтверждает сервер: повторите, когда связь появится.")
-                }
-                e => cloud_err(e),
-            },
-        )?;
-        std::fs::write(path, bytes).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
-        Ok(json!({"count": count}))
-    }
-
     /// Выгрузка локального Workspace (облачный — через `ws_export_checked`).
     pub fn ws_export(&self, request: crate::workspace::export::Request, path: &Path) -> CmdResult<Value> {
         let (bytes, count, _) = self.export_bytes(request)?;
@@ -643,195 +552,24 @@ impl Core {
         Ok(())
     }
 
-    // ------------------------------------------------------------ конфликты и отклонённые изменения
+    // ------------------------------------------------------------ название и валюта
 
-    pub fn ws_conflicts(&self) -> CmdResult<Value> {
-        self.with_crm(|st| Ok(json!({"conflicts": st.conflicts()?, "rejected": st.rejected_ops()?})))
-    }
-
-    /// Закрыть конфликт; `take_lost` — вернуть потерянное значение (новая правка поверх текущей).
-    pub fn ws_resolve_conflict(self: &Arc<Self>, id: &str, take_lost: bool) -> CmdResult<()> {
-        self.with_crm(|st| {
-            let c = st.conflicts()?.into_iter().find(|c| c["id"] == id).ok_or_else(|| crate::error::AppError::msg("Конфликт не найден."))?;
-            if take_lost {
-                let table =
-                    c["entityType"].as_str().and_then(schema::entity).map(|e| e.table).ok_or_else(|| crate::error::AppError::msg("Неизвестная сущность."))?;
-                let field = c["field"].as_str().unwrap_or_default();
-                if field != "*deleted" {
-                    let mut m = Map::new();
-                    m.insert(field.into(), c["lost"].clone());
-                    st.save(table, c["entityId"].as_str(), &m)?;
-                }
-            }
-            st.resolve_conflict(id)
-        })?;
-        if let Some(cloud) = self.env.cloud.clone() {
-            let id = id.to_string();
-            tokio::spawn(async move {
-                let body = json!({"resolved_at": stamp(crate::time::now())});
-                let _ = cloud.authorized("PATCH", &format!("/rest/v1/sync_conflicts?id=eq.{id}"), Some(&body), &[("Prefer", "return=minimal")]).await;
-            });
-        }
-        self.ws_changed();
-        Ok(())
-    }
-
-    pub fn ws_dismiss_rejected(self: &Arc<Self>) -> CmdResult<usize> {
-        let n = self.with_crm(|st| st.dismiss_rejected())?;
-        self.ws_changed();
-        Ok(n)
-    }
-
-    // ------------------------------------------------------------ участники и приглашения (облако)
-
-    async fn ws_rpc(self: &Arc<Self>, name: &str, mut args: Value, with_workspace: bool) -> CmdResult<Value> {
+    pub fn ws_rename_workspace(self: &Arc<Self>, name: &str) -> CmdResult<Value> {
         let s = self.require()?;
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        if with_workspace {
-            let ws = self.ws_catalog(&s)?.active.ok_or_else(|| CmdError::msg("Workspace не выбран."))?;
-            args["p_workspace"] = json!(ws);
-        }
-        let out = sync::rpc(&cloud, name, args).await.map_err(cloud_err)?;
-        let _ = self.ws_refresh_inner(&s).await;
-        Ok(out)
-    }
-
-    /// Приглашение: токен показывается один раз, его нужно передать приглашённому (письмом или в мессенджере).
-    pub async fn ws_invite(self: &Arc<Self>, email: &str, role: &str) -> CmdResult<Value> {
-        let r = self.ws_rpc("invite_member", json!({"p_email": email, "p_role": role}), true).await?;
-        let token = r["token"].as_str().unwrap_or_default();
-        Ok(json!({"id": r["id"], "email": r["email"], "role": r["role"], "expiresAt": r["expires_at"], "token": token,
-                  "link": format!("{}://invite?token={token}", crate::identity::APP.url_scheme)}))
-    }
-
-    /// Открытые приглашения активного Workspace (не принятые, не отозванные). Токена здесь нет: он показывается один раз.
-    pub async fn ws_invitations(self: &Arc<Self>) -> CmdResult<Value> {
-        let s = self.require()?;
-        let c = self.ws_catalog(&s)?;
-        let Some(active) = c.active_info().filter(|w| w.remote).cloned() else {
-            return Ok(json!([]));
-        };
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let rows = sync::select(
-            &cloud,
-            &format!(
-                "workspace_invitations?select=id,email_norm,created_at,expires_at,sent_count,last_sent_at,invited_by,roles(key,name)&workspace_id=eq.{}&accepted_at=is.null&revoked_at=is.null&order=created_at.desc&limit=100",
-                active.id
-            ),
-        )
-        .await
-        .map_err(cloud_err)?;
-        let list: Vec<Value> = rows
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|r| {
-                json!({"id": r["id"], "email": r["email_norm"], "role": r["roles"]["key"], "roleName": r["roles"]["name"], "createdAt": r["created_at"],
-                       "expiresAt": r["expires_at"], "sentCount": r["sent_count"], "lastSentAt": r["last_sent_at"], "invitedBy": r["invited_by"]})
-            })
-            .collect();
-        Ok(Value::Array(list))
-    }
-
-    pub async fn ws_revoke_invitation(self: &Arc<Self>, id: &str) -> CmdResult<Value> {
-        check_uuid(id)?;
-        self.ws_rpc("revoke_invitation", json!({"p_invitation": id}), false).await?;
-        Ok(json!(true))
-    }
-
-    /// Повторная отправка: новый токен и срок; приложение снова показывает ссылку (раз в 10 минут, не больше 5 раз — проверяет база).
-    pub async fn ws_resend_invitation(self: &Arc<Self>, id: &str) -> CmdResult<Value> {
-        check_uuid(id)?;
-        let r = self.ws_rpc("resend_invitation", json!({"p_invitation": id}), false).await?;
-        let token = r["token"].as_str().unwrap_or_default();
-        Ok(json!({"id": r["id"], "email": r["email"], "expiresAt": r["expires_at"], "token": token,
-                  "link": format!("{}://invite?token={token}", crate::identity::APP.url_scheme)}))
-    }
-
-    /// Журнал действий Workspace (право `audit.view`, проверяет база): последние записи с необязательным отбором.
-    pub async fn ws_audit(self: &Arc<Self>, actor: Option<String>, action: Option<String>, entity_id: Option<String>, offset: Option<i64>) -> CmdResult<Value> {
-        let s = self.require()?;
-        let c = self.ws_catalog(&s)?;
-        let Some(active) = c.active_info().filter(|w| w.remote).cloned() else {
-            return Ok(json!({"items": [], "more": false}));
-        };
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let mut q = format!("audit_log?select=id,actor_id,action,entity_type,entity_id,at,details&workspace_id=eq.{}&order=at.desc,id.desc", active.id);
-        if let Some(a) = actor.filter(|x| !x.is_empty()) {
-            check_uuid(&a)?;
-            q.push_str(&format!("&actor_id=eq.{a}"));
-        }
-        if let Some(a) = action.filter(|x| !x.is_empty()) {
-            if !a.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.') {
-                return Err(CmdError::msg("Недопустимое действие в отборе."));
-            }
-            q.push_str(&format!("&action=eq.{a}"));
-        }
-        if let Some(e) = entity_id.filter(|x| !x.is_empty()) {
-            check_uuid(&e)?;
-            q.push_str(&format!("&entity_id=eq.{e}"));
-        }
-        const PAGE: i64 = 100;
-        q.push_str(&format!("&limit={}&offset={}", PAGE + 1, offset.unwrap_or(0).clamp(0, 100_000)));
-        let rows = sync::select(&cloud, &q).await.map_err(cloud_err)?;
-        let mut items = rows.as_array().cloned().unwrap_or_default();
-        let more = items.len() as i64 > PAGE;
-        items.truncate(PAGE as usize);
-        Ok(json!({"items": items, "more": more}))
-    }
-
-    pub async fn ws_accept_invitation(self: &Arc<Self>, token: &str) -> CmdResult<Value> {
-        let token = token.trim().rsplit("token=").next().unwrap_or("").trim().to_string();
-        let ws = self.ws_rpc("accept_invitation", json!({"p_token": token}), false).await?;
-        if let Some(id) = ws.as_str() {
-            self.ws_switch(id)?;
-        }
+        let name = checked_title(name)?;
+        let mut c = self.ws_catalog(&s)?;
+        let active = c.active.clone();
+        let w = c.workspaces.iter_mut().find(|w| Some(&w.id) == active.as_ref()).ok_or_else(|| CmdError::msg("Нет активного Workspace."))?;
+        w.name = name;
+        self.set_catalog(&s, c)?;
+        self.env.emit("workspace-changed", Value::Null);
         self.ws_state()
     }
 
-    pub async fn ws_set_member_role(self: &Arc<Self>, user: &str, role: &str) -> CmdResult<Value> {
-        self.ws_rpc("set_member_role", json!({"p_user": user, "p_role": role}), true).await?;
-        self.ws_state()
-    }
-
-    pub async fn ws_remove_member(self: &Arc<Self>, user: &str) -> CmdResult<Value> {
-        self.ws_rpc("remove_member", json!({"p_user": user}), true).await?;
-        self.ws_state()
-    }
-
-    pub async fn ws_leave(self: &Arc<Self>) -> CmdResult<Value> {
-        self.ws_rpc("leave_workspace", json!({}), true).await?;
-        self.ws_state()
-    }
-
-    /// Передать владение: цель становится владельцем, прежний владелец — администратором (одной транзакцией в базе).
-    pub async fn ws_transfer_ownership(self: &Arc<Self>, user: &str) -> CmdResult<Value> {
-        check_uuid(user)?;
-        self.ws_rpc("transfer_ownership", json!({"p_user": user}), true).await?;
-        self.ws_state()
-    }
-
-    /// Удалить Workspace: мягкое удаление, имя вводится повторно (проверяет база); локальные копии уходят при обновлении списка.
-    pub async fn ws_delete_workspace(self: &Arc<Self>, confirm_name: &str) -> CmdResult<Value> {
-        self.ws_rpc("delete_workspace", json!({"p_confirm_name": confirm_name}), true).await?;
-        self.ws_state()
-    }
-
-    pub async fn ws_rename_workspace(self: &Arc<Self>, name: &str) -> CmdResult<Value> {
-        self.ws_rpc("update_workspace", json!({"p_name": name}), true).await?;
-        self.ws_state()
-    }
-
-    /// Название и валюта сделок активного Workspace на этом устройстве (мастер первого запуска, пакет G7).
-    /// Только локальный Workspace: список хранится на устройстве, сервер не меняется. У облачного Workspace
-    /// название меняет `ws_rename_workspace`, валюта задаётся на сервере.
+    /// Название и валюта сделок активного Workspace (мастер первого запуска, пакет G7).
     pub fn ws_set_local_details(self: &Arc<Self>, name: &str, currency: &str) -> CmdResult<Value> {
         let s = self.require()?;
-        let name = name.trim();
-        if name.is_empty() || name.chars().count() > 120 {
-            return Err(CmdError::msg("Название — от 1 до 120 символов."));
-        }
+        let name = checked_title(name)?;
         let currency = currency.trim().to_uppercase();
         if currency.len() != 3 || !currency.bytes().all(|b| b.is_ascii_uppercase()) {
             return Err(CmdError::msg("Валюта — трёхбуквенный код, например RUB."));
@@ -839,268 +577,24 @@ impl Core {
         let mut c = self.ws_catalog(&s)?;
         let active = c.active.clone();
         let w = c.workspaces.iter_mut().find(|w| Some(&w.id) == active.as_ref()).ok_or_else(|| CmdError::msg("Нет активного Workspace."))?;
-        if w.remote {
-            return Err(CmdError::msg("Облачный Workspace настраивается в его настройках."));
-        }
-        w.name = name.into();
+        w.name = name;
         w.default_currency = currency;
         self.set_catalog(&s, c)?;
         self.ws_state()
     }
 
-    // ------------------------------------------------------------ роли и воронки (редакторы)
-
-    /// Роли активного Workspace и каталог разрешений. Локальная запись: ролей нет (один владелец).
-    pub async fn ws_roles(self: &Arc<Self>) -> CmdResult<Value> {
-        let s = self.require()?;
-        let c = self.ws_catalog(&s)?;
-        let Some(active) = c.active_info().filter(|w| w.remote).cloned() else {
-            return Ok(json!({"roles": [], "catalog": []}));
-        };
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let roles = sync::select(&cloud, &format!("roles?select=id,key,name,rank,is_system,workspace_id,role_permissions(permission_key)&or=(workspace_id.is.null,workspace_id.eq.{})&order=rank.desc", active.id))
-            .await
-            .map_err(cloud_err)?;
-        let catalog = sync::select(&cloud, "permissions?select=key,description&order=key").await.map_err(cloud_err)?;
-        // Видимость записей роли в этом Workspace (ADR-096); сервер без отделов — у всех ролей «всё».
-        let scopes = sync::select(&cloud, &format!("role_scopes?workspace_id=eq.{}&select=role_id,scope", active.id)).await.unwrap_or(Value::Null);
-        let scope_of =
-            |id: &Value| scopes.as_array().and_then(|a| a.iter().find(|s| &s["role_id"] == id)).and_then(|s| s["scope"].as_str()).unwrap_or("all").to_string();
-        // Своя роль с тем же ключом заменяет системный шаблон.
-        let mut by_key: std::collections::BTreeMap<String, Value> = Default::default();
-        for r in roles.as_array().cloned().unwrap_or_default() {
-            let key = r["key"].as_str().unwrap_or_default().to_string();
-            let own = !r["workspace_id"].is_null();
-            if own || !by_key.contains_key(&key) {
-                let perms: Vec<Value> = r["role_permissions"].as_array().map(|a| a.iter().map(|p| p["permission_key"].clone()).collect()).unwrap_or_default();
-                by_key.insert(
-                    key.clone(),
-                    json!({"key": key, "name": r["name"], "rank": r["rank"], "system": r["is_system"], "permissions": perms, "scope": scope_of(&r["id"])}),
-                );
-            }
-        }
-        let mut list: Vec<Value> = by_key.into_values().collect();
-        list.sort_by_key(|r| std::cmp::Reverse(r["rank"].as_i64().unwrap_or(0)));
-        Ok(json!({"roles": list, "catalog": catalog}))
-    }
-
-    pub async fn ws_save_role(self: &Arc<Self>, key: &str, name: &str, rank: i64, permissions: Vec<String>) -> CmdResult<Value> {
-        let name = name.trim();
-        if name.is_empty() || name.chars().count() > 60 {
-            return Err(CmdError::msg("Название роли — от 1 до 60 символов."));
-        }
-        let rank_ok = (0..=100).contains(&rank);
-        if !rank_ok {
-            return Err(CmdError::msg("Ранг — число от 0 до 100."));
-        }
-        self.ws_rpc("save_role", json!({"p_key": key, "p_name": name, "p_rank": rank, "p_permissions": permissions}), true).await?;
-        self.ws_roles().await
-    }
-
-    /// Какие записи видит роль: all, department, own (ADR-096).
-    pub async fn ws_set_role_scope(self: &Arc<Self>, key: &str, scope: &str) -> CmdResult<Value> {
-        if !matches!(scope, "all" | "department" | "own") {
-            return Err(CmdError::msg("Видимость — «все записи», «свой отдел» или «только свои»."));
-        }
-        self.ws_rpc("set_role_scope", json!({"p_key": key, "p_scope": scope}), true).await?;
-        self.ws_roles().await
-    }
-
-    // ------------------------------------------------------------ отделы (ADR-096)
-
-    /// Отделы активного облачного Workspace (дерево по `parent_id`). Локальный — пусто.
-    pub async fn ws_departments(self: &Arc<Self>) -> CmdResult<Value> {
-        let s = self.require()?;
-        let Some(active) = self.remote_active(&s)? else {
-            return Ok(json!([]));
-        };
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let path = format!("departments?workspace_id=eq.{}&deleted_at=is.null&select=id,name,parent_id,head_id,position&order=position,name", active.id);
-        match sync::select(&cloud, &path).await {
-            Ok(v) => Ok(v),
-            Err(CloudError::Server(m)) if m.contains("departments") || m == "HTTP 404" => Ok(json!([])),
-            Err(e) => Err(cloud_err(e)),
-        }
-    }
-
-    /// Создать (`id` пусто) или изменить отдел.
-    pub async fn ws_save_department(self: &Arc<Self>, id: Option<String>, name: &str, parent: Option<String>, head: Option<String>) -> CmdResult<Value> {
-        let name = name.trim();
-        if name.is_empty() || name.chars().count() > 120 {
-            return Err(CmdError::msg("Название отдела — от 1 до 120 символов."));
-        }
-        for v in [&id, &parent, &head].into_iter().flatten() {
-            check_uuid(v)?;
-        }
-        let r = self.ws_rpc("save_department", json!({"p_id": id, "p_name": name, "p_parent": parent, "p_head": head}), true).await?;
-        Ok(json!({"id": r}))
-    }
-
-    /// Закрыть отдел: сотрудники, подотделы и записи переходят в вышестоящий.
-    pub async fn ws_delete_department(self: &Arc<Self>, id: &str) -> CmdResult<()> {
-        check_uuid(id)?;
-        self.ws_rpc("delete_department", json!({"p_id": id}), true).await?;
-        Ok(())
-    }
-
-    pub async fn ws_set_member_department(self: &Arc<Self>, user: &str, department: Option<String>) -> CmdResult<()> {
-        check_uuid(user)?;
-        if let Some(d) = &department {
-            check_uuid(d)?;
-        }
-        self.ws_rpc("set_member_department", json!({"p_user": user, "p_department": department}), true).await?;
-        Ok(())
-    }
-
-    pub async fn ws_delete_role(self: &Arc<Self>, key: &str) -> CmdResult<Value> {
-        self.ws_rpc("delete_role", json!({"p_key": key}), true).await?;
-        self.ws_roles().await
-    }
+    // ------------------------------------------------------------ воронки
 
     /// Удаление этапа воронки: сделки переходят на этап `move_to`.
-    pub async fn ws_delete_stage(self: &Arc<Self>, stage: &str, move_to: &str) -> CmdResult<Value> {
-        if stage == move_to {
-            return Err(CmdError::msg("Выберите другой этап для переноса сделок."));
-        }
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let moved = sync::rpc(&cloud, "delete_stage", json!({"p_stage": stage, "p_move_to": move_to})).await.map_err(cloud_err)?;
-        self.ws_sync_now().await?;
-        Ok(json!({"moved": moved}))
-    }
-
-    // ------------------------------------------------------------ загрузка локальной CRM в облако
-
-    /// Копирует локальный Workspace (на этом устройстве) в новый облачный: записи сохраняют идентификаторы, поэтому
-    /// повторная загрузка не плодит дубли. Воронки нового Workspace создаёт сервер; сделки переносятся на этапы с теми же названиями.
-    /// Локальный Workspace остаётся на месте.
-    pub async fn ws_upload_local(self: &Arc<Self>) -> CmdResult<Value> {
-        let s = self.require()?;
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let catalog = self.ws_catalog(&s)?;
-        let local =
-            catalog.active_info().filter(|w| !w.remote).cloned().ok_or_else(|| CmdError::msg("Выберите локальный Workspace, который нужно загрузить."))?;
-        let old = self.ws_store(&s)?;
-        let snapshot: Vec<(&'static schema::Entity, Vec<Value>)> = {
-            let g = old.lock().unwrap();
-            let mut out = Vec::new();
-            for e in schema::ENTITIES {
-                let mut rows = Vec::new();
-                loop {
-                    let q = Query { archived: true, limit: Some(500), offset: Some(rows.len() as u32), ..Default::default() };
-                    let page = g.list(e.table, &q).map_err(cmd)?;
-                    let n = page.len();
-                    rows.extend(page);
-                    if n < 500 {
-                        break;
-                    }
-                }
-                out.push((e, rows));
-            }
-            out
-        };
-
-        let name = local.name.replace(" (на этом устройстве)", "");
-        let id = sync::rpc(&cloud, "create_workspace", json!({"p_name": name})).await.map_err(cloud_err)?;
-        let new_id = id.as_str().unwrap_or_default().to_string();
-        if new_id.is_empty() {
-            return Err(CmdError::msg("Сервер не создал Workspace."));
-        }
-        // Серверный список без переключения: загрузку ведём здесь, фоновая синхронизация не должна мешать.
-        let fresh = sync::workspaces(&cloud).await.map_err(cloud_err)?;
-        let mut c = self.ws_catalog(&s)?;
-        c.replace_remote(fresh);
-        c.active = Some(new_id.clone());
-        self.set_catalog(&s, c)?;
-        s.workspace.lock().unwrap().store = None;
-        let target = self.ws_store(&s)?;
-        if let Ok(members) = sync::members(&cloud, &new_id).await {
-            target.lock().unwrap().replace_members(&members).map_err(cmd)?;
-        }
-        CrmSync::new(cloud.clone(), target.clone(), self.env.device_id.clone()).sync().await.map_err(cloud_err)?; // сначала получаем воронки, созданные сервером
-
-        let (stage_map, pipeline_map) = {
-            let g = target.lock().unwrap();
-            let stages = g.list("pipeline_stages", &Query::default()).map_err(cmd)?;
-            let pipelines = g.list("pipelines", &Query::default()).map_err(cmd)?;
-            let default_pipeline = pipelines.iter().find(|p| p["is_default"] == json!(true)).or(pipelines.first()).cloned();
-            let mut stage_map = std::collections::HashMap::new();
-            let mut pipeline_map = std::collections::HashMap::new();
-            if let Some(dp) = default_pipeline {
-                let theirs: Vec<&Value> = stages.iter().filter(|x| x["pipeline_id"] == dp["id"]).collect();
-                for (e, rows) in &snapshot {
-                    if e.table == "pipelines" {
-                        if let Some(lp) = rows.iter().find(|p| p["is_default"] == json!(true)).or(rows.first()) {
-                            pipeline_map.insert(lp["id"].as_str().unwrap_or_default().to_string(), dp["id"].as_str().unwrap_or_default().to_string());
-                            for st in snapshot
-                                .iter()
-                                .filter(|(x, _)| x.table == "pipeline_stages")
-                                .flat_map(|(_, r)| r.iter())
-                                .filter(|x| x["pipeline_id"] == lp["id"])
-                            {
-                                let pick = theirs
-                                    .iter()
-                                    .find(|t| t["name"] == st["name"])
-                                    .or_else(|| theirs.iter().find(|t| t["kind"] == st["kind"]))
-                                    .or(theirs.first());
-                                if let Some(t) = pick {
-                                    stage_map.insert(st["id"].as_str().unwrap_or_default().to_string(), t["id"].as_str().unwrap_or_default().to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            (stage_map, pipeline_map)
-        };
-
-        let mut copied = 0usize;
-        let mut skipped = 0usize;
-        {
-            let g = target.lock().unwrap();
-            for (e, rows) in &snapshot {
-                for row in rows {
-                    let rid = row["id"].as_str().unwrap_or_default();
-                    let is_seed_pipeline = matches!(e.table, "pipelines" | "pipeline_stages")
-                        && (pipeline_map.contains_key(rid)
-                            || stage_map.contains_key(rid)
-                            || pipeline_map.contains_key(row["pipeline_id"].as_str().unwrap_or_default()));
-                    let is_builtin_collection = e.table == "collections" && !row["builtin"].is_null();
-                    if is_seed_pipeline || is_builtin_collection || !row["deleted_at"].is_null() {
-                        continue;
-                    }
-                    let mut f = Map::new();
-                    for fld in e.fields.iter().filter(|x| x.writable) {
-                        let v = &row[fld.name];
-                        if !v.is_null() && !(fld.name == "is_default") {
-                            f.insert(fld.name.into(), v.clone());
-                        }
-                    }
-                    if let Some(p) = f.get("pipeline_id").and_then(Value::as_str).and_then(|p| pipeline_map.get(p)) {
-                        f.insert("pipeline_id".into(), json!(p));
-                    }
-                    if let Some(st) = f.get("stage_id").and_then(Value::as_str).and_then(|x| stage_map.get(x)) {
-                        f.insert("stage_id".into(), json!(st));
-                    }
-                    match g.save(e.table, Some(rid), &f) {
-                        Ok(_) => copied += 1,
-                        Err(err) => {
-                            skipped += 1;
-                            self.env.log_error(&format!("Загрузка CRM: {} {rid}: {err}", e.table));
-                        }
-                    }
-                }
-            }
-        }
-        old.lock().unwrap().set_meta("uploaded_to", &new_id).map_err(cmd)?;
+    pub fn ws_delete_stage(self: &Arc<Self>, stage: &str, move_to: &str) -> CmdResult<Value> {
+        let moved = self.with_crm(|st| st.delete_stage(stage, move_to))?;
         self.ws_changed();
-        let state = self.ws_state()?;
-        Ok(json!({"workspace": new_id, "copied": copied, "skipped": skipped, "state": state}))
+        Ok(json!({"moved": moved}))
     }
 
     // ------------------------------------------------------------ вложения
 
-    /// Файл к карточке: метаданные — запись CRM (синхронизируется), содержимое — в зашифрованной базе Workspace
-    /// и отдельным запросом в облако (до 5 МБ).
+    /// Файл к карточке (до 5 МБ): метаданные — запись CRM, содержимое — в зашифрованной базе Workspace.
     pub fn ws_attach_add(self: &Arc<Self>, entity_type: &str, entity_id: &str, name: &str, mime: &str, data_base64: &str) -> CmdResult<Value> {
         use base64::Engine;
         let data = base64::engine::general_purpose::STANDARD.decode(data_base64.trim()).map_err(|_| CmdError::msg("Файл не читается."))?;
@@ -1126,466 +620,14 @@ impl Core {
         Ok(row)
     }
 
-    /// Вложение с проверкой места в облаке (ADR-097): облачный Workspace на связи — сначала спрашиваем сервер,
-    /// хватит ли места; нет связи или сервер старый — сохраняем, сервер проверит при загрузке файла.
-    pub async fn ws_attach_add_checked(self: &Arc<Self>, entity_type: &str, entity_id: &str, name: &str, mime: &str, data_base64: &str) -> CmdResult<Value> {
-        let size = data_base64.trim().len() / 4 * 3;
-        let s = self.require()?;
-        let remote = self.ws_catalog(&s).ok().and_then(|c| c.active_info().filter(|w| w.remote).map(|w| w.id.clone()));
-        if let (Some(ws), Some(cloud)) = (remote, self.env.cloud.clone()) {
-            if let Ok(u) = sync::rpc(&cloud, "attachment_usage", json!({"p_workspace": ws})).await {
-                if let Some(msg) = quota_refusal(u["used"].as_u64(), u["limit"].as_u64(), size as u64) {
-                    return Err(CmdError::new("attachmentQuota", msg));
-                }
-            }
-        }
-        self.ws_attach_add(entity_type, entity_id, name, mime, data_base64)
-    }
-
     /// Сохраняет вложение в файл, выбранный пользователем.
-    pub async fn ws_attach_save(self: &Arc<Self>, id: &str, path: &str) -> CmdResult<String> {
-        use base64::Engine;
-        let v = self.ws_attach_get(id).await?;
-        let data = base64::engine::general_purpose::STANDARD.decode(v["data"].as_str().unwrap_or_default()).map_err(|_| CmdError::msg("Файл повреждён."))?;
-        std::fs::write(path, data).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
-        Ok(v["name"].as_str().unwrap_or_default().to_string())
-    }
-
-    /// Содержимое вложения; нет на устройстве — скачивается из облака и остаётся в базе.
-    async fn ws_attach_get(self: &Arc<Self>, id: &str) -> CmdResult<Value> {
-        use base64::Engine;
-        let s = self.require()?;
-        let store = self.ws_store(&s)?;
-        let (meta, local) = {
-            let g = store.lock().unwrap();
-            (g.get("attachments", id).map_err(cmd)?, g.blob(id))
-        };
+    pub fn ws_attach_save(self: &Arc<Self>, id: &str, path: &str) -> CmdResult<String> {
+        let (meta, data) = self.with_crm(|st| Ok((st.get("attachments", id)?, st.blob(id))))?;
         let meta = meta.ok_or_else(|| CmdError::msg("Вложение не найдено."))?;
-        let data = match local {
-            Some(d) => d,
-            None => {
-                let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Файл есть только в облаке: нужна связь."))?;
-                let rows = sync::select(&cloud, &format!("attachment_blobs?select=data&attachment_id=eq.{id}")).await.map_err(cloud_err)?;
-                let text = rows[0]["data"].as_str().ok_or_else(|| CmdError::msg("Файл ещё не загружен автором в облако."))?;
-                let d = base64::engine::general_purpose::STANDARD.decode(text).map_err(|_| CmdError::msg("Файл в облаке повреждён."))?;
-                store.lock().unwrap().put_blob(id, &d, true).map_err(cmd)?;
-                d
-            }
-        };
-        Ok(json!({"name": meta["name"], "mime": meta["mime"], "data": base64::engine::general_purpose::STANDARD.encode(data)}))
-    }
-
-    /// После выгрузки очереди: файлы, чьи метаданные сервер уже принял, уходят в облако (повтор при следующей синхронизации).
-    /// Возвращает `true`, если сервер отказал: место под вложения Workspace закончилось.
-    async fn upload_blobs(&self, cloud: &crate::cloud::auth::CloudAuth, store: &Store) -> bool {
-        use base64::Engine;
-        let pending = store.lock().unwrap().blobs_to_upload();
-        for (id, data) in pending {
-            let ws = store.lock().unwrap().workspace_id.clone();
-            let body = json!({"attachment_id": id, "workspace_id": ws, "data": base64::engine::general_purpose::STANDARD.encode(&data)});
-            let r = cloud.authorized("POST", "/rest/v1/attachment_blobs", Some(&body), &[("Prefer", "return=minimal,resolution=ignore-duplicates")]).await;
-            match r {
-                Ok((s, _)) if (200..300).contains(&s) => {
-                    let _ = store.lock().unwrap().mark_blob_uploaded(&id);
-                }
-                Ok((_, body)) if is_quota_error(&body) => return true,
-                _ => {}
-            }
-        }
-        false
-    }
-
-    // ------------------------------------------------------------ присутствие
-
-    /// «Я здесь» (и какую карточку смотрю) + кто ещё онлайн. Локальный Workspace и нет связи: пустой список.
-    pub async fn ws_presence(self: &Arc<Self>, entity_type: Option<String>, entity_id: Option<String>) -> CmdResult<Value> {
-        let s = self.require()?;
-        let c = self.ws_catalog(&s)?;
-        let Some(active) = c.active_info().filter(|w| w.remote).cloned() else { return Ok(json!([])) };
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        let list = sync::rpc(&cloud, "touch_presence", json!({"p_workspace": active.id, "p_entity_type": entity_type, "p_entity_id": entity_id})).await;
-        match list {
-            Ok(v) => Ok(v),
-            Err(CloudError::Network(_)) => Ok(json!([])),
-            Err(e) => Err(cloud_err(e)),
-        }
-    }
-
-    // ------------------------------------------------------------ сотрудники, чат и уведомления (облако)
-
-    /// Активный облачный Workspace; локальный — None (там один пользователь, чата нет).
-    fn remote_active(&self, s: &Session) -> CmdResult<Option<WorkspaceInfo>> {
-        Ok(self.ws_catalog(s)?.active_info().filter(|w| w.remote).cloned())
-    }
-
-    /// Справочник сотрудников. Локальный Workspace: только вы. Облако недоступно: участники из локальной копии.
-    pub async fn ws_team(self: &Arc<Self>) -> CmdResult<Value> {
-        let s = self.require()?;
-        let me = user_id(&s);
-        let info = self.info();
-        let (name, avatar) = info.as_ref().map(|i| (i.display_name.clone(), i.avatar.clone())).unwrap_or_default();
-        let email = self.cloud_user.lock().unwrap().as_ref().map(|u| u.email.clone());
-        let Some(active) = self.remote_active(&s)? else {
-            return Ok(json!([{"user_id": me, "display_name": name, "avatar": avatar, "email": email, "role": "owner",
-                              "role_name": "Владелец", "rank": 100, "joined_at": null, "title": "", "department": "",
-                              "manager_id": null, "hired_on": null, "last_seen": null, "online": true, "can_edit": false}]));
-        };
-        let cloud = self.env.cloud.clone().ok_or_else(|| CmdError::msg("Облако не настроено."))?;
-        match sync::rpc(&cloud, "team_directory", json!({"p_workspace": active.id})).await {
-            Ok(list) => {
-                // Своё имя и фото в облаке и здесь могут разойтись (сменили на другом устройстве): сверяем.
-                if let Some(mine) = list.as_array().and_then(|a| a.iter().find(|p| p["user_id"].as_str() == Some(me.as_str()))) {
-                    if self.reconcile_profile(&s, mine["display_name"].as_str(), mine["avatar"].as_str().or(Some(""))) {
-                        self.env.emit("session-changed", serde_json::to_value(self.info()).unwrap_or(Value::Null));
-                    }
-                }
-                Ok(list)
-            }
-            Err(CloudError::Network(_)) => {
-                let members = self.ws_store(&s)?.lock().unwrap().members().map_err(cmd)?;
-                Ok(Value::Array(
-                    members
-                        .into_iter()
-                        .map(|m| {
-                            json!({"user_id": m.user_id, "display_name": m.display_name, "avatar": null, "email": m.email,
-                                   "role": m.role, "role_name": m.role_name, "rank": m.rank, "joined_at": null, "title": "",
-                                   "department": "", "manager_id": null, "hired_on": null, "last_seen": null,
-                                   "online": false, "can_edit": false, "offline": true})
-                        })
-                        .collect(),
-                ))
-            }
-            Err(e) => Err(cloud_err(e)),
-        }
-    }
-
-    /// Карточка сотрудника: должность, отдел, руководитель, дата прихода.
-    pub async fn ws_update_member(self: &Arc<Self>, user: &str, fields: Map<String, Value>) -> CmdResult<Value> {
-        let text = |k: &str| fields.get(k).and_then(Value::as_str).map(|v| v.trim().chars().take(120).collect::<String>());
-        let manager = fields.get("managerId");
-        let hired = fields.get("hiredOn");
-        let hired_ok = hired.and_then(Value::as_str).map(|d| crate::time::parse_ymd(d).is_some()).unwrap_or(true);
-        if !hired_ok {
-            return Err(CmdError::msg("Дата прихода — в формате ГГГГ-ММ-ДД."));
-        }
-        let args = json!({
-            "p_user": user,
-            "p_title": text("title"),
-            "p_department": text("department"),
-            "p_manager": manager.and_then(Value::as_str),
-            "p_hired_on": hired.and_then(Value::as_str),
-            "p_clear_manager": manager.is_some_and(Value::is_null),
-            "p_clear_hired": hired.is_some_and(Value::is_null),
-        });
-        self.ws_rpc("update_member_profile", args, true).await
-    }
-
-    /// Действия чата: имя действия — функция сервера из списка ниже, аргументы — как у неё (без `p_`).
-    pub async fn ws_chat(self: &Arc<Self>, action: &str, args: Map<String, Value>) -> CmdResult<Value> {
-        const WITH_WORKSPACE: [&str; 4] = ["chat_list", "chat_open_direct", "chat_create_group", "notifications_mark_read"];
-        const OTHERS: [&str; 10] = [
-            "chat_add_members",
-            "chat_remove_member",
-            "chat_update",
-            "chat_set_role",
-            "chat_set_muted",
-            "chat_messages",
-            "chat_send",
-            "chat_post",
-            "chat_edit",
-            "chat_delete",
-        ];
-        let with_ws = WITH_WORKSPACE.contains(&action);
-        if !with_ws && !OTHERS.contains(&action) {
-            return Err(CmdError::msg("Неизвестное действие чата."));
-        }
-        let s = self.require()?;
-        if self.remote_active(&s)?.is_none() {
-            if action == "chat_list" {
-                return Ok(json!([]));
-            }
-            return Err(CmdError::new(
-                "localWorkspace",
-                "Сообщения доступны в облачном Workspace: войдите в облачную учётную запись и выберите общий Workspace.",
-            ));
-        }
-        let mut body = Map::new();
-        for (k, v) in args {
-            if !k.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
-                return Err(CmdError::msg("Неверный аргумент."));
-            }
-            body.insert(format!("p_{k}"), v);
-        }
-        if action == "chat_send" {
-            let text = body.get("p_body").and_then(Value::as_str).unwrap_or("").trim().to_string();
-            if text.is_empty() || text.chars().count() > 4000 {
-                return Err(CmdError::msg("Сообщение — от 1 до 4000 символов."));
-            }
-        }
-        if action == "chat_post" {
-            check_chat_post(&body)?;
-        }
-        let out = match self.ws_rpc(action, Value::Object(body), with_ws).await {
-            Err(e) if action == "chat_post" && (e.message.contains("chat_post") || e.message.contains("schema cache")) => {
-                return Err(CmdError::msg(
-                    "Карточки в сообщениях появятся после обновления сервера: владельцу проекта Supabase нужно применить миграцию 20261111090000_chat_live_attachments.sql.",
-                ))
-            }
-            r => r?,
-        };
-        if matches!(action, "chat_send" | "chat_post" | "chat_messages" | "notifications_mark_read") {
-            self.env.emit("chat-read", Value::Null);
-        }
-        Ok(out)
-    }
-
-    /// Маркетплейс: действие — функция сервера из списка ниже, аргументы — как у неё (без `p_`).
-    /// Каталог и подача интеграций нужны облачной учётной записи; установка — в облачный Workspace.
-    pub async fn ws_market(self: &Arc<Self>, action: &str, args: Map<String, Value>) -> CmdResult<Value> {
-        // Действия, которым нужен активный облачный Workspace (подставляется сам).
-        const WITH_WORKSPACE: [&str; 4] = ["market_installed", "market_install", "market_uninstall", "market_set_enabled"];
-        const OTHERS: [&str; 18] = [
-            "market_catalog",
-            "market_my_apps",
-            "market_submit",
-            "market_is_moderator",
-            "market_review_queue",
-            "market_review",
-            "market_suspend",
-            // Проверка компаний-разработчиков (ADR-083, сервер — ADR-095). На сервере без миграции 20261121140000
-            // приложение показывает понятное сообщение.
-            "market_company",
-            "market_company_save",
-            "market_company_queue",
-            "market_company_review",
-            // Модерация (ADR-095): снятые с каталога, журнал решений, список модераторов, уведомления разработчику.
-            "market_suspended",
-            "market_audit_log",
-            "market_moderators",
-            "market_moderator_add",
-            "market_moderator_remove",
-            "market_notices",
-            "market_notices_read",
-        ];
-        let with_ws = WITH_WORKSPACE.contains(&action);
-        if !with_ws && !OTHERS.contains(&action) {
-            return Err(CmdError::msg("Неизвестное действие маркетплейса."));
-        }
-        let s = self.require()?;
-        let Some(cloud) = self.env.cloud.clone() else {
-            return Err(CmdError::new("cloudOnly", "Облако не настроено."));
-        };
-        let mut body = Map::new();
-        for (k, v) in args {
-            if !k.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
-                return Err(CmdError::msg("Неверный аргумент."));
-            }
-            body.insert(format!("p_{k}"), v);
-        }
-        let active = self.remote_active(&s)?;
-        if with_ws {
-            let Some(ws) = &active else {
-                if action == "market_installed" {
-                    return Ok(json!([]));
-                }
-                return Err(CmdError::new("localWorkspace", "Интеграции устанавливаются в облачный Workspace: выберите общий Workspace."));
-            };
-            body.insert("p_workspace".into(), json!(ws.id));
-        } else if action == "market_catalog" {
-            body.insert("p_workspace".into(), json!(active.as_ref().map(|w| w.id.clone())));
-        }
-        match sync::rpc(&cloud, action, Value::Object(body)).await {
-            Ok(v) => Ok(v),
-            Err(CloudError::Server(m)) if m.contains("market_company") && (m.contains("schema cache") || m.contains("Could not find")) => {
-                Err(CmdError::new("companyMissing", "Проверка компаний появится после обновления сервера: пока коннекторы можно только устанавливать."))
-            }
-            Err(CloudError::Server(m))
-                if ["market_suspended", "market_audit_log", "market_moderator", "market_notices"].iter().any(|f| m.contains(f))
-                    && (m.contains("schema cache") || m.contains("Could not find")) =>
-            {
-                Err(CmdError::new(
-                    "moderationMissing",
-                    "Журнал модерации и уведомления появятся после обновления сервера: владельцу проекта Supabase нужно применить миграцию 20261121140000_market_moderation.sql.",
-                ))
-            }
-            Err(CloudError::Server(m)) if m.contains("market_") && (m.contains("schema cache") || m.contains("Could not find")) => Err(CmdError::new(
-                "marketMissing",
-                "Маркетплейс появится после обновления сервера: владельцу проекта Supabase нужно применить миграцию 20261111100000_marketplace.sql.",
-            )),
-            Err(e) => Err(cloud_err(e)),
-        }
-    }
-
-    /// Опрос раз в ~15 с: «в сети», непрочитанное, новые сообщения и уведомления. Новое (после прошлого опроса)
-    /// уходит системным уведомлением, если окно не в фокусе и уведомления о сообщениях включены.
-    pub async fn ws_chat_poll(self: &Arc<Self>) -> CmdResult<Value> {
-        let s = self.require()?;
-        let empty = json!({"cursor": 0, "unread": {}, "fresh": [], "notifications": [], "freshNotifications": [], "available": false});
-        let Some(active) = self.remote_active(&s)? else { return Ok(empty) };
-        let Some(cloud) = self.env.cloud.clone() else { return Ok(empty) };
-        let since = s.workspace.lock().unwrap().chat_cursor.clone().filter(|(w, _)| *w == active.id).map(|(_, c)| c);
-        let mut out = match sync::rpc(&cloud, "chat_poll", json!({"p_workspace": active.id, "p_since": since})).await {
-            Ok(v) => v,
-            Err(CloudError::Network(_)) => return Ok(empty),
-            // Сервер без миграции чата: функции нет. Интерфейс показывает подсказку, а не ошибку каждые 15 с.
-            Err(CloudError::Server(m)) if m.contains("chat_poll") || m.contains("schema cache") => {
-                return Ok(json!({"cursor": 0, "unread": {}, "fresh": [], "notifications": [], "freshNotifications": [], "available": false, "missing": true}))
-            }
-            Err(e) => return Err(cloud_err(e)),
-        };
-        let cursor = out["cursor"].as_i64().unwrap_or(0);
-        s.workspace.lock().unwrap().chat_cursor = Some((active.id.clone(), cursor));
-        out["live"] = json!(self.ensure_live(&s, &cloud));
-        let fresh_notes: Vec<Value> = match since {
-            None => vec![],
-            Some(prev) => {
-                out["notifications"].as_array().map(|a| a.iter().filter(|n| n["seq"].as_i64().unwrap_or(0) > prev).cloned().collect()).unwrap_or_default()
-            }
-        };
-        if s.account_prefs().notify_messages {
-            for (title, body) in chat_alerts(&out["fresh"], &fresh_notes) {
-                self.env.emit("notify", json!({"kind": "message", "title": title, "body": body}));
-            }
-        }
-        out["freshNotifications"] = Value::Array(fresh_notes);
-        out["available"] = json!(true);
-        Ok(out)
-    }
-
-    /// Держит канал Realtime открытым для пользователя сессии. События приходят без содержимого:
-    /// интерфейс по ним сразу делает обычный опрос. Возвращает, открыт ли канал сейчас.
-    fn ensure_live(self: &Arc<Self>, s: &Arc<Session>, cloud: &Arc<crate::cloud::auth::CloudAuth>) -> bool {
-        let me = user_id(s);
-        let mut st = s.workspace.lock().unwrap();
-        if let Some(l) = &st.live {
-            if l.user == me && !l.task.is_finished() {
-                return l.on.load(std::sync::atomic::Ordering::SeqCst);
-            }
-        }
-        let on = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let env = self.env.clone();
-        // Слабые ссылки: задача канала живёт внутри сессии и не должна удерживать ядро и сессию.
-        let (core, session) = (Arc::downgrade(self), Arc::downgrade(s));
-        let on_event: Arc<dyn Fn(String, Value) + Send + Sync> = Arc::new(move |event, payload| {
-            if event == "crm" || event == "resync" {
-                if let (Some(core), Some(session)) = (core.upgrade(), session.upgrade()) {
-                    // resync: канал переподключился, толчки за время обрыва могли потеряться.
-                    core.ws_nudged(&session, if event == "crm" { payload["workspace_id"].as_str() } else { None });
-                }
-                if event == "crm" {
-                    return;
-                }
-            }
-            env.emit("chat-live", json!({"event": event, "payload": payload}));
-        });
-        let task = tokio::spawn(crate::cloud::realtime::run(cloud.clone(), me.clone(), on.clone(), on_event));
-        st.live = Some(LiveChannel { user: me, on, task });
-        false
-    }
-
-    // ------------------------------------------------------------ синхронизация
-
-    /// Толчок Realtime: коллега выгрузил изменения CRM в этот Workspace. Содержимого в толчке нет — после
-    /// короткой задержки идёт обычная синхронизация с правами пользователя (RLS решает, что он увидит).
-    /// `workspace`: о каком Workspace толчок (`None` — об активном, после переподключения канала).
-    fn ws_nudged(self: &Arc<Self>, s: &Arc<Session>, workspace: Option<&str>) {
-        let active = self.ws_catalog(s).ok().and_then(|c| c.active_info().filter(|w| w.remote).map(|w| w.id.clone()));
-        if !nudge_applies(active.as_deref(), workspace) {
-            return;
-        }
-        {
-            let mut st = s.workspace.lock().unwrap();
-            if st.nudged {
-                return;
-            }
-            st.nudged = true;
-        }
-        let (core, session) = (self.clone(), s.clone());
-        let delay = nudge_delay(rand::random::<f64>());
-        let handle = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(delay)).await;
-            session.workspace.lock().unwrap().nudged = false;
-            core.ws_sync_soon(&session);
-        });
-        s.tasks.lock().unwrap().push(handle);
-    }
-
-    fn ws_sync_soon(self: &Arc<Self>, s: &Arc<Session>) {
-        let Some(cloud) = self.env.cloud.clone() else { return };
-        if !self.ws_catalog(s).ok().and_then(|c| c.active_info().map(|w| w.remote)).unwrap_or(false) {
-            return;
-        }
-        let Ok(store) = self.ws_store(s) else { return };
-        {
-            let mut st = s.workspace.lock().unwrap();
-            if st.running {
-                st.again = true;
-                return;
-            }
-            st.running = true;
-        }
-        let (core, session) = (self.clone(), s.clone());
-        let handle = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(300)).await;
-            loop {
-                let result = CrmSync::new(cloud.clone(), store.clone(), core.env.device_id.clone()).sync().await;
-                let mut quota_full = false;
-                if result.is_ok() {
-                    let waiting = session.workspace.lock().unwrap().quota_full_at.is_some_and(|t| t.elapsed() < QUOTA_RETRY);
-                    quota_full = waiting || core.upload_blobs(&cloud, &store).await;
-                }
-                let again = {
-                    let mut st = session.workspace.lock().unwrap();
-                    match &result {
-                        Ok(_) if quota_full => {
-                            let expired = match st.quota_full_at {
-                                Some(t) => t.elapsed() >= QUOTA_RETRY,
-                                None => true,
-                            };
-                            if expired {
-                                st.quota_full_at = Some(std::time::Instant::now());
-                            }
-                            st.last_error = Some(QUOTA_FULL.into());
-                            st.last_sync = Some(stamp(crate::time::now()));
-                        }
-                        Ok(_) => {
-                            st.quota_full_at = None;
-                            st.last_error = None;
-                            st.last_sync = Some(stamp(crate::time::now()));
-                        }
-                        Err(CloudError::Network(_)) => st.last_error = Some("Нет связи: изменения отправятся позже.".into()),
-                        Err(e) => st.last_error = Some(e.to_string()),
-                    }
-                    let again = std::mem::take(&mut st.again) && result.is_ok();
-                    if !again {
-                        st.running = false;
-                    }
-                    again
-                };
-                if let Err(e) = &result {
-                    if sync::is_not_member(e) {
-                        let _ = core.ws_refresh_inner(&session).await;
-                    } else if !matches!(e, CloudError::Network(_)) {
-                        core.env.log_error(&format!("Синхронизация CRM: {e}"));
-                    }
-                }
-                core.env.emit("workspace-changed", Value::Null);
-                if !again {
-                    break;
-                }
-            }
-        });
-        s.tasks.lock().unwrap().push(handle);
-    }
-
-    pub async fn ws_sync_now(self: &Arc<Self>) -> CmdResult<Value> {
-        let s = self.require()?;
-        if let Ok(st) = self.ws_store(&s) {
-            st.lock().unwrap().retry_now().map_err(cmd)?;
-        }
-        self.ws_refresh_inner(&s).await?;
-        self.ws_sync_soon(&s);
-        self.ws_state()
+        // Файлы облачных коллег, которые так и не скачались на это устройство, после отказа от облака недоступны.
+        let data = data.ok_or_else(|| CmdError::msg("Содержимого файла нет на этом компьютере."))?;
+        std::fs::write(path, data).map_err(|e| CmdError::msg(format!("Не удалось сохранить файл: {e}")))?;
+        Ok(meta["name"].as_str().unwrap_or_default().to_string())
     }
 
     // ------------------------------------------------------------ напоминания задач
@@ -1640,137 +682,28 @@ impl Core {
     }
 }
 
-/// Тексты системных уведомлений: по одному на новое сообщение (не больше трёх, дальше — сводка) и на уведомление,
-/// которого нет среди сообщений (добавление в обсуждение, упоминание в заметке или комментарии).
-/// Сообщение с карточками: текст до 4000 символов (может быть пустым, если есть карточки), до 10 карточек
-/// известных типов. Окончательно всё проверяет сервер; здесь — чтобы не слать заведомо неверное.
-fn check_chat_post(body: &Map<String, Value>) -> CmdResult<()> {
-    let text = body.get("p_body").and_then(Value::as_str).unwrap_or("").trim().chars().count();
-    let items = match body.get("p_attachments") {
-        None | Some(Value::Null) => vec![],
-        Some(Value::Array(a)) => a.clone(),
-        Some(_) => return Err(CmdError::msg("Неверный список карточек.")),
-    };
-    if text > 4000 || (text == 0 && items.is_empty()) {
-        return Err(CmdError::msg("Сообщение — от 1 до 4000 символов."));
-    }
-    if items.len() > 10 {
-        return Err(CmdError::msg("В сообщение можно добавить до 10 карточек."));
-    }
-    for it in &items {
-        let kind_ok = matches!(it["type"].as_str(), Some("company" | "contact" | "crm_lead" | "deal"));
-        let id_ok = it["id"].as_str().map(|x| uuid::Uuid::parse_str(x).is_ok()).unwrap_or(false);
-        if !kind_ok || !id_ok {
-            return Err(CmdError::msg("Неверная карточка в сообщении."));
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn chat_alerts(fresh: &Value, notes: &[Value]) -> Vec<(String, String)> {
-    let mut out = vec![];
-    let msgs = fresh.as_array().cloned().unwrap_or_default();
-    for m in msgs.iter().take(3) {
-        let author = m["author_name"].as_str().unwrap_or("Сотрудник");
-        let title = match (m["kind"].as_str(), m["mentioned"].as_bool().unwrap_or(false)) {
-            (Some("group"), true) => format!("{author} упоминает вас в «{}»", m["title"].as_str().unwrap_or("обсуждении")),
-            (Some("group"), false) => format!("{author} в «{}»", m["title"].as_str().unwrap_or("обсуждении")),
-            _ => author.to_string(),
-        };
-        let body = m["body"].as_str().unwrap_or("");
-        let body = if body.is_empty() { "Карточка CRM" } else { body };
-        out.push((title, body.chars().take(160).collect()));
-    }
-    if msgs.len() > 3 {
-        out.push(("Новые сообщения".into(), format!("И ещё {}", msgs.len() - 3)));
-    }
-    for n in notes {
-        let actor = n["actor_name"].as_str().unwrap_or("Сотрудник");
-        let excerpt: String = n["excerpt"].as_str().unwrap_or("").chars().take(160).collect();
-        match n["kind"].as_str() {
-            Some("added_to_group") => out.push((format!("{actor} добавляет вас в обсуждение"), excerpt)),
-            Some("note_mention") => out.push((format!("{actor} упоминает вас в заметке"), excerpt)),
-            Some("comment_mention") => out.push((format!("{actor} упоминает вас в комментарии"), excerpt)),
-            Some("task_assigned") => out.push((format!("{actor} назначает вам задачу"), excerpt)),
-            Some("record_assigned") => out.push((format!("{actor} передаёт вам запись"), excerpt)),
-            _ => {}
-        }
-    }
-    out
-}
-
-const QUOTA_FULL: &str = "Место под вложения в этом Workspace закончилось (300 МБ): новые файлы остаются только на этом устройстве. Удалите ненужные вложения — файлы загрузятся сами.";
-
-/// Ответ сервера на загрузку файла: «место под вложения закончилось» (код 53400, ADR-097).
-fn is_quota_error(body: &[u8]) -> bool {
-    let v: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
-    v["code"] == "53400" || v["message"].as_str().is_some_and(|m| m.contains("attachment quota exceeded"))
-}
-
-/// Текст отказа, если файл размером `size` не помещается; без ответа сервера — не отказываем.
-fn quota_refusal(used: Option<u64>, limit: Option<u64>, size: u64) -> Option<String> {
-    let (used, limit) = (used?, limit?);
-    if used + size <= limit {
-        return None;
-    }
-    let mb = |b: u64| (b as f64 / 1_048_576.0).round() as u64;
-    Some(format!("Место под вложения в этом Workspace закончилось: занято {} из {} МБ. Удалите ненужные вложения и попробуйте снова.", mb(used), mb(limit)))
-}
-
-/// Толчок касается только активного облачного Workspace; толчок без Workspace (переподключение) — его же.
-fn nudge_applies(active: Option<&str>, workspace: Option<&str>) -> bool {
-    match (active, workspace) {
-        (None, _) => false,
-        (Some(_), None) => true,
-        (Some(a), Some(w)) => a == w,
-    }
-}
-
-/// Задержка синхронизации по толчку для случайного числа `r` из [0, 1).
-fn nudge_delay(r: f64) -> u64 {
-    NUDGE_DELAY_MS + (r.clamp(0.0, 1.0) * NUDGE_JITTER_MS) as u64
-}
-
 #[cfg(test)]
-mod team_tests {
+mod local_tests {
     use super::super::testing::fixture;
     use super::*;
 
-    // Пароль собирается из частей, чтобы сканер не считал тестовую строку секретом (как в data.rs).
-
     fn local() -> (super::super::testing::Fixture, Arc<Core>) {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = Core::new(f.env.clone());
         core.sign_in_test_user("anna");
         (f, core)
     }
 
-    #[test]
-    fn ids_from_the_interface_must_be_uuids() {
-        assert!(check_uuid("00000000-0000-4000-8000-000000000003").is_ok());
-        for bad in ["", "abc", "00000000-0000-4000-8000-000000000003&limit=1", "00000000-0000-4000-8000-00000000000z", "../../etc"] {
-            assert!(check_uuid(bad).is_err(), "{bad}");
-        }
-    }
-
-    #[tokio::test]
-    async fn invitations_and_audit_are_empty_for_a_local_workspace() {
-        let (_f, core) = local();
-        assert_eq!(core.ws_invitations().await.unwrap(), json!([]));
-        let a = core.ws_audit(None, None, None, None).await.unwrap();
-        assert_eq!(a, json!({"items": [], "more": false}));
-        assert!(core.ws_audit(Some("x&y".into()), None, None, None).await.is_ok(), "локальное пространство: отбор не проверяется, облака нет");
-        assert!(core.ws_revoke_invitation("не-идентификатор").await.is_err());
-        assert!(core.ws_transfer_ownership("не-идентификатор").await.is_err());
-        assert!(core.ws_delete_workspace("Моё").await.is_err(), "в локальной учётной записи облачных действий нет");
+    fn active(state: &Value) -> Value {
+        let id = state["active"].clone();
+        state["workspaces"].as_array().unwrap().iter().find(|w| w["id"] == id).unwrap().clone()
     }
 
     #[tokio::test]
     async fn first_run_sets_name_and_currency_of_local_workspace() {
         let (_f, core) = local();
         let state = core.ws_set_local_details("  Студия «Пиксель» ", "usd").unwrap();
-        let active = state["active"].as_str().unwrap().to_string();
-        let w = state["workspaces"].as_array().unwrap().iter().find(|w| w["id"] == json!(active)).unwrap().clone();
+        let w = active(&state);
         assert_eq!(w["name"], "Студия «Пиксель»");
         assert_eq!(w["defaultCurrency"], "USD");
         assert!(core.ws_set_local_details("", "RUB").unwrap_err().message.contains("от 1 до 120"));
@@ -1782,108 +715,117 @@ mod team_tests {
     }
 
     #[tokio::test]
-    async fn local_workspace_has_only_me_and_no_chat() {
+    async fn workspaces_are_created_and_renamed_on_this_computer() {
         let (_f, core) = local();
-        let team = core.ws_team().await.unwrap();
-        let list = team.as_array().unwrap();
-        assert_eq!(list.len(), 1);
-        assert_eq!(list[0]["user_id"], json!(user_id(&core.require().unwrap())));
-        assert_eq!(list[0]["display_name"], "anna@example.com");
-        assert_eq!(core.ws_chat("chat_list", Map::new()).await.unwrap(), json!([]));
-        let e = core.ws_chat("chat_send", Map::new()).await.unwrap_err();
-        assert_eq!(e.code, "localWorkspace");
-        let poll = core.ws_chat_poll().await.unwrap();
-        assert_eq!(poll["available"], false);
-        assert!(core.ws_update_member("x", Map::new()).await.is_err(), "карточки — только в облаке");
+        let first = core.ws_state().unwrap()["active"].clone();
+        let state = core.ws_create_workspace(" Филиал ").unwrap();
+        let w = active(&state);
+        assert_eq!(w["name"], "Филиал");
+        assert_eq!(w["remote"], false);
+        assert_eq!(w["role"], "owner");
+        assert_ne!(state["active"], first, "новое пространство сразу выбрано");
+        assert_eq!(state["workspaces"].as_array().unwrap().len(), 2);
+        assert!(w["permissions"].as_array().unwrap().iter().any(|p| p == "workspace.manage"));
+        let renamed = core.ws_rename_workspace("Филиал на Ленина").unwrap();
+        assert_eq!(active(&renamed)["name"], "Филиал на Ленина");
+        assert!(core.ws_create_workspace("   ").is_err());
+        assert!(core.ws_rename_workspace(&"я".repeat(121)).is_err());
+        // В новом пространстве своя воронка из шаблона и я — единственный участник.
+        assert!(!core.ws_list("pipelines", Query::default()).unwrap()["items"].as_array().unwrap().is_empty());
+        let members = core.ws_state().unwrap()["members"].clone();
+        assert_eq!(members.as_array().unwrap().len(), 1);
     }
 
     #[tokio::test]
-    async fn chat_actions_are_whitelisted_and_arguments_checked() {
+    async fn deleting_a_stage_moves_its_deals() {
         let (_f, core) = local();
-        for bad in ["crm_push", "delete_workspace", "chat_poll", "", "chat_list; drop"] {
-            let e = core.ws_chat(bad, Map::new()).await.unwrap_err();
-            assert_eq!(e.message, "Неизвестное действие чата.", "{bad}");
-        }
-        let mut hired = Map::new();
-        hired.insert("hiredOn".into(), json!("10.11.2026"));
-        assert!(core.ws_update_member("u", hired).await.unwrap_err().message.contains("ГГГГ-ММ-ДД"));
+        let stages = core.ws_list("pipeline_stages", Query::default()).unwrap()["items"].as_array().unwrap().clone();
+        let (from, to) = (stages[0]["id"].as_str().unwrap().to_string(), stages[1]["id"].as_str().unwrap().to_string());
+        let pipeline = stages[0]["pipeline_id"].clone();
+        let mut deal = Map::new();
+        deal.insert("title".into(), json!("Сайт"));
+        deal.insert("pipeline_id".into(), pipeline);
+        deal.insert("stage_id".into(), json!(from));
+        let d = core.ws_save("deals", None, deal).unwrap();
+        assert!(core.ws_delete_stage(&from, &from).is_err(), "перенос на тот же этап");
+        assert_eq!(core.ws_delete_stage(&from, &to).unwrap()["moved"], 1);
+        let pending = core.with_crm(|st| Ok(st.pending_count())).unwrap();
+        assert_eq!(pending, 0, "изменения не копятся в очереди отправки: отправлять их некуда");
+        let card = core.ws_card("deals", d["id"].as_str().unwrap()).unwrap();
+        assert_eq!(card["record"]["stage_id"], json!(to));
+        let left = core.ws_list("pipeline_stages", Query::default()).unwrap()["items"].as_array().unwrap().clone();
+        assert!(!left.iter().any(|s| s["id"] == json!(from)), "этап удалён");
+        assert!(core.ws_delete_stage(&from, &to).is_err(), "удалённый этап второй раз не удаляется");
     }
 
     #[tokio::test]
-    async fn market_actions_are_whitelisted_and_need_cloud() {
-        let (_f, core) = local();
-        for bad in ["crm_push", "market_deliver", "", "market_catalog; drop"] {
-            let e = core.ws_market(bad, Map::new()).await.unwrap_err();
-            assert_eq!(e.message, "Неизвестное действие маркетплейса.", "{bad}");
+    async fn attachments_stay_in_the_workspace_database() {
+        use base64::Engine;
+        let (f, core) = local();
+        let c = core.ws_save("companies", None, json!({"name": "Вектор"}).as_object().unwrap().clone()).unwrap();
+        let data = base64::engine::general_purpose::STANDARD.encode(b"hello");
+        let a = core.ws_attach_add("company", c["id"].as_str().unwrap(), "../счёт.txt", "text/plain", &data).unwrap();
+        assert_eq!(a["name"], "счёт.txt");
+        let out = f.dir.path().join("out.txt");
+        assert_eq!(core.ws_attach_save(a["id"].as_str().unwrap(), out.to_str().unwrap()).unwrap(), "счёт.txt");
+        assert_eq!(std::fs::read(&out).unwrap(), b"hello");
+        let big = base64::engine::general_purpose::STANDARD.encode(vec![0u8; MAX_ATTACHMENT + 1]);
+        assert!(core.ws_attach_add("company", c["id"].as_str().unwrap(), "big.bin", "", &big).is_err());
+    }
+
+    /// Копия облачного Workspace прежней версии становится локальной: данные и участники на месте, права — владельца.
+    #[tokio::test]
+    async fn downloaded_cloud_workspace_becomes_local() {
+        let f = fixture(vec![]);
+        let core = Core::new(f.env.clone());
+        core.sign_in_test_user("anna");
+        let s = core.require().unwrap();
+        let me = user_id(&s);
+        let dir = s.dir.join("workspaces");
+        let (cloud_id, missing_id) = (uuid::Uuid::new_v4().to_string(), uuid::Uuid::new_v4().to_string());
+        {
+            let key = f.env.keys.key_for(&s.id).unwrap();
+            let st = WorkspaceStore::open(&database_file(&dir, &cloud_id), Some(&key), &cloud_id, &me).unwrap();
+            st.set_permissions(&["records.create".to_string()]).unwrap();
+            let colleague = Member {
+                user_id: "11111111-1111-4111-8111-111111111111".into(),
+                display_name: "Борис".into(),
+                role: "manager".into(),
+                role_name: "Менеджер".into(),
+                rank: 50,
+                avatar_path: None,
+                email: None,
+            };
+            st.replace_members(&[colleague]).unwrap();
+            let mut c = Map::new();
+            c.insert("name".into(), json!("Из облака"));
+            st.save("companies", None, &c).unwrap();
         }
-        let e = core.ws_market("market_catalog", Map::new()).await.unwrap_err();
-        assert_eq!(e.code, "cloudOnly");
-    }
+        let mut info = local_workspace("Команда", false);
+        info.id = cloud_id.clone();
+        info.remote = true;
+        info.role = "manager".into();
+        info.permissions = vec!["records.read".into()];
+        let mut gone = local_workspace("Не скачан", false);
+        gone.id = missing_id.clone();
+        gone.remote = true;
+        Catalog { active: Some(cloud_id.clone()), workspaces: vec![info, gone] }.save(&dir).unwrap();
+        *s.workspace.lock().unwrap() = CrmState::default();
 
-    #[test]
-    fn chat_post_arguments_are_checked() {
-        let ok = |v: Value| check_chat_post(v.as_object().unwrap()).is_ok();
-        let id = "0b6f5c1e-2f0a-4d7e-9b1a-1c2d3e4f5a6b";
-        assert!(ok(json!({"p_body": "текст"})));
-        assert!(ok(json!({"p_body": "", "p_attachments": [{"type": "company", "id": id}]})));
-        assert!(!ok(json!({"p_body": "  "})), "пусто и без карточек");
-        assert!(!ok(json!({"p_body": "x".repeat(4001)})));
-        assert!(!ok(json!({"p_body": "x", "p_attachments": [{"type": "leads", "id": id}]})));
-        assert!(!ok(json!({"p_body": "x", "p_attachments": [{"type": "deal", "id": "1; drop"}]})));
-        assert!(!ok(json!({"p_body": "x", "p_attachments": {"type": "deal"}})));
-        assert!(!ok(json!({"p_body": "x", "p_attachments": vec![json!({"type": "deal", "id": id}); 11]})));
-        let a = chat_alerts(&json!([{"kind": "direct", "author_name": "Борис", "body": "", "mentioned": false}]), &[]);
-        assert_eq!(a[0].1, "Карточка CRM");
-    }
-
-    #[test]
-    fn attachment_quota_is_explained_before_and_after_upload() {
-        assert_eq!(quota_refusal(Some(10), Some(100), 90), None);
-        assert_eq!(quota_refusal(None, None, u64::MAX), None, "без ответа сервера файл сохраняется, сервер проверит позже");
-        let msg = quota_refusal(Some(300 * 1_048_576 - 1), Some(300 * 1_048_576), 2).unwrap();
-        assert!(msg.contains("занято 300 из 300 МБ"), "{msg}");
-        assert!(is_quota_error(br#"{"code":"53400","message":"attachment quota exceeded"}"#));
-        assert!(!is_quota_error(br#"{"code":"42501","message":"new row violates row-level security policy"}"#));
-        assert!(!is_quota_error(b"not json"));
-    }
-
-    #[test]
-    fn crm_nudge_syncs_only_the_active_cloud_workspace_with_spread() {
-        assert!(nudge_applies(Some("w1"), Some("w1")));
-        assert!(nudge_applies(Some("w1"), None), "переподключение канала сверяет активный Workspace");
-        assert!(!nudge_applies(Some("w1"), Some("w2")), "толчок другого Workspace не трогает активный");
-        assert!(!nudge_applies(None, Some("w1")), "локальный Workspace толчки не ждёт");
-        assert_eq!(nudge_delay(0.0), 1000);
-        assert_eq!(nudge_delay(0.999), 2998);
-        assert!((0..100).map(|i| nudge_delay(i as f64 / 100.0)).collect::<std::collections::BTreeSet<_>>().len() > 50, "устройства приходят вразброс");
-    }
-
-    #[test]
-    fn chat_alerts_name_the_author_and_conversation() {
-        let fresh = json!([
-            {"kind": "direct", "author_name": "Борис", "body": "Привет", "mentioned": false},
-            {"kind": "group", "title": "Продажи", "author_name": "Вера", "body": "@Анна смотри", "mentioned": true},
-            {"kind": "group", "title": "Продажи", "author_name": "Вера", "body": "ещё", "mentioned": false},
-            {"kind": "group", "title": "Продажи", "author_name": "Вера", "body": "и ещё", "mentioned": false},
-            {"kind": "group", "title": "Продажи", "author_name": "Вера", "body": "последнее", "mentioned": false}
-        ]);
-        let notes = vec![
-            json!({"kind": "added_to_group", "actor_name": "Глеб", "excerpt": "Отдел продаж"}),
-            json!({"kind": "note_mention", "actor_name": "Глеб", "excerpt": "проверь счёт"}),
-            json!({"kind": "mention", "actor_name": "Вера", "excerpt": "уже в сообщениях"}),
-            json!({"kind": "task_assigned", "actor_name": "Вера", "excerpt": "Подготовить КП"}),
-            json!({"kind": "record_assigned", "actor_name": "Вера", "excerpt": "ООО Вектор"}),
-        ];
-        let a = chat_alerts(&fresh, &notes);
-        assert_eq!(a[0], ("Борис".to_string(), "Привет".to_string()));
-        assert_eq!(a[1].0, "Вера упоминает вас в «Продажи»");
-        assert_eq!(a[2].0, "Вера в «Продажи»");
-        assert_eq!(a[3], ("Новые сообщения".to_string(), "И ещё 2".to_string()));
-        assert_eq!(a[4].0, "Глеб добавляет вас в обсуждение");
-        assert_eq!(a[5].0, "Глеб упоминает вас в заметке");
-        assert_eq!(a[6], ("Вера назначает вам задачу".to_string(), "Подготовить КП".to_string()));
-        assert_eq!(a[7].0, "Вера передаёт вам запись");
-        assert_eq!(a.len(), 8, "упоминание в чате уже показано как сообщение");
-        assert!(chat_alerts(&json!([]), &[]).is_empty());
+        let state = core.ws_state().unwrap();
+        let list = state["workspaces"].as_array().unwrap();
+        assert_eq!(list.len(), 1, "Workspace без скачанной базы убран: {list:?}");
+        let w = active(&state);
+        assert_eq!((w["id"].as_str().unwrap(), w["remote"].as_bool().unwrap(), w["role"].as_str().unwrap()), (cloud_id.as_str(), false, "owner"));
+        let names: Vec<&str> = state["members"].as_array().unwrap().iter().map(|m| m["displayName"].as_str().unwrap()).collect();
+        assert_eq!(names.len(), 2, "коллега остался в списке, я добавлен: {names:?}");
+        assert!(names.contains(&"Борис"));
+        let companies = core.ws_list("companies", Query::default()).unwrap();
+        assert_eq!(companies["items"].as_array().unwrap().len(), 1);
+        let pipelines = core.ws_list("pipelines", Query::default()).unwrap();
+        assert!(pipelines["items"].as_array().unwrap().is_empty(), "шаблон воронки в бывший облачный Workspace не засевается");
+        let mut c = Map::new();
+        c.insert("name".into(), json!("Новая"));
+        core.ws_save("companies", None, c).expect("владелец может создавать записи");
     }
 }

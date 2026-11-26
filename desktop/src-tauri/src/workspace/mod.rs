@@ -13,7 +13,6 @@ pub mod merge;
 pub mod query;
 pub mod schema;
 pub mod store;
-pub mod sync;
 
 #[cfg(test)]
 mod tests;

@@ -23,7 +23,6 @@ pub struct TrayText {
     pub search: &'static str,
     pub stop: &'static str,
     pub new_leads: &'static str,
-    pub sync: &'static str,
     pub updates: &'static str,
     pub settings: &'static str,
     pub quit: &'static str,
@@ -37,7 +36,6 @@ pub fn text(lang: Lang) -> TrayText {
             search: "Найти лидов сейчас",
             stop: "Остановить поиск",
             new_leads: "Показать новые лиды",
-            sync: "Синхронизировать",
             updates: "Проверить обновления",
             settings: "Настройки…",
             quit: "Выйти",
@@ -48,7 +46,6 @@ pub fn text(lang: Lang) -> TrayText {
             search: "Find leads now",
             stop: "Stop search",
             new_leads: "Show new leads",
-            sync: "Sync now",
             updates: "Check for updates",
             settings: "Settings…",
             quit: "Quit",
@@ -101,7 +98,7 @@ mod tests {
     fn both_languages_have_every_label() {
         for lang in [Lang::Ru, Lang::En] {
             let t = text(lang);
-            for s in [t.tooltip, t.open, t.search, t.stop, t.new_leads, t.sync, t.updates, t.settings, t.quit] {
+            for s in [t.tooltip, t.open, t.search, t.stop, t.new_leads, t.updates, t.settings, t.quit] {
                 assert!(!s.trim().is_empty());
             }
         }

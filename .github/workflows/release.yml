@@ -101,10 +101,6 @@ jobs:
 
       - name: Build app
         env:
-          # Облако: адрес проекта и ПУБЛИЧНЫЙ ключ из переменных репозитория (не секретов).
-          # Не заданы — собирается версия только с локальными учётными записями.
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
           # Облачные диски: ID OAuth-приложений — переменные репозитория, секрет клиента Google — секрет.
           GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
@@ -148,8 +144,6 @@ jobs:
         shell: pwsh
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
-      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -45,7 +45,7 @@ impl Core {
         Ok(serde_json::to_value(s.with_store(|st| st.events(lead_id))?).unwrap_or(Value::Null))
     }
 
-    /// Выполнить действие над данными: перечитать список и отправить изменения в облако.
+    /// Выполнить действие над данными и перечитать список.
     fn act(self: &Arc<Self>, f: impl FnOnce(&crate::store::LeadStore) -> crate::error::AppResult<()>) -> CmdResult<()> {
         let s = self.require()?;
         s.with_store(f).map_err(|e| {
@@ -53,7 +53,6 @@ impl Core {
             CmdError::from(e)
         })?;
         self.env.emit("data-changed", Value::Null);
-        self.sync_soon(&s);
         Ok(())
     }
 
@@ -95,7 +94,6 @@ impl Core {
         let s = self.require()?;
         let n = s.with_store(|st| st.import_exclusions(&text))?;
         self.env.emit("data-changed", Value::Null);
-        self.sync_soon(&s);
         Ok(format!("Из файла добавлено исключений: {n}"))
     }
 
@@ -211,7 +209,6 @@ impl Core {
         }
         self.reload_synced_settings(&s);
         self.env.emit("data-changed", Value::Null);
-        self.sync_soon(&s);
         // Копии до пакета A1 не содержат CRM: тогда базы Workspace не трогаются.
         let crm = crm_copy_dir(path);
         let restored = if crm.is_dir() {
@@ -247,7 +244,7 @@ impl Core {
         Ok(self.require()?.prefs.lock().unwrap().to_json())
     }
 
-    /// Изменить настройки учётной записи. Автопоиск хранится в базе (синхронизируется) и перезапускает таймер.
+    /// Изменить настройки учётной записи. Автопоиск хранится в базе и перезапускает таймер.
     pub fn patch_account_prefs(self: &Arc<Self>, changes: &Value) -> CmdResult<Value> {
         let s = self.require()?;
         let before = s.account_prefs();
@@ -258,11 +255,9 @@ impl Core {
         if changed {
             let after = s.account_prefs();
             if after.auto_search_minutes != before.auto_search_minutes {
-                let _ = s.with_store(|st| st.set_synced_value("search.auto", &after.auto_search_minutes.to_string()));
+                let _ = s.with_store(|st| st.set_value("search.auto", &after.auto_search_minutes.to_string()));
                 s.search.lock().unwrap().reschedule.notify_one();
-                self.sync_soon(&s);
             }
-            self.push_account_prefs(&s, changes);
             self.env.emit("account-prefs", json.clone());
         }
         Ok(json)
@@ -281,7 +276,7 @@ mod tests {
     use crate::models::{LeadData, LeadKind};
 
     fn seeded() -> (super::super::testing::Fixture, Arc<Core>, Vec<String>) {
-        let f = fixture(false, vec![]);
+        let f = fixture(vec![]);
         let core = Core::new(f.env.clone());
         core.sign_in_test_user("anna");
         let s = core.session().unwrap();
@@ -406,7 +401,7 @@ mod tests {
         assert!(msg.contains("elsewhere"));
         assert_eq!(core.snapshot().unwrap().leads.len(), 3);
         assert_eq!(core.info().unwrap().database_path, target.join("leads.db").display().to_string());
-        core.logout();
+        core.close_current();
         core.sign_in_test_user("anna");
         assert_eq!(core.snapshot().unwrap().leads.len(), 3, "после входа база открывается из новой папки");
     }
@@ -418,14 +413,14 @@ mod tests {
         assert_eq!((p["autoSearchMinutes"].clone(), p["keepBackups"].clone(), p["signature"].clone()), (json!(240), json!(365), json!("С уважением")));
         assert_eq!(core.session().unwrap().with_store(|st| st.value("search.auto")).as_deref(), Some("240"));
         assert!(f.events.count("account-prefs") >= 1);
-        core.logout();
+        core.close_current();
         core.sign_in_test_user("anna");
         assert_eq!(core.account_prefs().unwrap()["autoSearchMinutes"], 240);
     }
 
     #[tokio::test]
     async fn backups_go_to_the_default_folder_of_the_account() {
-        let f = super::super::testing::fixture(false, vec![]);
+        let f = super::super::testing::fixture(vec![]);
         let core = Core::new(f.env.clone());
         core.sign_in_test_user("anna");
         let s = core.session().unwrap();

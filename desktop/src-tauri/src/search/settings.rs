@@ -1,5 +1,5 @@
-//! Настройки поиска. Хранятся в базе пользователя как JSON и синхронизируются через облако, поэтому
-//! имена полей совпадают с теми, что писали версии для macOS и Windows. Недостающие поля берутся по
+//! Настройки поиска. Хранятся в базе пользователя как JSON; имена полей совпадают с теми, что писали
+//! версии для macOS и Windows. Недостающие поля берутся по
 //! умолчанию: новые настройки не сбрасывают сохранённые.
 
 use once_cell::sync::Lazy;
@@ -231,7 +231,7 @@ impl SearchSettings {
     }
 
     pub fn encoded(&self) -> String {
-        crate::cloud::types::canonical_json(&serde_json::to_value(self).unwrap_or_default())
+        crate::jsonfmt::canonical_json(&serde_json::to_value(self).unwrap_or_default())
     }
 }
 
@@ -332,7 +332,7 @@ mod tests {
     use super::*;
 
     // Каталог OpenStreetMap (data/osm_catalog.json; раньше проверялся тестом на Python, пакет D2). Его читают ядро
-    // и интерфейс, настройки синхронизируются через облако: ключи, названия, группы и условия должны быть корректны.
+    // и интерфейс, настройки хранятся в базе: ключи, названия, группы и условия должны быть корректны.
     #[test]
     fn osm_catalog_is_large_enough_and_groups_are_titled() {
         let items = osm_categories();

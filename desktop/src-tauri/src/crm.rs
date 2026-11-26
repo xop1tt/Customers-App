@@ -101,7 +101,7 @@ impl ExportLedger {
     }
 
     pub fn encoded(&self) -> String {
-        crate::cloud::types::canonical_json(&serde_json::to_value(self).unwrap_or_default())
+        crate::jsonfmt::canonical_json(&serde_json::to_value(self).unwrap_or_default())
     }
 
     /// Ключ kv для назначения. Адрес вебхука содержит секрет, поэтому в ключ идёт только хэш.
@@ -221,7 +221,7 @@ async fn perform(t: &dyn HttpTransport, req: HttpRequest) -> Result<HttpResponse
 fn post_json(url: String, body: &Value, headers: Vec<(String, String)>) -> HttpRequest {
     let mut h = vec![("Content-Type".to_string(), "application/json".to_string()), ("Accept".to_string(), "application/json".to_string())];
     h.extend(headers);
-    HttpRequest { method: "POST".into(), url, headers: h, body: Some(crate::cloud::types::canonical_json(body).into_bytes()), timeout: 30.0 }
+    HttpRequest { method: "POST".into(), url, headers: h, body: Some(crate::jsonfmt::canonical_json(body).into_bytes()), timeout: 30.0 }
 }
 
 fn id_string(v: &Value) -> Option<String> {
@@ -490,7 +490,7 @@ impl NotionDestination {
             method: method.into(),
             url: format!("{NOTION_API}{path}"),
             headers: h,
-            body: body.map(|b| crate::cloud::types::canonical_json(b).into_bytes()),
+            body: body.map(|b| crate::jsonfmt::canonical_json(b).into_bytes()),
             timeout: 30.0,
         }
     }
