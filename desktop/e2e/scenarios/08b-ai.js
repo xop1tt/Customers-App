@@ -28,7 +28,7 @@
     healthy("в чате Ai");
     await shot("ai-chat");
     // Чат остаётся открытым при смене вкладки.
-    click($$(".rail-btn").find((b) => (b.getAttribute("aria-label") || "").startsWith("Команда")));
+    click($$(".rail-btn").find((b) => (b.getAttribute("aria-label") || "").startsWith("CRM")));
     await sleep(300);
     check($("#ai-drawer"), "чат Ai закрылся при смене вкладки");
     const btn = $$("button").find((b) => norm(b.textContent) === "Открыть настройки Ai");
