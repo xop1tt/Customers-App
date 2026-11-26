@@ -3,7 +3,7 @@
   const { C, scenario, waitFor, $, check, eq, core, hasCore, dom, norm, skipIf } = E2E;
 
   scenario("boot", "Запуск: окно не пустое, ядро отвечает, версия и платформа верны", async () => {
-    await waitFor(() => $(".auth, .welcome, .shell"), "первый экран (вход, мастер или рабочее окно)", { timeout: 45000 });
+    await waitFor(() => $(".welcome, .shell"), "первый экран (мастер или рабочее окно)", { timeout: 45000 });
     check(($("#root") || {}).children && $("#root").children.length > 0, "корневой элемент пуст (белое окно)");
     check(!norm(dom()).includes("Не удалось запустить приложение"), `экран ошибки запуска: ${dom()}`);
     check(!norm(dom()).includes("Интерфейс не смог открыться"), `экран ошибки отрисовки: ${dom()}`);
@@ -14,8 +14,10 @@
     eq(b.error, null, "ошибка запуска ядра");
     check(/^\d+\.\d+\.\d+/.test(b.version), `версия ${b.version}`);
     if (C.platform) eq(b.platform, C.platform, "платформа");
-    eq(b.session, null, "до входа сессии быть не должно");
-    check(b.cloudAvailable, "облако проверки не подключено");
+    // Входа нет (ADR-100): локальная учётная запись открывается сразу.
+    check(b.session && /^local-/.test(b.session.id), `локальная сессия при первом запуске: ${JSON.stringify(b.session)}`);
+    check(!("cloudAvailable" in b), "в ответе ядра остались сведения об облаке");
+    check(!$(".auth"), "показан экран входа, хотя входа больше нет");
   }, { fatal: true });
 
   scenario("paths", "Папки данных: приложение пишет только в отведённую папку", async () => {

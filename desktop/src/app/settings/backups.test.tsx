@@ -6,7 +6,7 @@ import { getState, setState } from "../../state/store";
 import { DataSection } from "./DataSection";
 
 beforeEach(async () => {
-  setState({ session: { id: "c", displayName: "Алексей", avatar: null, cloudUser: null, databasePath: "" }, account: await api.accountPrefs() });
+  setState({ session: { id: "c", displayName: "Алексей", avatar: null, databasePath: "" }, account: await api.accountPrefs() });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); setState({ session: null, account: null }); });
 

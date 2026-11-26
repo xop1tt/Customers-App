@@ -46,10 +46,8 @@ describe("выдвижной чат Ai", () => {
     openAi();
     const drawer = await screen.findByRole("complementary", { name: "Чат Ai" });
     expect(within(rail()).getByRole("button", { name: "Ai" })).toHaveAttribute("aria-expanded", "true");
-    fireEvent.click(within(rail()).getByRole("button", { name: /^Команда/ }));
-    await waitFor(() => expect(getState().section).toBe("people"));
-    fireEvent.click(within(rail()).getByRole("button", { name: /^Чат/ }));
-    await waitFor(() => expect(getState().chatPopup).toBe(true));
+    fireEvent.click(within(rail()).getByRole("button", { name: /^Поиск клиентов/ }));
+    await waitFor(() => expect(getState().section).toBe("home"));
     expect(screen.getByRole("complementary", { name: "Чат Ai" })).toBe(drawer);
     fireEvent.click(within(drawer).getByRole("button", { name: "Закрыть чат" }));
     expect(screen.queryByRole("complementary", { name: "Чат Ai" })).toBeNull();

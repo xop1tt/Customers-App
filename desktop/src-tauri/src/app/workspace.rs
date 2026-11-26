@@ -353,8 +353,6 @@ impl Core {
                 "contacts" => out["dealLinks"] = by("deal_contacts", "contact_id")?,
                 _ => {}
             }
-            let conflicts: Vec<Value> = st.conflicts()?.into_iter().filter(|c| c["entityId"] == id).collect();
-            out["conflicts"] = json!(conflicts);
             Ok(out)
         })
     }

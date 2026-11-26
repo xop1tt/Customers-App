@@ -4,13 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import type { CrmRecord } from "../../api/types";
 import { byTable, can, cellText, columnLabel, STATUS_TONE } from "../../lib/crm";
-import { sameDepartment, teamOf } from "../../lib/departments";
 import { integer, plural } from "../../lib/format";
 import { Button, Checkbox, EmptyState, Segmented, Select, Spinner, Tag, TextInput } from "../../ui/kit";
 import { confirmDialog } from "../../ui/overlay";
 import { Icon } from "../../ui/icons";
 import { attempt, openRecord, setSection, toast, useStore } from "../../state/store";
-import { refreshTeam } from "../../state/team";
 import { CrmExportDialog } from "./CrmExport";
 import { ImportDialog } from "./ImportDialog";
 import { useLookup, useWsQuery } from "./useCrm";
@@ -31,15 +29,13 @@ export function CollectionPage() {
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   // Удобный фильтр «чьи записи» (не право доступа: видимость задают роли, ADR-077).
-  const [scope, setScope] = useState<"all" | "me" | "team" | "dept">("all");
-  const team = useStore((s) => s.team);
-  useEffect(() => { if (!team.length) void refreshTeam(); }, [team.length]);
+  const [scope, setScope] = useState<"all" | "me">("all");
   const lk = useLookup();
   const me = ws?.me ?? "";
   const [lastTable, setLastTable] = useState<string | null>(null);
   useEffect(() => { setScope("all"); setLastTable(null); }, [id]);
   const ownerField = byTable(lastTable ?? "")?.fields.find((f) => f.name === "owner_id" || f.name === "assignee_id")?.name ?? null;
-  const people = useMemo(() => (scope === "me" ? [me] : scope === "team" ? [me, ...teamOf(team, me)] : scope === "dept" ? [me, ...sameDepartment(team, me)] : null), [scope, team, me]);
+  const people = useMemo(() => (scope === "me" ? [me] : null), [scope, me]);
   const filters = useMemo(() => (people && ownerField ? [{ field: ownerField, op: "in", value: people }] : []), [people, ownerField]);
   const { data, error } = useWsQuery(() => (id ? api.wsCollectionItems(id, { search, limit: 2000, ...(filters.length ? { filters } : {}), ...(sort ? { sort: [sort] } : {}) }) : Promise.resolve(null)), [id, search, sort?.field, sort?.dir, filters]);
 
@@ -87,8 +83,8 @@ export function CollectionPage() {
     <div className="page crm-page">
       <div className="crm-bar">
         <TextInput value={search} onChange={setSearch} onClear={() => setSearch("")} icon="search" placeholder={`Поиск: ${e.many.toLowerCase()}`} wrapClass="crm-search" aria-label="Поиск в коллекции" />
-        {ownerField && team.length > 1 && (
-          <Segmented small value={scope} onChange={setScope} options={[{ value: "all", label: "Все" }, { value: "me", label: "Мои" }, { value: "team", label: "Моей команды" }, { value: "dept", label: "Моего отдела" }]} />
+        {ownerField && (ws?.members.length ?? 0) > 1 && (
+          <Segmented small value={scope} onChange={setScope} options={[{ value: "all", label: "Все" }, { value: "me", label: "Мои" }]} />
         )}
         <span className="grow" />
         {exportable && <Button icon="download" small disabled={data.total === 0} onClick={() => setExporting(true)}>Экспорт</Button>}
@@ -152,8 +148,6 @@ export function CollectionPage() {
       <div className="statusbar">
         <span className="num">{integer(data.total)} {plural(data.total, "запись", "записи", "записей")}</span>
         <span className="grow" />
-        {ws && ws.pending > 0 && <span className="faint">Ждут отправки: {integer(ws.pending)}</span>}
-        {ws && ws.conflicts > 0 && <span className="faint">Конфликтов: {integer(ws.conflicts)}</span>}
       </div>
     </div>
   );

@@ -1,16 +1,14 @@
 name: Cloud
 
-# Серверная часть (миграции Supabase, функции писем) и облачный модуль приложения проверяются
-# на одноразовом локальном стенде прямо в раннере: PostgreSQL, Supabase Auth и PostgREST в
-# Docker, функции в Deno, тестовый SMTP. Никакие облачные проекты и секреты не используются.
+# Серверная часть (миграции Supabase, функции писем) проверяется на одноразовом локальном стенде прямо
+# в раннере: PostgreSQL, Supabase Auth и PostgREST в Docker, функции в Deno, тестовый SMTP. Никакие облачные
+# проекты и секреты не используются. Приложение с сервером больше не работает (ADR-100): здесь только папка
+# supabase/, которую оставили до решения владельца о выключении сервера.
 on:
   push:
     branches: [main]
     paths:
       - "supabase/**"
-      - "desktop/src-tauri/src/cloud/**"
-      - "desktop/src-tauri/tests/stack.rs"
-      - "desktop/src-tauri/Cargo.*"
       - ".github/workflows/cloud.yml"
   pull_request:   # без фильтра путей: нужные файлы определяет задача changes
   workflow_dispatch:
@@ -42,7 +40,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ "$EVENT" != "pull_request" ]; then echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if git diff --name-only "$BASE" HEAD | grep -Eq '^(supabase/|desktop/src-tauri/src/cloud/|desktop/src-tauri/tests/stack\.rs$|desktop/src-tauri/Cargo\.|\.github/workflows/cloud\.yml$)'; then
+          if git diff --name-only "$BASE" HEAD | grep -Eq '^(supabase/|\.github/workflows/cloud\.yml$)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
@@ -52,8 +50,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-24.04
-    # Холодная сборка Rust-клиента занимает несколько минут; с кэшем Cargo всё укладывается в 10.
-    timeout-minutes: 25
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -91,29 +88,6 @@ jobs:
 
       - name: Server tests (auth, email limits, RLS, sync)
         run: python -m pytest supabase/tests -q -p no:cacheprovider
-
-      - name: Cache Cargo
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            desktop/src-tauri/target
-          key: cargo-cloud-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
-          restore-keys: cargo-cloud-
-
-      - name: Rust cloud client (unit + end-to-end on the stack)
-        working-directory: desktop
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
-          # Макросу Tauri нужна папка с интерфейсом; для тестов облака содержимое не важно.
-          mkdir -p dist && : > dist/index.html
-          source ../supabase/tests/stack/env.sh
-          LG_STACK_URL="$SUPABASE_URL" LG_STACK_ANON="$SUPABASE_ANON_KEY" LG_STACK_MAIL="$STACK_MAIL_DIR" \
-            cargo test --manifest-path src-tauri/Cargo.toml --test stack -- --nocapture
-          cargo test --manifest-path src-tauri/Cargo.toml --lib cloud::
 
       - name: Stack logs on failure
         if: failure()

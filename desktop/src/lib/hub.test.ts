@@ -51,8 +51,8 @@ describe("инструменты Ai", () => {
     expect(v("set_setting", { key: "uiScale", value: 5 })).toContain("Недопустимое");
     expect(v("set_setting", { key: "compactRows", value: "yes" })).toContain("Недопустимое");
     expect(v("search_leads", { limit: 500 })).toContain("целое число");
-    expect(v("open_connectors", { page: "moderation" })).toContain("одним из");
-    expect(v("open_connectors", { page: "review" })).toBeNull();
+    expect(v("search_leads", { only: "moderation" })).toContain("одним из");
+    expect(v("search_leads", { only: "new" })).toBeNull();
   });
   it("аргументы вызова читаются из строки JSON и отклоняют мусор", () => {
     expect(parseArgs('{"a":1}')).toEqual({ a: 1 });

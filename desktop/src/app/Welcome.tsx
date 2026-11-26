@@ -5,13 +5,13 @@ import { useState } from "react";
 import { api } from "../api";
 import { back, canGoBack, canSkip, finish, isLast, newFlow, next, position, progress, skip, stepOf, type WelcomeFlow } from "../lib/welcomeFlow";
 import { PIPELINE_TEMPLATES, planStages, type TemplateId } from "../lib/onboarding";
-import { Button, Field, Group, ProgressBar, Segmented, Select, Tag, TextArea, TextInput } from "../ui/kit";
+import { Button, Field, Group, ProgressBar, Select, Tag, TextArea, TextInput } from "../ui/kit";
 import { Icon } from "../ui/icons";
 import { attempt, getState, openSettings, patchAccount, refreshWorkspace, setSection, setState, toast, useStore } from "../state/store";
 import { MailPanel } from "./panels/MailPanel";
 import { CallApps } from "./settings/OutreachSection";
 import { ImportDialog } from "./crm/ImportDialog";
-import { Brand } from "./Auth";
+import { Brand } from "./Brand";
 
 export const CURRENCIES = [
   { value: "RUB", label: "₽ Российский рубль" },
@@ -45,7 +45,6 @@ export async function applyTemplate(id: TemplateId): Promise<string | null> {
 interface Setup {
   name: string;
   currency: string;
-  team: boolean;
   template: TemplateId;
   thenSearch: boolean;
   added: number;
@@ -63,7 +62,6 @@ export function Welcome() {
   const [setup, setSetup] = useState<Setup>(() => ({
     name: active && !PERSONAL.test(active.name) ? active.name : "",
     currency: active?.defaultCurrency || "RUB",
-    team: false,
     template: "services",
     thenSearch: false,
     added: 0,
@@ -82,8 +80,7 @@ export function Welcome() {
     if (step.id === "company") {
       const title = setup.name.trim();
       if (!title) return true;
-      const cloudTeam = setup.team && ws?.isCloud;
-      const r = await attempt(() => (cloudTeam ? api.wsCreateWorkspace(title) : active?.remote ? api.wsRenameWorkspace(title) : api.wsSetLocalDetails(title, setup.currency)));
+      const r = await attempt(() => api.wsSetLocalDetails(title, setup.currency));
       if (!r) return false;
       await refreshWorkspace();
     }
@@ -114,7 +111,7 @@ export function Welcome() {
         </header>
         <div className="welcome-body">
           {step.id === "intro" && <Intro />}
-          {step.id === "company" && <CompanyStep setup={setup} patch={patch} cloud={!!ws?.isCloud} />}
+          {step.id === "company" && <CompanyStep setup={setup} patch={patch} />}
           {step.id === "pipeline" && <PipelineStep value={setup.template} onChange={(template) => patch({ template })} />}
           {step.id === "clients" && <ClientsStep setup={setup} patch={patch} />}
           {step.id === "comms" && <CommsStep signature={setup.signature} onSignature={(signature) => patch({ signature })} />}
@@ -148,23 +145,12 @@ function Intro() {
   );
 }
 
-function CompanyStep({ setup, patch, cloud }: { setup: Setup; patch: (p: Partial<Setup>) => void; cloud: boolean }) {
-  // Валюта облачного рабочего пространства задаётся на сервере: мастер меняет её только у Workspace на этом устройстве.
-  const currencyHere = !(setup.team && cloud);
+function CompanyStep({ setup, patch }: { setup: Setup; patch: (p: Partial<Setup>) => void }) {
   return (
     <div className="col" style={{ gap: 14 }}>
       <Field label="Название"><TextInput value={setup.name} onChange={(name) => patch({ name })} placeholder="Например, Студия «Пиксель»" maxLength={120} autoFocus /></Field>
-      {currencyHere && <Field label="Основная валюта сделок"><Select value={setup.currency} options={CURRENCIES} onChange={(currency) => patch({ currency })} /></Field>}
-      <Field label="Как вы работаете">
-        <Segmented value={setup.team ? "team" : "solo"} onChange={(v) => patch({ team: v === "team" })} options={[{ value: "solo", label: "Один" }, { value: "team", label: "С командой" }]} />
-      </Field>
-      <p className="faint" style={{ margin: 0, fontSize: "var(--fs-sm)" }}>
-        {setup.team
-          ? cloud
-            ? "«С командой» создаёт облачное рабочее пространство; пригласить коллег можно позже в разделе «Команда»."
-            : "Работа командой — в облачной учётной записи. Пока всё будет на этом компьютере; облако можно подключить позже в настройках учётной записи."
-          : "Без облака всё работает на этом компьютере."}
-      </p>
+      <Field label="Основная валюта сделок"><Select value={setup.currency} options={CURRENCIES} onChange={(currency) => patch({ currency })} /></Field>
+      <p className="faint" style={{ margin: 0, fontSize: "var(--fs-sm)" }}>Всё хранится на этом компьютере, в зашифрованной базе.</p>
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import { can } from "../lib/crm";
-import { NotificationsPopover } from "./team/Notifications";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { count, type SectionId, SECTIONS } from "../lib/leads";
 import { useNewSince } from "../state/hooks";
 import { integer } from "../lib/format";
@@ -8,18 +7,14 @@ import { CONFIGURABLE, MAIN_GROUP, WORK_GROUP, move, ordered, toggled } from "..
 import { SOURCES } from "../lib/sources";
 import { MODULES, moduleOf } from "../lib/modules";
 import { Avatar, Button, IconButton } from "../ui/kit";
-import { api } from "../api";
 import { Icon } from "../ui/icons";
 import { type MenuItem, Popover, showMenu } from "../ui/overlay";
-import type { SyncStatus, UpdateInfo } from "../api/types";
-import { attempt, toast, leaveSession, openCollection, openProfile, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
+import type { UpdateInfo } from "../api/types";
+import { attempt, openCollection, openScore, openSettings, openSource, patchDevice, setSection, setState, useStore } from "../state/store";
+import { api } from "../api";
 import { CollectionsGroup } from "./crm/Collections";
 import { openLink } from "../state/actions";
 import { GroupTitle, useCollapsed } from "./SideGroup";
-import { pollChat, unreadNotifications } from "../state/team";
-import { isMuted, loadPrefs, setMute } from "../lib/notifyPrefs";
-import { isHidden } from "../lib/visibility";
-import { openMarket } from "../state/market";
 
 const SCORE_STEPS = [90, 70, 50, 30];
 
@@ -28,26 +23,6 @@ export function updateVisible(u: UpdateInfo | null): boolean {
   if (!u || u.phase === "upToDate") return false;
   if (u.phase === "ready" || u.phase === "installing") return true;
   return !!u.stagedVersion && u.phase !== "downloading";
-}
-
-/** Облачко рядом с именем: показывает, что сейчас с синхронизацией. */
-export function syncView(s: SyncStatus | null): { tone: "ok" | "sync" | "pending" | "offline" | "failed"; icon: string; label: string } | null {
-  if (!s?.enabled) return null;
-  if (s.kind === "syncing") return { tone: "sync", icon: "refresh", label: "Синхронизация…" };
-  if (s.kind === "offline") return { tone: "offline", icon: "cloudOff", label: "Потеряно соединение с облаком" };
-  if (s.kind === "failed") return { tone: "failed", icon: "cloudAlert", label: s.message ? `Не синхронизировано: ${s.message}` : "Не синхронизировано" };
-  if (s.pending > 0) return { tone: "pending", icon: "cloudAlert", label: "Не синхронизировано: изменения ждут отправки" };
-  return { tone: "ok", icon: "cloudCheck", label: "Синхронизировано" };
-}
-
-function SyncBadge({ sync }: { sync: SyncStatus | null }) {
-  const v = syncView(sync);
-  if (!v) return null;
-  return (
-    <span className={`sync-badge ${v.tone}`} role="img" aria-label={v.label} data-tip={v.label}>
-      <Icon name={v.icon} size={15} />
-    </span>
-  );
 }
 
 function NavItem({ id, active, badge, onClick }: { id: SectionId; active: boolean; badge?: number; onClick: () => void }) {
@@ -74,7 +49,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const sourcesShut = useCollapsed("sources");
   const scoresShut = useCollapsed("scores");
   const workShut = useCollapsed("work");
-  const teamShut = useCollapsed("team");
   const hasWs = useStore((s) => !!s.ws?.active);
   const perms = useStore((s) => s.ws?.permissions);
   const wsOpen = useStore((s) => s.workspaceOpen);
@@ -86,7 +60,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   const customize = customizeFlag && canCustomize;
   const showSearch = mod === "search";
   const showCrm = mod === "crm";
-  const showTeam = !customize && mod === "team";
 
   const countOf = (id: SectionId) => (device.sidebarCounts && id !== "home" && id !== "sources" && id !== "runs" ? count(leads, id, true, since) : undefined);
   const visible = (id: string) => customize || !device.sidebarHidden.includes(id);
@@ -205,21 +178,6 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
           </div>
         )}
 
-        {showTeam && (
-          <div className="nav-group">
-            {mod === "team" && <GroupTitle id="team" title="Команда" />}
-            {(["people", "structure"] as ("people" | "structure")[]).filter((id) => !teamShut || section === id || (id === "people" && section === "profile")).map((id) => {
-              const active = section === id || (id === "people" && section === "profile");
-              return (
-                <button key={id} type="button" className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => setSection(id)}>
-                  <Icon name={SECTIONS[id].icon} size={16} />
-                  <span className="ellipsis grow">{SECTIONS[id].title}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
         {showSearch && (
           <div className="nav-group">
             <GroupTitle id="work" title="Работа" />
@@ -250,48 +208,12 @@ export function Sidebar({ overlay }: { overlay?: boolean }) {
   );
 }
 
-/** Учётная запись внизу левой панели: кнопка «Обновить», аватар с меню, уведомления (колокольчик) и справка. Показывается и в чате, где панели разделов нет. */
+/** Учётная запись внизу левой панели: кнопка «Обновить», аватар с меню и справка. */
 export function AccountBar({ withUpdate = true }: { withUpdate?: boolean } = {}) {
   const session = useStore((s) => s.session);
-  const sync = useStore((s) => s.sync);
   const update = useStore((s) => s.update);
-  const chat = useStore((s) => s.chat);
-  const incoming = useStore((s) => s.incoming.length);
   const accountBtn = useRef<HTMLButtonElement>(null);
   const [accountRect, setAccountRect] = useState<DOMRect | null>(null);
-  const bellOpen = useStore((s) => s.bellOpen);
-  const [bellRect, setBellRect] = useState<DOMRect | null>(null);
-  const bellWrap = useRef<HTMLSpanElement>(null);
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const bump = () => setTick((n) => n + 1);
-    window.addEventListener("customers:notify-prefs", bump);
-    const t = setInterval(() => { if (!isHidden()) bump(); }, 30_000);
-    return () => { window.removeEventListener("customers:notify-prefs", bump); clearInterval(t); };
-  }, []);
-  const muted = isMuted(loadPrefs());
-  const notes = muted ? 0 : unreadNotifications(chat);
-  const bellMenu = (rect: DOMRect): MenuItem[] => {
-    const unread = unreadNotifications(chat);
-    const mute = (h?: number) => () => { setMute(h); toast("Уведомления отключены."); };
-    const durations = (): MenuItem[] => [
-      { label: "Назад", icon: "chevronLeft", onSelect: () => setTimeout(() => showMenu(bellMenu(rect), rect, "top-start"), 0) },
-      { separator: true },
-      { label: "1 час", onSelect: mute(1) },
-      { label: "2 часа", onSelect: mute(2) },
-      { label: "12 часов", onSelect: mute(12) },
-      { label: "24 часа", onSelect: mute(24) },
-      { label: "Пока не включу", onSelect: mute() },
-    ];
-    return [
-      { label: "Прочитать все", icon: "check", disabled: unread === 0, onSelect: () => void attempt(() => api.wsChat("notifications_mark_read", { ids: null })).then(() => pollChat()) },
-      { label: "Настройки уведомлений", icon: "settings", onSelect: () => openSettings("notifications") },
-      { separator: true },
-      muted
-        ? { label: "Включить уведомления", icon: "bell", onSelect: () => { setMute(0); toast("Уведомления включены."); } }
-        : { label: "Отключить уведомления", icon: "bellOff", hint: "›", onSelect: () => setTimeout(() => showMenu(durations(), rect, "top-start"), 0) },
-    ];
-  };
   const helpItems = (): MenuItem[] => [
     { label: "Что нового", icon: "sparkles", onSelect: () => setState({ whatsNewOpen: true }) },
     { label: "Страница релизов", icon: "external", onSelect: () => void openLink(update?.releasesPage ?? "https://github.com/xop1tt/Customers-App/releases") },
@@ -301,35 +223,22 @@ export function AccountBar({ withUpdate = true }: { withUpdate?: boolean } = {})
     <>
       {withUpdate && updateVisible(update) && <UpdateButton />}
         <div className="row side-account-row">
-          <button ref={accountBtn} type="button" className="account-btn" onClick={() => setAccountRect(accountBtn.current?.getBoundingClientRect() ?? null)} aria-haspopup="menu" aria-label={incoming > 0 ? `Учётная запись, приглашений: ${incoming}` : "Учётная запись"}>
+          <button ref={accountBtn} type="button" className="account-btn" onClick={() => setAccountRect(accountBtn.current?.getBoundingClientRect() ?? null)} aria-haspopup="menu" aria-label="Учётная запись">
             <span className="avatar-wrap">
               <Avatar name={session?.displayName ?? "?"} src={session?.avatar} size={28} />
-              {incoming > 0 && <span className="red-badge" aria-label={`Приглашений: ${incoming}`}>{incoming}</span>}
             </span>
             <span className="side-name-row grow">
               <span className="ellipsis side-name">{session?.displayName}</span>
-              {sync?.enabled && <SyncBadge sync={sync} />}
             </span>
           </button>
-          {(sync?.enabled || chat?.available) && (
-          <span className="avatar-wrap" ref={bellWrap}>
-            <IconButton icon={muted ? "bellOff" : "bell"} tip={muted ? "Уведомления отключены" : "Уведомления"} aria-label={notes > 0 ? `Уведомления, новых: ${notes}` : muted ? "Уведомления отключены" : "Уведомления"} onClick={(e: React.MouseEvent<HTMLElement>) => { setState({ bellOpen: !bellOpen }); setBellRect(e.currentTarget.getBoundingClientRect()); }}
-              onContextMenu={(e: React.MouseEvent<HTMLElement>) => { e.preventDefault(); showMenu(bellMenu(e.currentTarget.getBoundingClientRect()), e.currentTarget.getBoundingClientRect(), "top-start"); }} />
-            {notes > 0 && <span className="red-badge" aria-hidden="true">{notes > 99 ? "99+" : integer(notes)}</span>}
-          </span>
-          )}
           <IconButton icon="help" tip="Справка" onClick={(e) => showMenu(helpItems(), e.currentTarget.getBoundingClientRect(), "top-start")} />
         </div>
-      {bellOpen && bellRect && <NotificationsPopover anchor={bellRect} ignore={bellWrap.current} />}
       {accountRect && (
         <Popover anchor={accountRect} onClose={() => setAccountRect(null)} ignore={accountBtn.current} minWidth={Math.max(accountRect.width, 220)} className="popover-menu" placement="top-start">
           <ul className="menu">
-            <li><button className="menu-item" onClick={() => { setAccountRect(null); openProfile(null); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Профиль</button></li>
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("account"); }}><span className="menu-icon"><Icon name="user" size={14} /></span>Профиль</button></li>
             <li><button className="menu-item" onClick={() => { setAccountRect(null); openSettings("appearance"); }}><span className="menu-icon"><Icon name="settings" size={14} /></span>Настройки</button></li>
-            <li><button className="menu-item" onClick={() => { setAccountRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство{incoming > 0 && <span className="red-badge menu-badge" aria-label={`Приглашений: ${incoming}`}>{incoming}</span>}</button></li>
-            <li><button className="menu-item" onClick={() => { setAccountRect(null); openMarket(); }}><span className="menu-icon"><Icon name="store" size={14} /></span>Коннекторы</button></li>
-            <li className="menu-sep" />
-            <li><button className="menu-item danger" onClick={() => { setAccountRect(null); void leaveSession(); }}><span className="menu-icon"><Icon name="logout" size={14} /></span>Выйти</button></li>
+            <li><button className="menu-item" onClick={() => { setAccountRect(null); setState({ workspaceOpen: true }); }}><span className="menu-icon"><Icon name="users" size={14} /></span>Рабочее пространство</button></li>
           </ul>
         </Popover>
       )}

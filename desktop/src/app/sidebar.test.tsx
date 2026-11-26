@@ -1,17 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { SyncStatus, UpdateInfo } from "../api/types";
+import { afterEach, describe, expect, it } from "vitest";
+import type { UpdateInfo } from "../api/types";
 import { getState, setState } from "../state/store";
 import { App } from "./App";
 import { subsectionsOf } from "./settings/subsections";
-import { syncView, updateVisible } from "./Sidebar";
+import { updateVisible } from "./Sidebar";
 
 afterEach(cleanup);
 
 const update = (over: Partial<UpdateInfo>): UpdateInfo => ({
   phase: "idle", current: "1.2.2", canUpdate: true, available: null, stagedVersion: null, lastCheck: null, releasesPage: "https://example.org", ...over,
 });
-const sync = (over: Partial<SyncStatus>): SyncStatus => ({ enabled: true, kind: "idle", message: null, lastSync: null, pending: 0, ...over });
 
 describe("кнопка «Обновить»", () => {
   it("видна, только когда обновление уже загружено", () => {
@@ -38,38 +37,25 @@ describe("кнопка «Обновить»", () => {
   });
 });
 
-describe("облачко синхронизации", () => {
-  it("показывает четыре состояния", () => {
-    expect(syncView(null)).toBeNull();
-    expect(syncView(sync({ enabled: false }))).toBeNull();
-    expect(syncView(sync({ kind: "syncing" }))?.tone).toBe("sync");
-    expect(syncView(sync({}))).toMatchObject({ tone: "ok", label: "Синхронизировано" });
-    expect(syncView(sync({ pending: 3 }))).toMatchObject({ tone: "pending" });
-    expect(syncView(sync({ kind: "failed", message: "ошибка" }))?.label).toContain("Не синхронизировано");
-    expect(syncView(sync({ kind: "offline" }))).toMatchObject({ tone: "offline", label: "Потеряно соединение с облаком" });
-  });
-
-  it("стоит справа от имени, подписи «Облачный аккаунт» нет, «?» в одной строке с профилем", async () => {
+describe("учётная запись в левой панели", () => {
+  it("имя без значка синхронизации и подписи об облаке, «?» в одной строке с профилем", async () => {
     render(<App />);
     const nav = await screen.findByLabelText("Навигация");
-    setState({ session: { id: "c", displayName: "Алексей", avatar: null, cloudUser: null, databasePath: "" }, sync: sync({ kind: "offline" }) });
+    setState({ session: { id: "local-1", displayName: "Алексей", avatar: null, databasePath: "" } });
     const account = await within(nav).findByLabelText("Учётная запись");
     expect(within(account).getByText("Алексей")).toBeInTheDocument();
-    expect(within(account).getByRole("img", { name: "Потеряно соединение с облаком" })).toBeInTheDocument();
+    expect(account.querySelector(".sync-badge")).toBeNull();
     expect(within(nav).queryByText("Облачный аккаунт")).toBeNull();
     expect(account.parentElement).toContainElement(within(nav).getByLabelText("Справка"));
-    setState({ sync: sync({ kind: "syncing" }) });
-    expect(await within(account).findByRole("img", { name: "Синхронизация…" })).toBeInTheDocument();
   });
 });
 
 describe("подразделы настроек", () => {
   it("у страниц с несколькими группами есть подразделы, остальные не раскрываются", () => {
-    expect(subsectionsOf("appearance", false).map((s) => s.id)).toEqual(["look", "sidebar"]);
-    expect(subsectionsOf("account", false).map((s) => s.id)).toEqual(["profile", "security"]);
-    expect(subsectionsOf("account", true).map((s) => s.id)).toEqual(["profile", "security"]);
-    expect(subsectionsOf("exclusions", true)).toEqual([]);
-    expect(subsectionsOf("notifications", true)).toEqual([]);
+    expect(subsectionsOf("appearance").map((s) => s.id)).toEqual(["look", "sidebar"]);
+    expect(subsectionsOf("account")).toEqual([]);
+    expect(subsectionsOf("exclusions")).toEqual([]);
+    expect(subsectionsOf("notifications")).toEqual([]);
   });
 
   it("выбранная страница раскрывается, показывается только её подраздел", async () => {
@@ -86,20 +72,6 @@ describe("подразделы настроек", () => {
     fireEvent.click(within(subs).getByRole("button", { name: "Боковая панель" }));
     expect(await within(dialog).findByText("Числа у разделов")).toBeInTheDocument();
     expect(within(dialog).queryByText("Акцентный цвет")).toBeNull();
-  });
-});
-
-describe("экран входа", () => {
-  beforeEach(() => { window.history.pushState({}, "", "/?auth&cloud"); });
-  it("на экране входа нет выбора «на этом компьютере»: вход только в облако", async () => {
-    const { AuthScreen } = await import("./Auth");
-    const { setState: set } = await import("../state/store");
-    set({ phase: "auth", boot: { version: "1", platform: "macos", cloudAvailable: true, hasUsers: true, existingInstall: false, session: null, device: { rememberedUser: null } } as never });
-    const { container } = render(<AuthScreen />);
-    expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByText("На этом компьютере")).toBeNull();
-    expect(container.querySelector("img.brand")).not.toBeNull();
-    expect(container.querySelector(".brand svg")).toBeNull();
   });
 });
 
@@ -126,7 +98,7 @@ describe("сворачиваемые группы и меню учётной з�
     expect(await within(nav).findByText("Оценка 90+")).toBeInTheDocument();
   });
 
-  it("меню: Профиль, Настройки, Рабочее пространство — без «Аккаунт и синхронизация» и «Данные и копии»", async () => {
+  it("меню: Профиль, Настройки, Рабочее пространство — без «Выйти», «Коннекторы» и «Данные и копии»", async () => {
     render(<App />);
     await screen.findByLabelText("Навигация");
     fireEvent.click(screen.getByLabelText("Учётная запись"));
@@ -134,9 +106,9 @@ describe("сворачиваемые группы и меню учётной з�
     expect(items.slice(0, 3)).toEqual(["Профиль", "Настройки", "Рабочее пространство"]);
     expect(items).not.toContain("Аккаунт и синхронизация");
     expect(items).not.toContain("Данные и копии");
+    expect(items).not.toContain("Выйти");
+    expect(items).not.toContain("Коннекторы");
     fireEvent.click(screen.getByText("Профиль", { selector: ".menu-item" }));
-    expect(await screen.findByRole("button", { name: "Изменить профиль" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Изменить профиль" }));
     const dialog = await screen.findByRole("dialog", { name: "Настройки" });
     expect(within(dialog).getAllByText("Профиль").length).toBeGreaterThan(0);
   });

@@ -31,27 +31,16 @@ describe("рейка модулей", () => {
     await waitFor(() => expect(getState().section).toBe("all"));
     fireEvent.click(mod(/^CRM/));
     await waitFor(() => expect(getState().section).toBe("deals"));
-    fireEvent.click(mod(/^Команда/));
-    await waitFor(() => expect(getState().section).toBe("people"));
-    // «Чат» — не модуль, а кнопка у низа рейки над «Ai»: всплывающее окно, повторный клик сворачивает.
-    const chat = mod(/^Чат/);
-    expect(getState().section).toBe("people");
-    fireEvent.click(chat);
-    expect(await screen.findByRole("dialog", { name: "Чат" })).toBeInTheDocument();
-    expect(getState().section).toBe("people");
-    expect(chat).toHaveAttribute("aria-expanded", "true");
-    fireEvent.click(chat);
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Чат" })).toBeNull());
-    expect(chat).toHaveAttribute("aria-expanded", "false");
+    // Модулей «Команда» и «Чат» больше нет (ADR-100): только CRM и поиск.
+    expect(within(rail()).queryByRole("button", { name: /^Команда/ })).toBeNull();
+    expect(within(rail()).queryByRole("button", { name: /^Чат/ })).toBeNull();
   });
 
-  it("кнопка «Чат» стоит в рейке внизу, прямо над «Ai»", async () => {
+  it("в рейке только CRM, поиск и Ai", async () => {
     render(<App />);
     await screen.findByLabelText("Навигация");
-    const names = within(rail()).getAllByRole("button").map((b) => b.getAttribute("aria-label"));
-    const chat = names.findIndex((n) => /^Чат/.test(n ?? ""));
-    expect(chat).toBeGreaterThan(names.findIndex((n) => /^Команда/.test(n ?? "")));
-    expect(names[chat + 1]).toBe("Ai");
+    const names = within(rail()).getAllByRole("button").map((b) => b.getAttribute("aria-label")?.replace(/,.*$/, ""));
+    expect(names).toEqual(["CRM", "Поиск клиентов", "Ai"]);
   });
 
   it("в рейке нет «Настроек»: внизу кнопка «Ai», а настройки открываются из меню аккаунта", async () => {
@@ -87,11 +76,6 @@ describe("панель разделов", () => {
     expect(within(nav).queryByText("Все лиды")).toBeNull();
     expect(within(nav).queryByText("Избранное")).toBeNull();
     fireEvent.click(within(nav).getByRole("button", { name: "Готово" }));
-
-    // У «Сообщений» и «Команды» настраивать нечего: кнопки нет.
-    fireEvent.click(mod(/^Команда/));
-    await waitFor(() => expect(getState().section).toBe("people"));
-    expect(within(nav).queryByRole("button", { name: "Настроить панель" })).toBeNull();
   });
 
   it("левая панель сворачивается растяжением и выдвигается обратно; кнопок сворачивания нет", async () => {

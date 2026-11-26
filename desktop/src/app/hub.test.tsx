@@ -17,17 +17,7 @@ async function ready() {
   await screen.findByLabelText("Навигация");
 }
 
-describe("коннекторы: встроенных нет", () => {
-  it("каталог без облака пуст и предлагает войти; Slack, Telegram и прочие из приложения убраны", async () => {
-    await ready();
-    act(() => setState({ market: "catalog" }));
-    const dlg = await screen.findByRole("dialog", { name: "Коннекторы" });
-    expect(within(dlg).getByText("Коннекторы доступны в облачной учётной записи")).toBeInTheDocument();
-    for (const name of ["Slack", "Telegram", "Discord", "Microsoft Teams", "Notion", "Битрикс24"]) expect(within(dlg).queryByText(name)).toBeNull();
-    expect(within(dlg).queryByRole("list", { name: "Встроенные интеграции" })).toBeNull();
-    expect(within(dlg).getByRole("button", { name: "На проверке" })).toBeInTheDocument();
-  });
-
+describe("встроенных интеграций мессенджеров нет", () => {
   it("старые настройки мессенджеров стираются при первом сохранении настроек Ai", async () => {
     hubDemo.blob = { integrations: { slack: { enabled: true, webhook: SLACK, events: [] } } };
     await loadHub();

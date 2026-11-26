@@ -11,7 +11,6 @@ import { Icon } from "../ui/icons";
 import { ConfirmHost, MenuHost, TooltipHost, installInputContextMenu } from "../ui/overlay";
 import { IconButton, Spinner } from "../ui/kit";
 import { boot, checkPower, dismissToast, getState, openSettings, patchDevice, select, setState, useStore } from "../state/store";
-import { AuthScreen } from "./Auth";
 import { Welcome } from "./Welcome";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -19,7 +18,6 @@ import { Inspector } from "./Inspector";
 import { HomePage } from "./pages/Home";
 import { LeadsPage } from "./pages/LeadsPage";
 import { RunsPage } from "./pages/RunsPage";
-import { useMarketInstalled } from "../state/market";
 import { useHubSync } from "../state/hub";
 import { AiDrawer } from "./AiDrawer";
 import { CrashPrompt, StartupError, WhatsNewDialog } from "./Prompts";
@@ -29,11 +27,6 @@ import { ModuleRail, RAIL_W } from "./ModuleRail";
 import { TodayPage } from "./crm/TodayPage";
 import { CrmCard } from "./crm/CrmCard";
 import { CollectionDialog } from "./crm/Collections";
-import { ProfilePage } from "./team/ProfilePage";
-import { ChatWindow } from "./team/ChatWindow";
-import { useChatPolling } from "../state/team";
-import { useConnectionWatch } from "../state/connection";
-import { ReconnectToast } from "./Reconnect";
 
 
 /** Редкие экраны и окна загружаются при первом открытии: запуск разбирает меньше кода, окно появляется быстрее. */
@@ -41,7 +34,6 @@ function later<K extends string, M extends Record<K, React.ComponentType<any>>>(
   return lazy(() => load().then((m) => ({ default: m[name] })));
 }
 const Settings = later(() => import("./settings/Settings"), "Settings");
-const Marketplace = later(() => import("./market/Marketplace"), "Marketplace");
 const ReportDialog = later(() => import("./settings/SystemSections"), "ReportDialog");
 const ExportDialog = later(() => import("./ExportDialog"), "ExportDialog");
 const CalendarPage = later(() => import("./crm/CalendarPage"), "CalendarPage");
@@ -50,8 +42,6 @@ const ReportsPage = later(() => import("./crm/ReportsPage"), "ReportsPage");
 const WorkspaceDialog = later(() => import("./crm/WorkspaceDialog"), "WorkspaceDialog");
 const JournalPage = later(() => import("./crm/JournalPage"), "JournalPage");
 const TrashPage = later(() => import("./crm/TrashPage"), "TrashPage");
-const PeoplePage = later(() => import("./team/PeoplePage"), "PeoplePage");
-const OrgChartPage = later(() => import("./team/OrgChart"), "OrgChartPage");
 
 const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const MIN_CENTER = 560;
@@ -62,7 +52,6 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), h
 export function App() {
   const phase = useStore((s) => s.phase);
   const settingsOpen = useStore((s) => s.settings !== null);
-  const marketOpen = useStore((s) => s.market !== null);
   const device = useStore((s) => s.device);
   const lightMode = useStore((s) => s.lightMode);
   const platform = useStore((s) => s.boot?.platform);
@@ -133,18 +122,14 @@ export function App() {
     <>
       {phase === "loading" && <div className="boot"><Spinner size={22} /></div>}
       {phase === "error" && <StartupError />}
-      {phase === "auth" && <AuthScreen />}
       {phase === "welcome" && <Welcome />}
       {phase === "ready" && <Shell />}
       {settingsOpen && <Suspense fallback={null}><Settings /></Suspense>}
-      {marketOpen && <Suspense fallback={null}><Marketplace /></Suspense>}
       {phase === "ready" && <QuickSearch />}
       <MenuHost />
       <ConfirmHost />
       <TooltipHost />
       <Toasts />
-      {phase === "ready" && <ChatWindow />}
-      <ReconnectToast />
     </>
   );
 }
@@ -236,10 +221,6 @@ function Shell() {
   const peek = useStore((st) => st.navPeek);
   const crmRecord = useStore((st) => st.record);
   const collectionId = useStore((st) => st.collectionId);
-  const profileId = useStore((st) => st.profileId);
-  useChatPolling();
-  useConnectionWatch();
-  useMarketInstalled();
   useHubSync();
   const collectionKey = useStore((st) => (st.collectionEdit ? st.collectionEdit.id ?? "new" : "closed"));
   const crm = section === "collection" || section === "today" || section === "calendar" || section === "deals" || section === "reports" || section === "trash" || section === "journal";
@@ -288,7 +269,7 @@ function Shell() {
       )}
       <main className="center">
         <TopBar />
-        <div className="page-host" key={section === "collection" ? `collection:${collectionId}` : section === "profile" ? `profile:${profileId ?? "me"}` : section}>
+        <div className="page-host" key={section === "collection" ? `collection:${collectionId}` : section}>
           {section === "home" && <HomePage />}
           {lead && <LeadsPage />}
           {section === "runs" && <RunsPage />}
@@ -300,10 +281,7 @@ function Shell() {
             {section === "reports" && <ReportsPage />}
             {section === "trash" && <TrashPage />}
             {section === "journal" && <JournalPage />}
-            {section === "people" && <PeoplePage />}
-            {section === "structure" && <OrgChartPage />}
           </Suspense>
-          {section === "profile" && <ProfilePage />}
         </div>
       </main>
       {showInsp && floatInsp && (

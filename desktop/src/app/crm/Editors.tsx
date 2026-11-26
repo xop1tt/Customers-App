@@ -1,10 +1,10 @@
-// Редакторы воронок и ролей рабочего пространства. Воронки — обычные записи CRM (синхронизируются как остальные), роли — серверные (облако).
+// Редактор воронок рабочего пространства: воронки и этапы — обычные записи CRM в локальной базе.
 
 import { useState } from "react";
 import { api } from "../../api";
-import type { CrmRecord, RecordScope, WsRole } from "../../api/types";
-import { Button, Checkbox, Group, IconButton, Notice, NumberInput, Select, SettingRow, Tag, TextInput } from "../../ui/kit";
-import { Dialog, confirmDialog } from "../../ui/overlay";
+import type { CrmRecord } from "../../api/types";
+import { Button, Group, IconButton, Notice, NumberInput, Select, SettingRow, TextInput } from "../../ui/kit";
+import { Dialog } from "../../ui/overlay";
 import { attempt, refreshWorkspace, useStore } from "../../state/store";
 import { useWsQuery } from "./useCrm";
 
@@ -109,94 +109,3 @@ function RemoveStage({ stage, others, onClose, onDone }: { stage: CrmRecord; oth
     </Dialog>
   );
 }
-
-/** Видимость записей роли (ADR-096). */
-const SCOPES: { value: RecordScope; label: string }[] = [
-  { value: "all", label: "Все записи" },
-  { value: "department", label: "Свой отдел и подотделы" },
-  { value: "own", label: "Только свои" },
-];
-
-/** Роли рабочего пространства: системные неизменны, свои создаются из разрешений, которые есть у вас, с рангом ниже вашего. */
-export function RolesEditor({ onClose }: { onClose: () => void }) {
-  const ws = useStore((s) => s.ws)!;
-  const myRank = ws.workspaces.find((w) => w.id === ws.active)?.rank ?? 0;
-  const can = ws.permissions.includes("roles.manage");
-  const { data, error } = useWsQuery(() => api.wsRoles(), []);
-  const [edit, setEdit] = useState<(WsRole & { isNew?: boolean }) | null>(null);
-  const [saved, setSaved] = useState(0);
-  const roles = data?.roles ?? [];
-  const catalog = data?.catalog ?? [];
-  const reload = async () => { setSaved((n) => n + 1); await refreshWorkspace(); };
-  const myRole = ws.workspaces.find((w) => w.id === ws.active)?.role;
-  const [scopes, setScopes] = useState<Record<string, RecordScope>>({});
-
-  return (
-    <Dialog title="Роли" onClose={onClose} width={640}>
-      {error && <Notice tone="error">{error}</Notice>}
-      {!can && <Notice tone="warn">Менять роли может участник с правом «Создавать и менять свои роли».</Notice>}
-      <Group title="Роли рабочего пространства" key={saved} action={can ? <Button small icon="plus" onClick={() => setEdit({ key: "", name: "", rank: Math.max(0, myRank - 10), system: false, permissions: ["records.view"], isNew: true })}>Новая роль</Button> : undefined}>
-        <ul className="ws-member-list">
-          {roles.map((r) => (
-            <li key={r.key} className="ws-member">
-              <span className="col grow" style={{ gap: 0, minWidth: 0 }}>
-                <span className="ellipsis">{r.name} {r.system && <Tag>системная</Tag>}</span>
-                <span className="faint" style={{ fontSize: "var(--fs-sm)" }}>ранг {r.rank} · разрешений: {r.permissions.length}</span>
-              </span>
-              {r.rank >= 100 ? <span className="faint">видит все записи</span> : (
-                <Select small value={scopes[r.key] ?? r.scope ?? "all"} options={SCOPES} label={`Какие записи видит роль «${r.name}»`}
-                  disabled={!can || r.rank >= myRank || (myRank < 100 && r.key === myRole)}
-                  onChange={async (v) => { if (await attempt(() => api.wsSetRoleScope(r.key, v))) setScopes((cur) => ({ ...cur, [r.key]: v })); }} />
-              )}
-              {can && !r.system && r.rank < myRank && (
-                <>
-                  <IconButton icon="edit" tip="Изменить" onClick={() => setEdit(r)} />
-                  <IconButton icon="trash" tip="Удалить" onClick={async () => {
-                    if (await confirmDialog({ title: `Удалить роль «${r.name}»?`, message: "Удалить можно роль, которой не пользуются участники и приглашения.", confirm: "Удалить", danger: true })) {
-                      await attempt(() => api.wsDeleteRole(r.key));
-                      await reload();
-                    }
-                  }} />
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Group>
-      {edit && <RoleForm role={edit} catalog={catalog} mine={ws.permissions} maxRank={myRank - 1} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); void reload(); }} />}
-    </Dialog>
-  );
-}
-
-function RoleForm({ role, catalog, mine, maxRank, onClose, onSaved }: { role: WsRole & { isNew?: boolean }; catalog: { key: string; description: string }[]; mine: string[]; maxRank: number; onClose: () => void; onSaved: () => void }) {
-  const [key, setKey] = useState(role.key);
-  const [name, setName] = useState(role.name);
-  const [rank, setRank] = useState(role.rank);
-  const [perms, setPerms] = useState(new Set(role.permissions));
-  const keyOk = /^[a-z][a-z0-9_]{0,40}$/.test(key) && !["owner", "admin", "manager", "employee", "viewer"].includes(key);
-  return (
-    <Dialog title={role.isNew ? "Новая роль" : `Роль «${role.name}»`} onClose={onClose} width={520}
-      footer={<><Button variant="ghost" onClick={onClose}>Отмена</Button>
-        <Button variant="primary" disabled={!name.trim() || !keyOk} onClick={async () => { if (await attempt(() => api.wsSaveRole(key, name, rank, [...perms]))) onSaved(); }}>Сохранить</Button></>}>
-      <SettingRow title="Название"><TextInput value={name} onChange={(v) => { setName(v); if (role.isNew && !role.key) setKey(slug(v)); }} maxLength={60} aria-label="Название роли" /></SettingRow>
-      <SettingRow title="Ключ" hint="Латиница, цифры и «_»; после создания не меняется.">
-        <TextInput value={key} onChange={setKey} maxLength={41} disabled={!role.isNew} aria-label="Ключ роли" />
-      </SettingRow>
-      <SettingRow title="Ранг" hint={`Выше ранг — больше власти над участниками. Не выше ${maxRank}.`}><NumberInput value={rank} min={0} max={Math.max(0, maxRank)} onChange={setRank} /></SettingRow>
-      <Group title="Разрешения" note="Выдать можно только то, что есть у вас.">
-        <div className="col" style={{ gap: 6 }}>
-          {catalog.map((p) => (
-            <Checkbox key={p.key} checked={perms.has(p.key)} disabled={!mine.includes(p.key)} label={p.description}
-              onChange={(on) => setPerms((cur) => { const n = new Set(cur); if (on) n.add(p.key); else n.delete(p.key); return n; })} />
-          ))}
-        </div>
-      </Group>
-    </Dialog>
-  );
-}
-
-const slug = (s: string) => {
-  const map: Record<string, string> = { а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ы: "y", э: "e", ю: "yu", я: "ya" };
-  const t = [...s.toLowerCase()].map((c) => map[c] ?? c).join("").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  return /^[a-z]/.test(t) ? t.slice(0, 40) : t ? `r_${t}`.slice(0, 40) : "";
-};

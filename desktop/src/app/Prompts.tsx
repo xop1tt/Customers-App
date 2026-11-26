@@ -8,7 +8,7 @@ import { Dialog } from "../ui/overlay";
 import { attempt, boot, patchDevice, setState, useStore } from "../state/store";
 import { openLink } from "../state/actions";
 import { ReportDialog } from "./settings/SystemSections";
-import { Brand } from "./Auth";
+import { Brand } from "./Brand";
 
 /** «Что нового»: при первом запуске новой версии и по запросу из меню справки. */
 export function WhatsNewDialog() {

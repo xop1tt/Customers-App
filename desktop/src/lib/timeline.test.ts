@@ -13,13 +13,11 @@ describe("лента клиента", () => {
     activities: [rec("a1", "2026-11-02T00:00:00Z", { type: "call", summary: "Первый звонок", occurred_at: "2026-11-06T09:00:00Z" })],
     tasks: [rec("t1", "2026-11-02T12:00:00Z", { title: "Отправить КП", status: "done", completed_at: "2026-11-07T08:00:00Z" })],
     deals: [rec("d1", "2026-11-02T15:00:00Z", { title: "Сайт" })],
-    conflicts: [],
   };
   const deal: WsCard = {
     record: rec("d1", "2026-11-02T15:00:00Z", { title: "Сайт" }),
     notes: [rec("n3", "2026-11-08T10:00:00Z", { body: "Согласовали смету" })],
     history: [{ from_stage_id: "s1", to_stage_id: "s2", changed_by: "u2", changed_at: "2026-11-09T10:00:00Z" }],
-    conflicts: [],
   };
 
   it("собирает всё в одну ленту, новые сверху, с подписью источника", () => {
@@ -41,7 +39,7 @@ describe("лента клиента", () => {
   });
 
   it("берёт в ленту компании живые сделки и контакты, не больше предела", () => {
-    const card: WsCard = { record: rec("c", "2026-11-01T00:00:00Z"), conflicts: [],
+    const card: WsCard = { record: rec("c", "2026-11-01T00:00:00Z"),
       deals: [rec("d1", "2026-11-01T00:00:00Z"), rec("d2", "2026-11-05T00:00:00Z"), rec("d3", "2026-11-06T00:00:00Z", { deleted_at: "x" })],
       contacts: [rec("p1", "2026-11-02T00:00:00Z")] };
     expect(relatedForTimeline(card).map((x) => x.rec.id)).toEqual(["d2", "d1", "p1"]);

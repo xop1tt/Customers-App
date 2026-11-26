@@ -8,8 +8,8 @@ Maksim (не программист); код пишет Claude Code. Отвеч�
 | Путь | Что |
 |---|---|
 | `desktop/src` | интерфейс: React + TypeScript (`app/` экраны, `state/` хранилище, `api/` вызовы ядра и демо-бэкенды `mock*.ts`, `lib/` чистая логика, `ui/` кит, `styles/` токены) |
-| `desktop/src-tauri/src` | Rust-ядро `customers_lib`: `commands.rs` (тонкие команды) → `app/` (Core), `workspace/` (CRM, команды `ws_*`), `search/` (генератор лидов), `cloud/` (Auth, синхронизация, Realtime), `secrets.rs` (Keychain/DPAPI), `db.rs`/`store.rs` (SQLCipher) |
-| `supabase/migrations` | схема PostgreSQL: RLS, RPC, триггеры. Источник истины для прав и инвариантов CRM |
+| `desktop/src-tauri/src` | Rust-ядро `customers_lib`: `commands.rs` (тонкие команды) → `app/` (Core), `workspace/` (CRM, команды `ws_*`), `search/` (генератор лидов), `secrets.rs` (Keychain/DPAPI), `db.rs`/`store.rs` (SQLCipher) |
+| `supabase/migrations` | схема прежнего сервера PostgreSQL. Приложение с сервером не работает (ADR-100); папка оставлена до решения Maksim |
 | `supabase/functions` | Edge Functions на Deno (письма, удаление аккаунта, неактивные аккаунты) |
 | `supabase/tests` | pytest на одноразовом стенде Supabase (`supabase/tests/stack/up.sh`) |
 | `tests/` | pytest-проверки репозитория: workflow, release-check, иконки, миграции, гигиена (генератор на Python удалён, ADR-051) |

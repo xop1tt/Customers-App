@@ -1,16 +1,16 @@
-// Второй запуск на тех же данных: облачная сессия, ключ базы, настройки и записи пережили перезапуск приложения.
+// Второй запуск на тех же данных: локальная сессия, ключ базы, настройки и записи пережили перезапуск приложения.
 // Это проверка настоящего хранилища ключей (Связка ключей macOS, DPAPI Windows): ключ базы читается после перезапуска процесса.
 {
   const { scenario, waitFor, $, $$, click, type, check, eq, core, sleep, norm, shot, golden, skipIf, hasCore, healthy } = E2E;
   const opts = { phase: "relaunch" };
 
-  scenario("relaunch-boot", "Перезапуск: окно открывается, облачная сессия на месте, тема и язык сохранились", async () => {
-    await waitFor(() => $(".auth, .welcome, .shell"), "первый экран после перезапуска", { timeout: 45000 });
+  scenario("relaunch-boot", "Перезапуск: окно открывается, локальная сессия на месте, тема и язык сохранились", async () => {
+    await waitFor(() => $(".welcome, .shell"), "первый экран после перезапуска", { timeout: 45000 });
     healthy("после перезапуска");
     const b = await core("boot_info");
     eq(b.error, null, "ошибка запуска ядра");
-    check(b.session && b.session.cloudUser, "сессия не восстановилась после перезапуска");
-    eq(b.session.cloudUser.email, E2E.account ? E2E.account.email : "e2e-owner@e2e-test.com", "почта сохранённой сессии");
+    check(b.session && /^local-/.test(b.session.id), "локальная сессия не открылась после перезапуска");
+    eq(b.session.displayName, E2E.account ? E2E.account.name : "e2e-owner", "имя профиля после перезапуска");
     eq([b.device.theme, b.device.language], ["light", "ru"], "тема и язык из настроек устройства");
     eq(document.documentElement.dataset.theme, "light", "тема применена в окне при запуске");
   }, { ...opts, fatal: true });

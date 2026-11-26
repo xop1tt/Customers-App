@@ -11,10 +11,10 @@
 | Unit | чистая логика Rust и TypeScript | `#[cfg(test)]` в модулях, `desktop/src/**/*.test.ts(x)` | `npm run test:core`, `npm test` |
 | Integration (ядро) | `Core` целиком на временной папке, секреты в памяти, сеть — заглушка | `app/*` тесты (`app::testing::fixture`) | `npm run test:core` |
 | Database | SQLCipher, миграции локальной схемы, восстановление, перенос | `db::`, `store::` | `npm run database:test` |
-| Backend (Supabase) | миграции, RLS, RPC, функции писем на одноразовом стенде | `supabase/tests/*.py`, `src-tauri/tests/stack.rs` | только CI `cloud.yml` (нужен Docker) |
+| Backend (Supabase, прежний сервер) | миграции, RLS, RPC, функции писем на одноразовом стенде; приложение сервер не использует (ADR-100) | `supabase/tests/*.py` | только CI `cloud.yml` (нужен Docker) |
 | Frontend | компоненты и состояние | Vitest + Testing Library | `npm test` |
 | UI | раскладка при размерах окна и масштабах | `scripts/screenshots.cjs` на демо-интерфейсе (сравнение снимков — позже) | `npm run shots` |
-| E2E | сценарии на настоящем ядре и стенде Supabase | `src-tauri/tests/stack.rs` (Scenario Runner удалён вместе с Beta, ADR-034) | CI `cloud.yml` |
+| E2E | сценарии на собранном приложении с локальным тестовым сервером | `desktop/e2e` ([E2E.md](E2E.md)) | CI `e2e.yml` |
 | Build | сборка для macOS universal и Windows x64, проверка пакета и установщика | `desktop.yml`, `release.yml` | CI |
 | Security | идентичность приложения, release-check, RLS-тесты стенда, CodeQL, dependency review | `identity::`, `tests/test_release_check.py`, `supabase/tests`, `codeql.yml` | `npm run test:core`, `npm run release:check`, CI |
 | Regression | весь набор выше на каждом PR | `Desktop gate`, `Cloud gate`, `test`, `review`, `Analyze` | CI |
@@ -29,7 +29,6 @@
 | `identity::tests::*` (3) | идентификатор, имя, схема ссылок, сервис Связки ключей, энтропия DPAPI и папки — как у прежних версий; идентификатор совпадает с `tauri.conf.json`; запуск с чужим идентификатором останавливается |
 | `paths::tests::standard_folders_match_previous_versions` | папки данных и журналов прежние на macOS, Windows и Linux |
 | `secrets::tests::secrets_keep_previous_names` | прежние имя Связки ключей и энтропия DPAPI |
-| `cloud::config::tests::links_from_emails_return_to_the_app` | ссылки из писем ведут в приложение (`leadgenerator://`) |
 | `reports::tests::crash_reports_of_old_beta_are_not_ours` | отчёты о сбоях старой Customers Beta не попадают в отчёты приложения |
 | `updates::tests::never_picks_old_beta_installers` | файлы старых Beta-сборок не устанавливаются, даже если оказались в релизе |
 | `app::data::tests::backups_go_to_the_default_folder_of_the_account` | резервные копии — в «Документах», в папке своей учётной записи |
@@ -103,10 +102,8 @@ VS Code (`.vscode/`): задача «Живой просмотр + подска�
 | `supabase/tests/test_team_access.py` (9) | ADR-094: роль ниже своей и не свою, автор теряет право после передачи, передача записи и задачи, свои поля и контакты сделки по правам карточки, звонки удаляет только `records.delete`, личные конфликты, занятый id без деталей, уведомления о назначении, удалённая учётная запись больше не ответственный |
 | `supabase/tests/test_departments.py` (6) | ADR-096: дерево отделов и права на него, видимость по роли (всё / свой отдел с подотделами / свои), руководитель видит подотделы, передача записи и журнал видимости только с id, настройка роли — на один Workspace, закрытие отдела, чужой отдел, отдел текстом становится сущностью |
 | `supabase/tests/test_team_scale.py` (9) | ADR-097: толчок Realtime об изменениях CRM (один на выгрузку, только коллегам в сети, без содержимого, сбой Realtime не мешает записи), содержимое вложений по видимости карточки и только в своём Workspace, лимит 300 МБ и докупленное место, размер файла по объявленному, индекс на каждом внешнем ключе |
-| `tests/stack.rs::departments_hide_and_return_records_on_devices` | на стенде: запись ушла в чужой отдел — исчезает с устройства вместе с заметкой, вернулась — приходит, смена видимости роли — полная перепроверка |
 | `supabase/tests/test_migrations.py` (6) | повторное применение не меняет данные, старые миграции не тронуты, RLS везде, `search_path` у definer-функций, у `anon` нет прав, физического удаления нет |
 | `workspace::*` (21, Rust) | очередь и слияние операций, проверки как на сервере, права, ссылки, сделки и задачи, корзина, загруженное не затирает неотправленное, отклонённое и отложенное, фильтры коллекций без SQL-инъекций, дубликаты, перенос лида, шифрование базы и привязка к Workspace, совпадение списков полей с миграциями |
-| `tests/stack.rs::workspace_crm_sync_rights_and_conflicts` | на стенде: два пользователя, шаблон с сервера, приглашение, устаревшие права отклоняются сервером, конфликт поля, этап и история сделки, корзина, исключённый участник |
 | `src/app/crm/crm.test.tsx` (13) | подписи и ввод полей, права в интерфейсе, эмодзи разделов, демо-ядро (версии, статусы, корзина, обязательные поля, дубликаты, коллекции, повторный перенос), место группы «Коллекции», аватары (4 и «+N», только облако), создание коллекции |
 
 ## 3b. Экспорт CRM (пакет G1)
@@ -187,6 +184,19 @@ VS Code (`.vscode/`): задача «Живой просмотр + подска�
 | `desktop/scripts/release-check.cjs` | флаг e2e не упомянут в `release.yml`/`desktop.yml` и не задан в конфигурации сборки |
 | `src-tauri/src/models.rs` (`crm_mark_survives_reading_and_roundtrip`) | пометка «в CRM» у лида не теряется при чтении (ошибка, найденная E2E) |
 | `src-tauri/src/e2e.rs` (2, только с флагом `--cfg e2e`) | подмена адресов тестового сервера |
+
+## 3z. Локальное приложение без сервера (ADR-100)
+
+| Тест | Проверяет |
+|---|---|
+| `app::session::tests::first_start_opens_a_new_local_account_without_sign_in` | первый запуск сразу открывает `local-<uuid>`, выбор запоминается и переживает перезапуск |
+| `app::session::tests::previous_cloud_account_folder_is_adopted_with_its_data` | папка прежней облачной записи `cloud-<uuid>` открывается с её данными и ключом |
+| `app::session::tests::account_ids_from_settings_cannot_leave_the_users_folder` | подменённый `localAccount` в настройках не выводит за пределы `users/` |
+| `app::workspace::local_tests::*` | первый запуск CRM, создание и переименование пространства, удаление этапа с переносом сделок без роста `sync_outbox`, вложения, скачанное облачное пространство становится локальным со всеми правами |
+| `src/app/crm/workspacePanel.test.tsx` | в панели нет приглашений, ролей, коннекторов, синхронизации и журнала; перенесённые участники — только список ответственных; новое пространство локальное |
+| `src/app/rail.test.tsx`, `src/app/sidebar.test.tsx` | в рейке только CRM, поиск и Ai; в меню учётной записи нет «Выйти» и «Коннекторы» |
+| `tests/test_release_check.py` | облачный модуль, `pub mod cloud`, адрес `SUPABASE_URL` или ключ `sb_publishable_` в клиенте — ошибка сборки |
+| e2e `local-start`, `profile`, `relaunch-boot` | собранное приложение запускается без входа, имя профиля сохраняется, локальная сессия переживает перезапуск |
 
 ## 4. Журнал выполненных проверок
 

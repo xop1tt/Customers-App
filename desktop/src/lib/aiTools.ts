@@ -21,7 +21,7 @@ export interface AiTool {
 const str = (d: string) => ({ type: "string", description: d });
 const ids = (d: string) => ({ type: "array", items: { type: "string" }, description: d, maxItems: 100 });
 
-export const NAV_SECTIONS = ["home", "all", "new", "favorites", "archive", "runs", "today", "calendar", "deals", "reports", "trash", "people", "structure"] as const;
+export const NAV_SECTIONS = ["home", "all", "new", "favorites", "archive", "runs", "today", "calendar", "deals", "reports", "trash"] as const;
 export const SETTINGS_SECTIONS = ["appearance", "system", "notifications", "search", "account", "data", "exclusions", "outreach", "reports", "updates", "sources", "ai"] as const;
 export const SETTING_KEYS = ["theme", "uiScale", "compactRows", "animations", "language", "sidebarCounts"] as const;
 export const CRM_ENTITIES = ["company", "contact", "crm_lead", "deal", "task", "activity"] as const;
@@ -42,7 +42,6 @@ export const AI_TOOLS: AiTool[] = [
   { name: "get_settings", group: "read", risk: "read", description: "Текущие настройки оформления и интерфейса.", parameters: { type: "object", properties: {} }, summary: () => "Прочитать настройки" },
   { name: "open_section", group: "navigate", risk: "nav", description: "Открыть раздел приложения.", parameters: { type: "object", properties: { section: { type: "string", enum: [...NAV_SECTIONS] } }, required: ["section"] }, summary: (a) => `Открыть раздел «${String(a.section)}»` },
   { name: "open_settings", group: "navigate", risk: "nav", description: "Открыть окно настроек на нужной странице.", parameters: { type: "object", properties: { section: { type: "string", enum: [...SETTINGS_SECTIONS] } }, required: ["section"] }, summary: (a) => `Открыть настройки «${String(a.section)}»` },
-  { name: "open_connectors", group: "navigate", risk: "nav", description: "Открыть окно «Коннекторы» (каталог, установленные или заявки на проверке).", parameters: { type: "object", properties: { page: { type: "string", enum: ["catalog", "installed", "review"] } } }, summary: (a) => `Открыть коннекторы: ${String(a.page ?? "catalog")}` },
   { name: "set_setting", group: "settings", risk: "setting", description: "Изменить настройку приложения: theme (system|dark|light), uiScale (0.8–1.6), compactRows, animations, language (system|ru|en), sidebarCounts (true|false).",
     parameters: { type: "object", properties: { key: { type: "string", enum: [...SETTING_KEYS] }, value: { description: "Новое значение" } }, required: ["key", "value"] }, summary: (a) => `Настройка «${String(a.key)}» → ${JSON.stringify(a.value)}` },
   { name: "set_favorite", group: "data", risk: "soft", description: "Добавить лиды в избранное или убрать оттуда.", parameters: { type: "object", properties: { ids: ids("id лидов"), on: { type: "boolean" } }, required: ["ids", "on"] }, summary: (a) => `${a.on ? "В избранное" : "Из избранного"}: лидов ${list(a.ids)}` },

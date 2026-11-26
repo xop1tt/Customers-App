@@ -42,8 +42,8 @@ describe("поле глобального поиска", () => {
     setState({ boot: null });
   });
 
-  it("на экране входа поля поиска в заголовке нет", () => {
-    setState({ phase: "auth" });
+  it("пока приложение загружается, поля поиска в заголовке нет", () => {
+    setState({ phase: "loading" });
     render(<TitleBar />);
     expect(screen.queryByRole("combobox", { name: "Глобальный поиск" })).toBeNull();
   });

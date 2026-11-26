@@ -74,13 +74,12 @@ check(guids.length === 1 && guids[0] === "6B0F7C1E-3A52-4C58-9E41-5B7D2A9C1F30",
 check(/#define UrlScheme "leadgenerator"/.test(iss) && !/#ifdef Beta/.test(iss), "Inno: ссылки leadgenerator:, без варианта Beta", "Inno: схема ссылок изменена или остался вариант Beta");
 check(/#define AppExe "Customers\.exe"/.test(iss), "Inno: ставится как Customers.exe", "Inno: имя exe изменено");
 
-// ---------------------------------------------------------------- облако
-const cloudCfg = read("src-tauri/src/cloud/config.rs");
-check(!/SUPABASE_BETA_/.test(cloudCfg), "облако одно (SUPABASE_URL / SUPABASE_ANON_KEY)", "в cloud/config.rs остались SUPABASE_BETA_*");
+// ---------------------------------------------------------------- облака нет (ADR-100)
+check(!fs.existsSync(path.join(root, "src-tauri/src/cloud")) && !/pub mod cloud;/.test(lib), "облачного модуля в ядре нет", "src-tauri/src/cloud или pub mod cloud вернулись");
 
 // ---------------------------------------------------------------- секреты в клиенте
-// В приложение попадает только публичный ключ. Серверный ключ Supabase, секретный ключ или его переменная в коде
-// клиента — ошибка (исключение: проверка в cloud/config.rs, которая такие ключи отклоняет). Имя роли собирается
+// Приложение работает без сервера: адрес и ключи Supabase, серверный ключ или его переменная в коде клиента — ошибка.
+// Имя роли собирается
 // из частей: этот файл сам проверяется тестом стенда (supabase/tests/test_sync_rls.py), где имени быть не должно.
 const ROLE = ["service", "role"].join("_");
 const roleName = new RegExp(`${ROLE.toUpperCase()}|${ROLE}_key`);
@@ -101,10 +100,10 @@ for (const dir of ["src", "src-tauri/src"]) {
     const text = fs.readFileSync(f, "utf8");
     if (roleName.test(text) || roleJwt.test(text)) leaks.push(rel);
     if (/sb_secret_[A-Za-z0-9]{8,}/.test(text)) leaks.push(rel);
-    if (/sb_secret_/.test(text) && rel !== "src-tauri/src/cloud/config.rs") leaks.push(rel);
+    if (/sb_secret_|sb_publishable_|SUPABASE_(URL|ANON_KEY)/.test(text)) leaks.push(rel);
   }
 }
-check(leaks.length === 0, "в коде клиента нет серверного и секретных ключей Supabase", `серверный или секретный ключ Supabase в клиенте: ${[...new Set(leaks)].join(", ")}`);
+check(leaks.length === 0, "в коде клиента нет адреса и ключей Supabase", `адрес или ключ Supabase в клиенте: ${[...new Set(leaks)].join(", ")}`);
 
 for (const t of ok) console.log(`  ✓ ${t}`);
 if (problems.length) {

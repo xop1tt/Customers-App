@@ -64,7 +64,7 @@ export function Settings() {
     return () => document.removeEventListener("keydown", key);
   }, []);
   const current = ALL.find((s) => s.id === section) ?? (ALL[0] as Item);
-  const subs = subsectionsOf(current.id, true);
+  const subs = subsectionsOf(current.id);
   const activeSub = subs.find((x) => x.id === sub)?.id ?? subs[0]?.id ?? null;
   // Открытый раздел или подраздел перестаёт считаться новым.
   useEffect(() => { if (section) markSettingsSeen(current.id, subs.length > 1 ? activeSub : null); }, [section, current.id, activeSub, subs.length]);

@@ -6,7 +6,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { api } from "../api";
 import { resetWsMock } from "../api/wsMock";
 import { refreshSnapshot, setState } from "../state/store";
-import { refreshTeam } from "../state/team";
 import type { AppState } from "../state/store";
 import { HomePage } from "../app/pages/Home";
 import { LeadsPage } from "../app/pages/LeadsPage";
@@ -16,11 +15,6 @@ import { CalendarPage } from "../app/crm/CalendarPage";
 import { ReportsPage } from "../app/crm/ReportsPage";
 import { TrashPage } from "../app/crm/TrashPage";
 import { JournalPage } from "../app/crm/JournalPage";
-import { PeoplePage } from "../app/team/PeoplePage";
-import { ChatPage } from "../app/team/ChatPage";
-import { ChatWindow } from "../app/team/ChatWindow";
-import { ProfilePage } from "../app/team/ProfilePage";
-import { Marketplace } from "../app/market/Marketplace";
 import { Settings } from "../app/settings/Settings";
 import { ModuleRail } from "../app/ModuleRail";
 import { Sidebar } from "../app/Sidebar";
@@ -28,12 +22,10 @@ import { TopBar } from "../app/TopBar";
 import { TitleBar } from "../app/TitleBar";
 import { outline } from "./outline";
 
-// Состояние, в котором экран что-то показывает (Settings и Marketplace — окна, открываемые из состояния).
+// Состояние, в котором экран что-то показывает (Settings — окно, открываемые из состояния).
 const PREPARE: Record<string, Partial<AppState>> = {
   "Все лиды": { section: "all" },
-  "Магазин приложений": { market: "catalog" },
   "Настройки": { settings: "appearance" },
-  "Чат: всплывающее окно": { chatPopup: true },
   "Заголовок окна": { phase: "ready" },
 };
 
@@ -46,11 +38,6 @@ const SCREENS: [string, ComponentType][] = [
   ["CRM: Отчёты", ReportsPage],
   ["CRM: Корзина", TrashPage],
   ["CRM: Журнал", JournalPage],
-  ["Команда: Сотрудники", PeoplePage],
-  ["Команда: Чат", ChatPage],
-  ["Чат: всплывающее окно", ChatWindow],
-  ["Команда: Профиль", ProfilePage],
-  ["Магазин приложений", Marketplace],
   ["Настройки", Settings],
   ["Панель модулей", ModuleRail],
   ["Боковая панель", Sidebar as ComponentType],
@@ -66,10 +53,9 @@ afterAll(() => vi.useRealTimers());
 afterEach(cleanup);
 beforeEach(async () => {
   resetWsMock();
-  setState({ ws: await api.wsState(), section: "home", market: null, settings: null, profileId: null, chatPopup: false });
+  setState({ ws: await api.wsState(), section: "home", settings: null });
   setState({ session: (await api.bootInfo()).session });
   await refreshSnapshot();
-  await refreshTeam();
 });
 
 describe("золотые экраны", () => {

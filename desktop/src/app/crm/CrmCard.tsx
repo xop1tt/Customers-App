@@ -1,15 +1,13 @@
 // Карточка CRM-записи в панели сведений: поля, связанные записи, лента клиента (заметки, события, комментарии,
-// задачи, смены этапов; у компании — и по её сделкам и контактам), задачи и конфликты синхронизации. Новая запись создаётся здесь же.
+// задачи, смены этапов; у компании — и по её сделкам и контактам) и задачи. Новая запись создаётся здесь же.
 
 import { CustomFieldsSection } from "./CustomFields";
-import { WatchingNow } from "./Presence";
-import { DISCUSSABLE, DiscussDialog } from "./Discuss";
 import { AttachmentsSection } from "./Attachments";
 import { canMerge, MergeDialog, MergeUndo } from "./MergeDialog";
 import { CommsBar, NextStep } from "./Comms";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
-import type { ChatCardType, CrmRecord, WsCard, WsConflict } from "../../api/types";
+import type { CrmRecord, WsCard } from "../../api/types";
 import { byTable, can, cellText, CURRENCIES, ENUMS, ENTITIES, type EntityMeta, type FieldMeta, fromInput, type Lookup, memberName, STATUS_TONE, toInput } from "../../lib/crm";
 import { fullRu, money, shortRelative } from "../../lib/format";
 import { buildTimeline, filterTimeline, relatedForTimeline, type TimelineFilter, type TimelineSource } from "../../lib/timeline";
@@ -17,8 +15,6 @@ import { Button, EmptyState, Field, IconButton, Notice, Segmented, Select, Spinn
 import { Icon } from "../../ui/icons";
 import { confirmDialog } from "../../ui/overlay";
 import { attempt, openRecord, toast, useStore } from "../../state/store";
-import { actionsFor, actionUrl } from "../../state/market";
-import { openLink } from "../../state/actions";
 import { defaultStage, stagesOf, useLookup, useWsQuery } from "./useCrm";
 
 type Tab = "overview" | "feed" | "tasks";
@@ -47,7 +43,6 @@ function FieldInput({ f, e, value, lk, onCommit, disabled, pipeline }: { f: Fiel
     case "currency": return select(CURRENCIES.map((c) => ({ value: c, label: c })), false);
     case "company": return select([...lk.companies.values()].filter((c) => !c.deleted_at).map((c) => ({ value: c.id, label: String(c.name ?? "") })));
     case "pipeline": return select([...lk.pipelines.values()].map((p) => ({ value: p.id, label: String(p.name ?? "") })), false);
-    case "department": return select((lk.departments ?? []).map((d) => ({ value: d.id, label: d.name })));
     case "stage": return select(stagesOf(lk, pipeline).map((s) => ({ value: s.id, label: String(s.name ?? "") })), false);
     case "long": return <TextArea value={text} onChange={setText} onBlur={commit} disabled={disabled} rows={3} />;
     default:
@@ -71,8 +66,6 @@ function Fields({ e, rec, lk, editable, onChange }: { e: EntityMeta; rec: Record
     <div className="crm-fields">
       {e.fields.map((f) => {
         if (f.name === "lost_reason" && rec.status !== "lost") return null;
-        // Отделы есть только в облачном рабочем пространстве, где их создали (ADR-096).
-        if (f.kind === "department" && !lk.departments?.length) return null;
         return (
           <Field key={f.name} label={f.label + (f.required ? " *" : "")}>
             <FieldInput f={f} e={e} value={rec[f.name]} lk={lk} disabled={!editable} pipeline={rec.pipeline_id}
@@ -160,9 +153,6 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
   const { data, error } = useWsQuery(() => api.wsCard(e.table, id), [e.table, id]);
   const [tab, setTab] = useState<Tab>("overview");
   const [merging, setMerging] = useState(false);
-  const [discussing, setDiscussing] = useState(false);
-  const chatOn = useStore((s) => s.chat?.available ?? false);
-  const market = useStore((st) => st.marketInstalled);
   if (error) return <div className="inspector-body"><EmptyState icon="alert" title="Запись не открылась">{error}</EmptyState></div>;
   if (!data) return <div className="inspector-body"><div className="boot"><Spinner size={18} /></div></div>;
   const r = data.record;
@@ -191,26 +181,13 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
           {r.deleted_at && <Tag tone="red" icon="trash">Удалено</Tag>}
         </div>
         <h3 className="insp-title selectable">{e.title(r)}</h3>
-        <WatchingNow type={e.type} id={r.id} />
         <CommsBar e={e} data={data} lk={lk} />
-        {!r.deleted_at && !editable && ws?.isCloud && (
-          <div className="faint insp-hint">Правка недоступна: у вашей роли нет права менять эту запись. Что разрешено — «Рабочее пространство» → «Мои права».</div>
-        )}
         <div className="row insp-actions">
           {e.type === "task" && editable && (
             <IconButton icon="check" tip={r.status === "done" ? "Вернуть в работу" : "Выполнено"} active={r.status === "done"} onClick={() => save({ status: r.status === "done" ? "todo" : "done" })} />
           )}
           {"archived_at" in r && editable && <IconButton icon="archive" tip={r.archived_at ? "Вернуть из архива" : "В архив"} active={!!r.archived_at} onClick={() => save({ archived_at: r.archived_at ? null : new Date().toISOString() })} />}
-          {!r.deleted_at && actionsFor(market, e.type).map(({ app, action }) => (
-            <Button key={`${app.app_id}:${action.id}`} small variant="ghost" title={`${app.name}: ${action.label}`} onClick={() => {
-              const url = actionUrl(action, app.scopes, { id, type: e.type, title: e.title(r) });
-              if (url) void openLink(url); else toast("Адрес кнопки интеграции некорректен.", "error");
-            }}><span aria-hidden>{app.icon}</span> {action.label}</Button>
-          ))}
           <span className="grow" />
-          {DISCUSSABLE.includes(e.type) && !r.deleted_at && chatOn && perms.includes("records.create") && (
-            <Button small variant="ghost" icon="chat" onClick={() => setDiscussing(true)}>Обсудить</Button>
-          )}
           {(e.type === "company" || e.type === "contact") && !r.deleted_at && canMerge(perms) && <IconButton icon="merge" tip="Объединить с дубликатом" onClick={() => setMerging(true)} />}
           {deletable && (r.deleted_at
             ? <Button small icon="refresh" onClick={() => void attempt(() => api.wsRestore(e.table, id))}>Восстановить</Button>
@@ -218,36 +195,17 @@ function RecordCard({ e, id }: { e: EntityMeta; id: string }) {
           <IconButton icon="x" tip="Закрыть (Esc)" aria-label="Закрыть" onClick={() => openRecord(e.table, null)} />
         </div>
       </div>
-      {discussing && DISCUSSABLE.includes(e.type) && <DiscussDialog type={e.type as ChatCardType} id={id} title={e.title(r)} onClose={() => setDiscussing(false)} />}
       {merging && <MergeDialog e={e} record={r} lk={lk} onClose={() => setMerging(false)} />}
       {tabs.length > 1 && <Tabs value={tab} onChange={setTab} tabs={tabs} />}
       <div className="insp-scroll">
         <div className="insp-sections">
           {(e.type === "company" || e.type === "contact") && <MergeUndo table={e.table} id={id} />}
-          {data.conflicts.map((c) => <ConflictNotice key={c.id} c={c} e={e} lk={lk} />)}
           {tab === "overview" && <Overview e={e} data={data} lk={lk} editable={editable} save={save} />}
           {tab === "feed" && <Feed e={e} data={data} lk={lk} />}
           {tab === "tasks" && <Tasks e={e} id={id} tasks={data.tasks ?? []} lk={lk} />}
         </div>
       </div>
     </div>
-  );
-}
-
-function ConflictNotice({ c, e, lk }: { c: WsConflict; e: EntityMeta; lk: Lookup }) {
-  const label = c.field === "*deleted" ? "запись" : e.fields.find((f) => f.name === c.field)?.label ?? c.field;
-  const show = (v: unknown) => (v === null || v === undefined || v === "" ? "пусто" : cellText(e, { [c.field]: v } as CrmRecord, c.field, lk) || String(v));
-  return (
-    <Notice tone="warn" action={
-      <div className="row" style={{ gap: 6 }}>
-        <Button small onClick={() => void attempt(() => api.wsResolveConflict(c.id, false))}>Оставить</Button>
-        {c.field !== "*deleted" && <Button small variant="ghost" onClick={() => void attempt(() => api.wsResolveConflict(c.id, true))}>Вернуть «{show(c.lost)}»</Button>}
-      </div>
-    }>
-      {c.field === "*deleted"
-        ? "Запись удалил другой участник, ваши правки не применены."
-        : <>Поле «{label}» одновременно изменили: сохранено «{show(c.kept)}»{c.keptBy ? ` (${memberName(lk.members, c.keptBy)})` : ""}, ваше «{show(c.lost)}» не применено.</>}
-    </Notice>
   );
 }
 

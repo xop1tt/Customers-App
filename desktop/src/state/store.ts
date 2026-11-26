@@ -5,23 +5,17 @@ import { MODULES, moduleOf, RESTORABLE, type ModuleId } from "../lib/modules";
 import { api } from "../api";
 import { on } from "../api/backend";
 import type {
-  AccountPrefs, AuthCallback, BootInfo, ChatPoll, MarketInstalled, TeamMember, DevicePrefs, SearchOverview, SearchStatus, SessionInfo, Snapshot, SyncStatus, UpdateInfo, WsCollection, WsIncoming, WsState,
+  AccountPrefs, BootInfo, DevicePrefs, SearchOverview, SearchStatus, SessionInfo, Snapshot, UpdateInfo, WsCollection, WsState,
 } from "../api/types";
 import { type LeadFilter, type SectionId, emptyFilter } from "../lib/leads";
 import { type LightModeReason, evaluate } from "../lib/powerPolicy";
 
-export type Phase = "loading" | "error" | "auth" | "welcome" | "ready";
+export type Phase = "loading" | "error" | "welcome" | "ready";
 export type SettingsSection = "appearance" | "system" | "notifications" | "search" | "account" | "data" | "exclusions" | "outreach" | "reports" | "updates" | "sources" | "ai";
 export type ToastKind = "info" | "error" | "success";
 export interface Toast { id: number; kind: ToastKind; text: string }
 
 export interface AppState {
-  /** Связь с облаком: нет сети — «Переподключение», затем «Подключено». */
-  conn: "online" | "reconnecting" | "restored";
-  /** Чат — всплывающее окно над рейкой, а не раздел. */
-  chatPopup: boolean;
-  /** Окно уведомлений у колокольчика. */
-  bellOpen: boolean;
   phase: Phase;
   error: string | null;
   boot: BootInfo | null;
@@ -31,11 +25,9 @@ export interface AppState {
   snap: Snapshot;
   overview: SearchOverview | null;
   search: SearchStatus;
-  sync: SyncStatus | null;
   update: UpdateInfo | null;
   lightMode: LightModeReason | null;
   toasts: Toast[];
-  authCallback: AuthCallback | null;
   /** Интерфейс */
   section: SectionId;
   selection: string[];
@@ -60,22 +52,8 @@ export interface AppState {
   /** Открытая карточка CRM; `preset` — значения полей новой записи (например, срок задачи из календаря). */
   record: { table: string; id: string; preset?: Record<string, unknown> } | null;
   workspaceOpen: boolean;
-  /** Входящие приглашения в рабочие пространства (красный пузырёк у учётной записи). */
-  incoming: WsIncoming[];
-  /** Открытое окно маркетплейса (раздел) или null. */
-  market: "catalog" | "installed" | "review" | "developer" | null;
-  /** Установленные интеграции активного Workspace: кнопки в карточках CRM. */
-  marketInstalled: MarketInstalled[];
   /** Диалог коллекции: новая (`id: null`) или изменение существующей. */
   collectionEdit: { id: string | null } | null;
-  /** Открытый профиль сотрудника (раздел «profile»); null — свой. */
-  profileId: string | null;
-  /** Справочник сотрудников активного Workspace (раздел «Сотрудники», профили, чат). */
-  team: TeamMember[];
-  /** Последний опрос чата: непрочитанное и уведомления. */
-  chat: ChatPoll | null;
-  /** Открытое обсуждение в разделе «Сообщения». */
-  chatOpen: string | null;
   /** Растёт при каждом изменении данных Workspace: открытые списки и карточки перечитываются. */
   wsVersion: number;
 }
@@ -91,10 +69,10 @@ export const DEFAULT_DEVICE: DevicePrefs = {
 const EMPTY_SNAP: Snapshot = { leads: [], sources: [], pipelineErrors: [], exclusions: [], syncLog: [], lastSearchAt: null, databaseSize: 0 };
 
 const initial: AppState = {
-  conn: "online", chatPopup: false, bellOpen: false, phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
-  search: { running: false, progress: null, lastReport: null }, sync: null, update: null, lightMode: null, toasts: [], authCallback: null,
+  phase: "loading", error: null, boot: null, session: null, device: DEFAULT_DEVICE, account: null, snap: EMPTY_SNAP, overview: null,
+  search: { running: false, progress: null, lastReport: null }, update: null, lightMode: null, toasts: [],
   section: "home", selection: [], anchor: null, filter: emptyFilter(), settings: null, settingsSub: null, exportOpen: false, quickOpen: false, whatsNewOpen: false, reportOpen: false, customizeNav: false, navPeek: false, aiOpen: false,
-  ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, incoming: [], collectionEdit: null, wsVersion: 0, profileId: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [],
+  ws: null, collections: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, wsVersion: 0,
 };
 
 let state = initial;
@@ -163,13 +141,13 @@ export async function refreshOverview() {
 }
 
 async function loadSession(boot: BootInfo) {
-  const [snap, account, overview, search, sync, update] = await Promise.all([
-    api.snapshot(), api.accountPrefs(), api.searchOverview(), api.searchStatus(), api.syncStatus(), api.updateInfo(),
+  const [snap, account, overview, search, update] = await Promise.all([
+    api.snapshot(), api.accountPrefs(), api.searchOverview(), api.searchStatus(), api.updateInfo(),
   ]);
   const last = boot.device.lastSection as SectionId;
   const section: SectionId = RESTORABLE.includes(last) ? last : "home";
   setState({
-    session: boot.session, snap, account, overview, search, sync, update, section, selection: [], anchor: null, filter: emptyFilter(),
+    session: boot.session, snap, account, overview, search, update, section, selection: [], anchor: null, filter: emptyFilter(),
     phase: account.welcomeDone ? "ready" : "welcome",
   });
   void checkPower();
@@ -181,15 +159,15 @@ export async function boot() {
     wireEvents();
     const info = await api.bootInfo();
     setState({ boot: info, device: info.device, error: info.error });
-    if (info.error) return setState({ phase: "error" });
-    if (!info.session) return setState({ phase: "auth", session: null });
+    // Запись этого компьютера ядро открывает само (ADR-100): без неё запуск не удался.
+    if (info.error || !info.session) return setState({ phase: "error", error: info.error ?? "Не удалось открыть данные на этом компьютере." });
     await loadSession(info);
   } catch (e) {
     setState({ phase: "error", error: errText(e) });
   }
 }
 
-/** После входа или регистрации: подтянуть данные открытой сессии. */
+/** Ядро открыло запись заново (после восстановления копии и т. п.): подтянуть её данные. */
 let entering: Promise<void> | null = null;
 export function enterSession(): Promise<void> {
   if (entering) return entering;
@@ -205,27 +183,20 @@ export function enterSession(): Promise<void> {
   return entering;
 }
 
-export async function leaveSession() {
-  await attempt(() => api.logout());
-  setState({ phase: "auth", session: null, snap: EMPTY_SNAP, account: null, overview: null, settings: null, exportOpen: false, selection: [], ...NO_WORKSPACE });
-}
-
-const NO_WORKSPACE: Partial<AppState> = { ws: null, collections: [], incoming: [], collectionId: null, record: null, workspaceOpen: false, collectionEdit: null, team: [], chat: null, chatOpen: null, market: null, marketInstalled: [] };
-
 // ---------------------------------------------------------------- Workspace и коллекции
 
 let wsTimer: ReturnType<typeof setTimeout> | null = null;
 /** Состояние Workspace и список коллекций. Ошибка (нет сессии, база недоступна) не ломает генератор лидов. */
 export async function refreshWorkspace() {
   try {
-    const [ws, collections, incoming] = await Promise.all([api.wsState(), api.wsCollections(), api.wsIncoming()]);
+    const [ws, collections] = await Promise.all([api.wsState(), api.wsCollections()]);
     setState((s) => {
       const known = s.collectionId && collections.some((c) => c.id === s.collectionId);
       const lost = s.section === "collection" && !known;
-      return { ws, collections, incoming, ...(lost ? { section: "home" as SectionId, collectionId: null, record: null } : {}), wsVersion: s.wsVersion + 1 };
+      return { ws, collections, ...(lost ? { section: "home" as SectionId, collectionId: null, record: null } : {}), wsVersion: s.wsVersion + 1 };
     });
   } catch {
-    setState({ ws: null, collections: [], incoming: [] });
+    setState({ ws: null, collections: [] });
   }
 }
 const scheduleWorkspace = () => {
@@ -235,10 +206,6 @@ const scheduleWorkspace = () => {
 
 export function openCollection(id: string) {
   setState({ section: "collection", collectionId: id, record: null, selection: [], anchor: null, navPeek: false });
-}
-/** Профиль сотрудника; без id — свой. */
-export function openProfile(id: string | null = null) {
-  setState({ section: "profile", profileId: id, collectionId: null, record: null, selection: [], anchor: null, navPeek: false });
 }
 export const openRecord = (table: string, id: string | null, preset?: Record<string, unknown>) => setState({ record: id ? { table, id, ...(preset ? { preset } : {}) } : null });
 
@@ -256,12 +223,7 @@ function wireEvents() {
   void on("data-changed", scheduleRefresh);
   void on<SearchStatus>("search-state", (search) => setState({ search }));
   void on<{ summary: string; failed: boolean }>("search-finished", (r) => { toast(r.summary, r.failed ? "error" : "success"); });
-  void on<SyncStatus>("sync-state", (sync) => setState({ sync }));
-  void on<SessionInfo | null>("session-changed", (s) => { if (s && state.phase !== "auth") setState({ session: s }); else void enterSession(); });
-  void on<{ reason: string }>("session-ended", (r) => {
-    setState({ phase: "auth", session: null, snap: EMPTY_SNAP, settings: null, exportOpen: false, ...NO_WORKSPACE });
-    if (r?.reason) toast(r.reason, "error");
-  });
+  void on<SessionInfo | null>("session-changed", (s) => { if (s) setState({ session: s }); else void enterSession(); });
   void on<DevicePrefs>("device-prefs", (device) => { setState({ device }); void checkPower(); });
   void on<{ action: string }>("tray-action", (a) => {
     if (a.action === "new") setSection("new");
@@ -271,12 +233,6 @@ function wireEvents() {
   void on("search-settings", () => { void refreshOverview(); });
   void on<UpdateInfo>("update-state", (update) => setState({ update }));
   void on<{ kind: string; text: string }>("toast", (t) => toast(t.text, t.kind === "error" ? "error" : "info"));
-  void on<AuthCallback>("auth-callback", (authCallback) => {
-    if (authCallback.kind === "message") toast(authCallback.message);
-    else if (authCallback.kind === "error") toast(authCallback.message, "error");
-    else if (authCallback.kind === "signedIn") void enterSession();
-    else setState({ authCallback });
-  });
   void on("exit-requested", () => {});
   void on("workspace-changed", scheduleWorkspace);
 }
@@ -296,7 +252,7 @@ export function openModule(id: ModuleId) {
   const last = lastIn.get(id);
   if (last?.section === "collection" && last.collectionId && state.collections.some((c) => c.id === last.collectionId)) return openCollection(last.collectionId);
   const home = MODULES.find((m) => m.id === id)!.home;
-  setSection(last && last.section !== "collection" && last.section !== "profile" ? last.section : home);
+  setSection(last && last.section !== "collection" ? last.section : home);
 }
 
 /** Открыть запись CRM из любого места: если открыт не модуль CRM, сначала переход в подходящий раздел. */
@@ -358,5 +314,3 @@ export async function updateSettings(mutate: (s: import("../api/types").SearchSe
   }
 }
 
-/** Кнопка «Чат» в рейке: открывает всплывающее окно чата, повторное нажатие сворачивает его. */
-export const toggleChat = () => setState((s) => ({ chatPopup: !s.chatPopup }));

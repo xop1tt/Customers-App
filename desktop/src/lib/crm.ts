@@ -1,11 +1,11 @@
 // Описание CRM-сущностей для интерфейса: подписи полей, столбцы таблиц, значения перечислений.
-// Те же имена полей, что в ядре (workspace/schema.rs) и в миграциях Supabase.
+// Те же имена полей, что в ядре (workspace/schema.rs).
 
-import type { CrmRecord, Department, WsMember } from "../api/types";
+import type { CrmRecord, WsMember } from "../api/types";
 import { dateOnly, money, shortRelative } from "./format";
 
 export type EntityType = "company" | "contact" | "crm_lead" | "deal" | "task";
-export type FieldKind = "text" | "long" | "list" | "money" | "currency" | "date" | "datetime" | "member" | "enum" | "company" | "stage" | "pipeline" | "number" | "department";
+export type FieldKind = "text" | "long" | "list" | "money" | "currency" | "date" | "datetime" | "member" | "enum" | "company" | "stage" | "pipeline" | "number";
 
 export interface FieldMeta { name: string; label: string; kind: FieldKind; required?: boolean }
 export interface EntityMeta {
@@ -56,7 +56,6 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
       { name: "industry", label: "Отрасль", kind: "text" },
       { name: "size_range", label: "Размер", kind: "text" },
       { name: "owner_id", label: "Ответственный", kind: "member" },
-      { name: "department_id", label: "Отдел", kind: "department" },
     ],
   },
   contact: {
@@ -71,7 +70,6 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
       { name: "phones", label: "Телефоны", kind: "list" },
       { name: "emails", label: "Почта", kind: "list" },
       { name: "owner_id", label: "Ответственный", kind: "member" },
-      { name: "department_id", label: "Отдел", kind: "department" },
     ],
   },
   crm_lead: {
@@ -87,7 +85,6 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
       { name: "status", label: "Статус", kind: "enum" },
       { name: "source", label: "Источник", kind: "text" },
       { name: "owner_id", label: "Ответственный", kind: "member" },
-      { name: "department_id", label: "Отдел", kind: "department" },
     ],
   },
   deal: {
@@ -104,7 +101,6 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
       { name: "company_id", label: "Компания", kind: "company" },
       { name: "lost_reason", label: "Причина проигрыша", kind: "long" },
       { name: "owner_id", label: "Ответственный", kind: "member" },
-      { name: "department_id", label: "Отдел", kind: "department" },
     ],
   },
   task: {
@@ -119,7 +115,6 @@ export const ENTITIES: Record<EntityType, EntityMeta> = {
       { name: "due_at", label: "Срок", kind: "datetime" },
       { name: "remind_at", label: "Напомнить", kind: "datetime" },
       { name: "assignee_id", label: "Исполнитель", kind: "member" },
-      { name: "department_id", label: "Отдел", kind: "department" },
     ],
   },
 };
@@ -134,7 +129,7 @@ export function columnLabel(e: EntityMeta, col: string): string {
   return e.fields.find((f) => f.name === col)?.label ?? COLUMN_LABELS[col] ?? col;
 }
 
-export interface Lookup { members: WsMember[]; stages: Map<string, CrmRecord>; companies: Map<string, CrmRecord>; pipelines: Map<string, CrmRecord>; departments?: Department[] }
+export interface Lookup { members: WsMember[]; stages: Map<string, CrmRecord>; companies: Map<string, CrmRecord>; pipelines: Map<string, CrmRecord> }
 
 /** Имя участника; если список загружен, а человека в нём нет, — он вышел или удалён из рабочего пространства. */
 export const memberName = (members: WsMember[], id: unknown) => (typeof id === "string" ? members.find((m) => m.userId === id)?.displayName ?? (members.length ? "Бывший участник" : "Участник") : "");
@@ -150,7 +145,6 @@ export function cellText(e: EntityMeta, r: CrmRecord, col: string, lk: Lookup): 
   if (col === "stage_id") return text(lk.stages.get(String(v)) ?? ({} as CrmRecord), "name");
   if (col === "company_id") return text(lk.companies.get(String(v)) ?? ({} as CrmRecord), "name");
   if (col === "pipeline_id") return text(lk.pipelines.get(String(v)) ?? ({} as CrmRecord), "name");
-  if (col === "department_id") return lk.departments?.find((d) => d.id === v)?.name ?? "";
   if (kind === "money" && typeof v === "number") return money(v, typeof r.currency === "string" ? r.currency : "RUB");
   if (kind === "date" && typeof v === "string") return dateOnly(v);
   const en = ENUMS[`${e.table}.${col}`];

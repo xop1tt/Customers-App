@@ -1,11 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { api } from "../../api";
-import type { CrmRecord, WsState } from "../../api/types";
+import type { CrmRecord } from "../../api/types";
 import { resetWsMock } from "../../api/wsMock";
 import { can, cellText, ENTITIES, fromInput, toInput } from "../../lib/crm";
 import { SECTIONS } from "../../lib/leads";
-import { moduleOf } from "../../lib/modules";
 import { getState, setState } from "../../state/store";
 import { App } from "../App";
 import { canManage } from "./Collections";
@@ -148,26 +147,6 @@ describe("интерфейс CRM", () => {
     await waitFor(() => expect(screen.queryByLabelText("Карточка записи")).toBeNull());
   });
 
-  it("аватары участников видны только в облачном рабочем пространстве из нескольких человек", async () => {
-    render(<App />);
-    await screen.findByLabelText("Навигация");
-    await waitFor(() => expect(getState().ws).not.toBeNull());
-    expect(document.querySelector(".ws-avatars")).toBeNull();
-    const ws = getState().ws as WsState;
-    const people = ["Алексей", "Борис", "Вера", "Глеб", "Дина", "Егор"].map((n, i) => ({ userId: `u${i}`, displayName: n, role: "employee", roleName: "Сотрудник", rank: 40, avatarPath: null, email: null }));
-    setState({ ws: { ...ws, isCloud: true, members: people } });
-    const btn = await screen.findByRole("button", { name: "Участники: 6" });
-    // Широкое окно: 4 аватара и «+2»; узкое (< 1100 px): один и «+5».
-    const wide = window.innerWidth >= 1100;
-    expect(btn.querySelectorAll(".ws-avatar")).toHaveLength(wide ? 5 : 2);
-    expect(btn).toHaveTextContent(wide ? "+2" : "+5");
-    const topbar = document.querySelector(".topbar") as HTMLElement;
-    const order = [...topbar.children].map((el) => el.className);
-    expect(order.findIndex((c) => c.includes("ws-avatars"))).toBeGreaterThan(-1);
-    // «Найти лиды» есть только в модуле «Поиск».
-    expect(order.some((c) => c.includes("search-btn"))).toBe(moduleOf(getState().section) === "search");
-  });
-
   it("в верхней строке нет «Найти лиды», синхронизации и кнопок сворачивания панелей; «Найти лиды» остаётся в поиске", async () => {
     render(<App />);
     const nav = await screen.findByLabelText("Навигация");
@@ -179,6 +158,7 @@ describe("интерфейс CRM", () => {
     await within(nav).findByText("Коллекции");
     expect(within(top()).queryByRole("button", { name: "Найти лиды" })).toBeNull();
     expect(top().querySelector(".sync-chip")).toBeNull();
+    expect(top().querySelector(".ws-avatars")).toBeNull();
     expect(within(top()).queryByRole("button", { name: /Свернуть|Показать панель/ })).toBeNull();
   });
 
@@ -196,7 +176,7 @@ describe("интерфейс CRM", () => {
   });
 });
 
-describe("редакторы воронок и ролей (демо-ядро)", () => {
+describe("редактор воронок (демо-ядро)", () => {
   it("удаление этапа переносит сделки на выбранный этап", async () => {
     const stages = (await api.wsList("pipeline_stages", { sort: [{ field: "position", dir: "asc" }] })).items;
     const deals = (await api.wsList("deals")).items;
@@ -207,10 +187,6 @@ describe("редакторы воронок и ролей (демо-ядро)", 
     expect((await api.wsList("deals")).items.filter((d) => d.stage_id === from.id)).toHaveLength(0);
     expect((await api.wsList("pipeline_stages")).items.some((s) => s.id === from.id)).toBe(false);
     await expect(api.wsDeleteStage(to.id, to.id)).rejects.toBeDefined();
-  });
-
-  it("локальное рабочее пространство не показывает роли", async () => {
-    expect(await api.wsRoles()).toEqual({ roles: [], catalog: [] });
   });
 });
 
@@ -223,18 +199,6 @@ describe("свои поля (демо-ядро)", () => {
     expect(card.custom_field_values?.map((v) => v.id)).toEqual([value.id]);
     await api.wsSave("custom_field_values", value.id, { value: null });
     expect((await api.wsCard("companies", company.id)).custom_field_values?.[0]?.value).toBeNull();
-  });
-});
-
-describe("загрузка локальной CRM (демо-ядро)", () => {
-  it("локальная учётная запись не загружает в облако", async () => {
-    await expect(api.wsUploadLocal()).rejects.toBeDefined();
-  });
-});
-
-describe("присутствие (демо-ядро)", () => {
-  it("в локальном Workspace никого нет", async () => {
-    expect(await api.wsPresence()).toEqual([]);
   });
 });
 

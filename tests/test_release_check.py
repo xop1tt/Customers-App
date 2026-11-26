@@ -1,8 +1,8 @@
 """Готовность сборки: проверка release-check.cjs на настоящих файлах и на испорченных копиях.
 
 Канал один (ADR-034). Каждая порча — реальная ошибка: изменённая идентичность потеряла бы данные, ключи или
-обновления пользователей; вернувшиеся Beta-сборка, Debug Menu или devtools попали бы в релиз; ключ сервера
-Supabase попал бы в клиент. Скрипт обязан найти каждую. Без Node тест падает, а не пропускается.
+обновления пользователей; вернувшиеся Beta-сборка, Debug Menu или devtools попали бы в релиз; облако, адрес или
+ключ Supabase вернулись бы в клиент (ADR-100). Скрипт обязан найти каждую. Без Node тест падает, а не пропускается.
 """
 import json
 import re
@@ -19,7 +19,6 @@ FILES = [
     "src-tauri/Cargo.toml",
     "src-tauri/src/identity.rs",
     "src-tauri/src/lib.rs",
-    "src-tauri/src/cloud/config.rs",
     "installer/Customers.iss",
     "scripts/release-check.cjs",
 ]
@@ -108,7 +107,10 @@ BREAKAGES = {
         r, "installer/Customers.iss", lambda t: t.replace('#define AppName "Customers"', '#ifdef Beta\n#endif\n#define AppName "Customers"')
     ),
     "новое имя exe в установщике": lambda r: edit(r, "installer/Customers.iss", lambda t: t.replace('"Customers.exe"', '"Customers CRM.exe"')),
-    "вернулось облако Beta": lambda r: edit(r, "src-tauri/src/cloud/config.rs", lambda t: t + '\nconst B: &str = "SUPABASE_BETA_URL";\n'),
+    "вернулся облачный модуль": lambda r: add_file(r, "src-tauri/src/cloud/mod.rs", "pub fn sign_in() {}\n"),
+    "вернулось подключение облачного модуля": lambda r: edit(r, "src-tauri/src/lib.rs", lambda t: t + "\npub mod cloud;\n"),
+    "адрес Supabase в клиенте": lambda r: edit(r, "src-tauri/src/lib.rs", lambda t: t + '\nconst U: Option<&str> = option_env!("SUPABASE_URL");\n'),
+    "публичный ключ Supabase в интерфейсе": lambda r: add_file(r, "src/cloud.ts", 'export const KEY = "sb_publishable_abcdefgh123";\n'),
     "service_role в клиенте": lambda r: edit(r, "src-tauri/src/lib.rs", lambda t: t + '\nconst K: &str = "SUPABASE_SERVICE_ROLE_KEY";\n'),
     "секретный ключ в клиенте": lambda r: edit(r, "src-tauri/src/lib.rs", lambda t: t + '\nconst K: &str = "sb_secret_abcdefgh123";\n'),
 }

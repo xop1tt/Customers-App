@@ -105,19 +105,11 @@ export interface Snapshot {
   databaseSize: number;
 }
 
-export interface CloudUserInfo {
-  id: string;
-  email: string;
-  newEmail: string | null;
-  confirmed: boolean;
-}
-
 export interface SessionInfo {
   id: string;
   displayName: string;
-  /** Аватар в виде data-URL; приходит из облака вместе с остальными настройками. */
+  /** Аватар в виде data-URL. */
   avatar?: string | null;
-  cloudUser: CloudUserInfo | null;
   databasePath: string;
 }
 
@@ -197,7 +189,6 @@ export interface AccountPrefs {
 export interface BootInfo {
   version: string;
   platform: "windows" | "macos" | "linux";
-  cloudAvailable: boolean;
   session: SessionInfo | null;
   device: DevicePrefs;
   error: string | null;
@@ -224,19 +215,6 @@ export interface SearchStatus {
   running: boolean;
   progress: string | null;
   lastReport: SearchReport | null;
-}
-
-export type SyncKind = "idle" | "syncing" | "offline" | "failed";
-
-export interface SyncStatus {
-  enabled: boolean;
-  kind: SyncKind;
-  message: string | null;
-  lastSync: string | null;
-  pending: number;
-  /** Итоги последней синхронизации: отправлено и получено изменений. */
-  lastPushed?: number;
-  lastPulled?: number;
 }
 
 export type UpdatePhase =
@@ -457,8 +435,6 @@ export interface CmdError {
   message: string;
 }
 
-export type AuthCallback = { kind: "newPassword" | "signedIn" } | { kind: "message" | "error"; message: string };
-
 // ---------------------------------------------------------------- Customers 2.0: Workspace и CRM
 
 export interface WorkspaceInfo {
@@ -470,7 +446,7 @@ export interface WorkspaceInfo {
   rank: number;
   permissions: string[];
   members: number;
-  /** Workspace в Supabase; иначе — только на этом устройстве. */
+  /** Копия облачного Workspace прежних версий; ядро переводит такие в локальные (ADR-100). */
   remote: boolean;
   defaultCurrency: string;
 }
@@ -485,27 +461,12 @@ export interface WsMember {
   email: string | null;
 }
 
-export interface WsPresence { user_id: string; entity_type: string | null; entity_id: string | null; seen_at: string }
-/** Какие записи видит роль (ADR-096): все, свой отдел с подотделами (и записи без отдела), только свои. */
-export type RecordScope = "all" | "department" | "own";
-export interface WsRole { key: string; name: string; rank: number; system: boolean; permissions: string[]; scope?: RecordScope }
-/** Отдел Workspace (ADR-096): дерево по `parent_id`, руководитель — `head_id`. */
-export interface Department { id: string; name: string; parent_id: string | null; head_id: string | null; position: number }
-export interface WsRoles { roles: WsRole[]; catalog: { key: string; description: string }[] }
-
 export interface WsState {
-  isCloud: boolean;
   me: string;
   workspaces: WorkspaceInfo[];
   active: string | null;
   permissions: string[];
   members: WsMember[];
-  pending: number;
-  rejected: number;
-  conflicts: number;
-  syncing: boolean;
-  lastSync: string | null;
-  error: string | null;
 }
 
 /** Строка CRM-таблицы как есть: системные столбцы и поля сущности (snake_case, как в базе). */
@@ -547,28 +508,6 @@ export interface WsCollection extends CrmRecord {
   count: number;
 }
 
-export interface WsConflict {
-  id: string;
-  entityType: string;
-  entityId: string;
-  field: string;
-  kept: unknown;
-  lost: unknown;
-  lostBy: string | null;
-  keptBy: string | null;
-  at: string | null;
-}
-
-export interface WsOp {
-  op_id: string;
-  entity: string;
-  id: string;
-  kind: string;
-  fields: Record<string, unknown>;
-  state: string;
-  last_error: string | null;
-}
-
 export interface WsStageChange { from_stage_id: string | null; to_stage_id: string; changed_by: string | null; changed_at: string }
 
 /** Строка истории этапов для отчётов (ws_stage_history). */
@@ -587,7 +526,6 @@ export interface WsCard {
   history?: WsStageChange[];
   dealContacts?: CrmRecord[];
   dealLinks?: CrmRecord[];
-  conflicts: WsConflict[];
 }
 
 export interface WsConverted {
@@ -599,212 +537,12 @@ export interface WsConverted {
   reusedContact: boolean;
 }
 
-export interface WsInvitation { id: string; email: string; role: string; roleName: string; createdAt: string; expiresAt: string; sentCount: number; lastSentAt: string; invitedBy: string | null }
-export interface WsAuditItem { id: number; actor_id: string | null; action: string; entity_type: string | null; entity_id: string | null; at: string; details: Record<string, unknown> }
-export interface WsAuditQuery { actor?: string | null; action?: string | null; entityId?: string | null; offset?: number }
-
-/** Входящее приглашение: адресовано почте вашей учётной записи; принять можно в приложении, без ссылки. */
-export interface WsIncoming { id: string; workspaceName: string; roleName: string; invitedByName: string; createdAt: string; expiresAt: string }
-
-export interface WsInvite { id: string; email: string; role: string; expiresAt: string; token: string; link: string }
-
-// ---------------------------------------------------------------- сотрудники, чат и уведомления
-
-/** Сотрудник в справочнике Workspace (snake_case — как отдаёт сервер). */
-export interface TeamMember {
-  user_id: string;
-  display_name: string;
-  avatar: string | null;
-  email: string | null;
-  role: string;
-  role_name: string;
-  rank: number;
-  joined_at: string | null;
-  title: string;
-  department: string;
-  /** Отдел-сущность (ADR-096); `department` — его название. */
-  department_id?: string | null;
-  manager_id: string | null;
-  /** Дата прихода в компанию (ГГГГ-ММ-ДД); по умолчанию — дата входа в рабочее пространство. */
-  hired_on: string | null;
-  last_seen: string | null;
-  online: boolean;
-  can_edit: boolean;
-  /** Нет связи с облаком: данные из локальной копии, без карточек и статуса. */
-  offline?: boolean;
-}
-
-export interface MemberPatch { title?: string; department?: string; managerId?: string | null; hiredOn?: string | null }
-
-export interface ChatParticipant { user_id: string; role: "owner" | "admin" | "member"; active: boolean }
-
-export interface ChatLast { seq: number; author_id: string | null; kind: "text" | "system"; body: string; deleted: boolean; created_at: string }
-
-export interface ChatConversation {
-  id: string;
-  kind: "direct" | "group";
-  title: string | null;
-  members_can_add: boolean;
-  created_by: string | null;
-  created_at: string;
-  last_message_at: string;
-  my_role: "owner" | "admin" | "member";
-  muted: boolean;
-  last_read_seq: number;
-  participants: ChatParticipant[];
-  last: ChatLast | null;
-  unread: number;
-}
-
-export interface ChatMessage {
-  id: string;
-  seq: number;
-  author_id: string | null;
-  kind: "text" | "system";
-  body: string;
-  mentions: string[];
-  created_at: string;
-  edited_at: string | null;
-  deleted: boolean;
-  /** Карточки CRM в сообщении; название и подпись — только при праве просмотра. */
-  attachments?: ChatAttachment[];
-  /** Файлы в сообщении (только если сервер чата их поддерживает). */
-  files?: ChatFile[];
-}
-
-export interface ChatFile { id: string; name: string; size: number; mime: string }
-
-export type ChatCardType = "company" | "contact" | "crm_lead" | "deal";
-export interface ChatCardRef { type: ChatCardType; id: string }
-export interface ChatAttachment extends ChatCardRef { title: string; subtitle: string; available: boolean }
-
-export interface ChatPage { conversation: ChatConversation; messages: ChatMessage[] }
-
-export interface ChatFresh { seq: number; conversation_id: string; kind: "direct" | "group"; title: string | null; author_id: string | null; author_name: string; body: string; mentioned: boolean }
-
-export interface AppNotification {
-  id: string;
-  seq: number;
-  kind: "mention" | "added_to_group" | "note_mention" | "comment_mention" | "task_assigned" | "record_assigned";
-  actor_id: string | null;
-  actor_name: string;
-  conversation_id: string | null;
-  message_id: string | null;
-  entity_type: string | null;
-  entity_id: string | null;
-  excerpt: string;
-  created_at: string;
-  read: boolean;
-}
-
-export interface ChatPoll {
-  cursor: number;
-  /** Непрочитанные сообщения по обсуждениям. */
-  unread: Record<string, number>;
-  /** Новые сообщения после прошлого опроса. */
-  fresh: ChatFresh[];
-  notifications: AppNotification[];
-  freshNotifications: AppNotification[];
-  /** Чат работает: облачное рабочее пространство и сервер с миграцией чата. */
-  available: boolean;
-  /** Сервер без миграции 20261110170000. */
-  missing?: boolean;
-  /** Открыт канал Realtime: новое приходит сразу, без ожидания опроса. */
-  live?: boolean;
-}
-
 // ---------------------------------------------------------------- локальная модель (OpenAI-совместимый ответ)
 
 export interface AiToolCall { id?: string; type?: string; function: { name: string; arguments: string | Record<string, unknown> } }
 /** Что модель принимает кроме текста; null — неизвестно (файл отправляется, ответ сервера покажет, принят ли он). */
 export interface AiCaps { vision: boolean | null; audio: boolean | null }
 export interface AiChatReply { choices: { message: { role: string; content: string | null; tool_calls?: AiToolCall[] }; finish_reason?: string }[] }
-
-// ---------------------------------------------------------------- маркетплейс
-
-export type MarketCategory = "crm" | "telephony" | "messaging" | "email" | "documents" | "analytics" | "marketing" | "other";
-export type MarketEntity = "company" | "contact" | "crm_lead" | "deal";
-export interface MarketAction { id: string; label: string; entity: MarketEntity; url: string }
-/** Манифест интеграции: кнопки в карточках, события на сервер разработчика, права; окно — на будущее. */
-export interface MarketManifest {
-  schema: 1;
-  scopes?: string[];
-  webhooks?: { url: string; events: string[] };
-  actions?: MarketAction[];
-  window?: { url: string };
-}
-export interface MarketInstall { version: string; manifest: MarketManifest; enabled: boolean; installed_at: string; update_available: boolean }
-/** Замечание автопроверки (lib/connectors.ts и private.market_checks на сервере). */
-export interface MarketCheck { id: string; label: string; level: "ok" | "warn" | "fail"; detail: string }
-export interface MarketVersion {
-  id: string; version: string; status: "pending" | "approved" | "rejected" | "superseded"; review_note: string | null; created_at: string; manifest: MarketManifest;
-  /** Отчёт серверной автопроверки при подаче (ADR-095); у версий, поданных раньше, — пусто. */
-  checks?: MarketCheck[];
-  reviewed_at?: string | null;
-}
-export interface MarketApp {
-  id: string;
-  slug: string;
-  name: string;
-  tagline: string;
-  description: string;
-  category: MarketCategory;
-  icon: string;
-  website: string | null;
-  support_email: string | null;
-  developer_name: string;
-  status: "draft" | "listed" | "suspended";
-  version: string | null;
-  manifest: MarketManifest | null;
-  updated_at: string;
-  installs: number;
-  installed: MarketInstall | null;
-  /** Только в «Моих интеграциях». */
-  versions?: MarketVersion[];
-  status_note?: string | null;
-}
-/** Компания-разработчик: подать коннектор может только проверенная (ADR-083). */
-export interface MarketCompany {
-  legal_name: string; country: string; reg_number: string; website: string; contact_name: string; contact_email: string; privacy_url: string;
-  status: "none" | "submitted" | "verified" | "rejected";
-  note: string | null;
-  submitted_at: string | null;
-}
-export interface MarketCompanyReview { user_id: string; account_email?: string | null; company: MarketCompany }
-export type MarketAuditAction = "version_approved" | "version_rejected" | "app_suspended" | "app_restored" | "company_verified" | "company_rejected" | "moderator_added" | "moderator_removed";
-export interface MarketReview {
-  version_id: string; version: string; manifest: MarketManifest; created_at: string; live_manifest: MarketManifest | null; developer_email: string | null; app: MarketApp;
-  /** ADR-095: что опубликовано сейчас, автопроверка при подаче и сейчас, компания и прошлые решения. Старый сервер их не присылает. */
-  live_version?: string | null;
-  checks?: MarketCheck[];
-  server_checks?: MarketCheck[];
-  company?: MarketCompany | null;
-  history?: { action: MarketAuditAction; note: string | null; created_at: string; version: string | null }[];
-}
-/** Запись журнала решений модераторов (только модераторам). */
-export interface MarketAuditEntry {
-  id: number; created_at: string; action: MarketAuditAction; actor_email: string | null; subject_email: string | null;
-  app_id: string | null; version_id: string | null; note: string | null;
-  details: { app_name?: string; version?: string; developer_name?: string; developer_email?: string; legal_name?: string; email?: string; scopes?: string[]; checks?: MarketCheck[] };
-}
-export interface MarketModerator { user_id: string; email: string | null; added_at: string; added_by_email: string | null; me: boolean }
-export interface MarketNotice { id: number; kind: Exclude<MarketAuditAction, "moderator_added" | "moderator_removed">; app_id: string | null; title: string; note: string | null; created_at: string; read: boolean }
-export interface MarketNotices { unread: number; items: MarketNotice[] }
-export interface MarketInstalled { app_id: string; name: string; icon: string; actions: MarketAction[]; scopes: string[] }
-export interface MarketSubmission {
-  id?: string;
-  slug: string;
-  name: string;
-  developer_name: string;
-  tagline: string;
-  description: string;
-  category: MarketCategory;
-  icon: string;
-  website: string;
-  support_email: string;
-  version: string;
-  manifest: MarketManifest;
-}
 
 // ------------------------------------------------------------------ импорт таблиц (B1)
 

@@ -1,4 +1,4 @@
-// Настройки: все разделы открываются; тема и язык переключаются и сохраняются; смена пароля.
+// Настройки: все разделы открываются; тема и язык переключаются и сохраняются.
 {
   const { scenario, waitFor, $, $$, withText, click, clickText, type, check, eq, core, sleep, norm, shot, golden, skipIf, hasCore, healthy } = E2E;
 
@@ -71,23 +71,5 @@
     await waitFor(() => $$(".rail-btn").some((b) => (b.getAttribute("aria-label") || "").startsWith("Поиск клиентов")), "рейка снова русская");
     eq((await core("device_prefs")).language, "ru", "язык после возврата");
     await closeSettings();
-  });
-
-  scenario("change-password", "Аккаунт: смена пароля, вход с новым паролем, старый отклоняется", async () => {
-    skipIf(!hasCore, "нет ядра Tauri");
-    const a = E2E.account;
-    const next = a.password + "-2";
-    const old = a.password;
-    await core("change_cloud_password", { current: old, new: next, confirm: next });
-    a.password = next;
-    E2E.account.password = next;
-    // Старый пароль больше не подходит.
-    await core("logout");
-    const bad = await E2E.coreFails("cloud_sign_in", { email: a.email, password: old });
-    check(bad.length > 0, "старый пароль принят");
-    await core("cloud_sign_in", { email: a.email, password: next });
-    check((await core("boot_info")).session.displayName === a.name, "вход с новым паролем не открыл сессию");
-    // Интерфейс узнаёт о смене сессии и возвращается в рабочее окно (то же делает приложение при перезапуске).
-    await sleep(500);
   });
 }

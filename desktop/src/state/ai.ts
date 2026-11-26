@@ -10,7 +10,6 @@ import { type AiAttachment, type ContentPart, slimContent, userContent } from ".
 import { can, memberName } from "../lib/crm";
 import type { AiConfig } from "../lib/hub";
 import { errText, getState, openSettings, patchDevice, setSection, setState, toast } from "./store";
-import { openMarket } from "./market";
 import { getHub } from "./hub";
 import type { SettingsSection } from "./store";
 import type { DevicePrefs } from "../api/types";
@@ -138,7 +137,6 @@ async function runTool(tool: AiTool, a: Record<string, unknown>): Promise<string
     }
     case "open_section": setSection(String(a.section) as SectionId); return `Открыт раздел «${String(a.section)}».`;
     case "open_settings": if (a.section === "ai") openSettings("ai" as SettingsSection); else openSettings(String(a.section) as SettingsSection); return `Открыты настройки «${String(a.section)}».`;
-    case "open_connectors": openMarket(a.page === "installed" ? "installed" : a.page === "review" ? "review" : "catalog"); return "Окно «Коннекторы» открыто.";
     case "set_setting": await patchDevice({ [String(a.key)]: a.value } as Partial<DevicePrefs>); return `Настройка «${String(a.key)}» изменена.`;
     case "set_favorite": { const ids = asIds(); await api.setFavorite(ids, a.on === true); return `Готово: лидов ${ids.length}.`; }
     case "archive_leads": { const ids = asIds(); await api.setArchived(ids, a.on === true); return `Готово: лидов ${ids.length}.`; }

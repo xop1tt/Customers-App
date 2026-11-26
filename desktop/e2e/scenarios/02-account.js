@@ -1,30 +1,18 @@
-// Первый вход: регистрация в облаке (тестовый сервер вместо Supabase), мастер первого запуска, выход и повторный вход.
+// Первый запуск: входа нет, локальная учётная запись открывается сразу; мастер первого запуска; имя профиля.
 {
-  const { scenario, waitFor, $, $$, withText, click, clickText, type, check, eq, core, hasCore, norm, healthy, shot, skipIf } = E2E;
-  // Пароль собирается во время выполнения (CodeQL не любит литералы-пароли).
-  const PASSWORD = ["E2e", "Test", "Pass", "9"].join("");
+  const { scenario, waitFor, $, $$, withText, click, type, check, eq, core, hasCore, norm, healthy, shot, skipIf } = E2E;
   const NAME = "e2e-owner";
-  const EMAIL = "e2e-owner@e2e-test.com";
-  E2E.account = { name: NAME, email: EMAIL, password: PASSWORD };
+  E2E.account = { name: NAME };
 
-  scenario("register", "Регистрация в облаке (шифрование базы, ключ в системном хранилище)", async () => {
-    await waitFor(() => $(".auth-card"), "экран входа", { timeout: 20000 });
-    await clickText(".auth-links .link", "Создать аккаунт");
-    await waitFor(() => $(".auth-card input[name=nickname]"), "поле имени пользователя");
-    type($(".auth-card input[name=nickname]"), NAME);
-    type($(".auth-card input[name=email]"), EMAIL);
-    const [p1, p2] = $$(".auth-card input[type=password]");
-    type(p1, PASSWORD);
-    type(p2, PASSWORD);
-    await waitFor(() => !$(".auth-submit").disabled, "кнопка «Зарегистрироваться» доступна");
-    await shot("01-register");
-    click($(".auth-submit"));
-    await waitFor(() => $(".welcome, .shell"), "мастер первого запуска или рабочее окно после регистрации", { timeout: 40000 });
-    healthy("после регистрации");
+  scenario("local-start", "Первый запуск без входа: база зашифрована ключом из системного хранилища", async () => {
+    await waitFor(() => $(".welcome, .shell"), "мастер первого запуска или рабочее окно", { timeout: 40000 });
+    check(!$(".auth, .auth-card"), "показан экран входа");
+    healthy("при первом запуске");
+    await shot("01-first-start");
     if (hasCore) {
       const s = await core("boot_info");
-      check(s.session && s.session.displayName === NAME, `сессия после регистрации: ${JSON.stringify(s.session)}`);
-      eq(s.session.cloudUser && s.session.cloudUser.email, EMAIL, "почта облачной учётной записи");
+      check(s.session && /^local-/.test(s.session.id), `локальная сессия: ${JSON.stringify(s.session)}`);
+      check(!("cloudUser" in s.session), "в сессии остались сведения об облачной учётной записи");
     }
   }, { fatal: true });
 
@@ -47,28 +35,20 @@
       const ws = await core("ws_state");
       const active = ws.workspaces.find((w) => w.id === ws.active);
       check(active && active.name === "Студия E2E", `рабочее пространство после мастера: ${JSON.stringify(active)}`);
-      eq(ws.isCloud, true, "облачная учётная запись");
+      check(ws.workspaces.every((w) => !w.remote), "есть облачное рабочее пространство");
+      check(!("isCloud" in ws), "в состоянии рабочего пространства остались сведения об облаке");
     }
     await shot("03-shell");
   }, { fatal: true });
 
-  scenario("relogin", "Выход и повторный вход: пароль проверяется, база открывается ключом из хранилища", async () => {
-    skipIf(!hasCore, "нет ядра Tauri");
-    // Выход — через меню учётной записи, как у пользователя: состояние интерфейса и ядра меняется вместе.
+  scenario("profile", "Профиль: имя сохраняется локально; в меню учётной записи нет «Выйти» и «Коннекторы»", async () => {
     click(await waitFor(() => $(".account-btn"), "кнопка учётной записи"), "учётная запись");
-    await clickText(".menu-item", "Выйти", "пункт «Выйти»");
-    await waitFor(() => $(".auth-card"), "экран входа после выхода", { timeout: 20000 });
-    await waitFor(() => /Вход/.test(norm($(".auth-card h2")?.textContent)), "форма входа");
-    type($(".auth-card input[name=email]"), EMAIL);
-    // Неверный пароль отклоняется.
-    type($(".auth-card input[type=password]"), PASSWORD + "x");
-    click($(".auth-submit"));
-    await waitFor(() => $(".auth-card .notice, .auth-card [role=alert]"), "сообщение о неверном пароле");
-    type($(".auth-card input[type=password]"), PASSWORD);
-    click($(".auth-submit"));
-    await waitFor(() => $(".shell"), "рабочее окно после входа", { timeout: 40000 });
-    healthy("после повторного входа");
-    const ws = await core("ws_state");
-    check(ws.workspaces.some((w) => w.name === "Студия E2E"), "рабочее пространство пропало после повторного входа");
+    const items = await waitFor(() => { const l = $$(".menu-item").map((b) => norm(b.textContent)); return l.length ? l : null; }, "меню учётной записи");
+    check(!items.some((t) => /Выйти|Коннекторы/.test(t)), `в меню учётной записи остались облачные пункты: ${JSON.stringify(items)}`);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    skipIf(!hasCore, "нет ядра Tauri");
+    const s = await core("set_profile", { name: NAME });
+    eq(s.displayName, NAME, "имя профиля");
+    eq((await core("boot_info")).session.displayName, NAME, "имя профиля после сохранения");
   });
 }

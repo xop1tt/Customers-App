@@ -3,10 +3,10 @@
 import { call } from "./backend";
 import type {
   PortableState,
-  AccountPrefs, AuthCallback, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
+  AccountPrefs, CallAppInfo, SessionInfo, BackupFile, BootInfo, CrashReport, CrmReport, CrmState, DevicePrefs, DrivesState, ExportFieldInfo,
   LeadEvent, MailAccount, MailProviderInfo, MailState, PathsInfo, PowerState, ReleaseSummary, SearchOverview, SearchSettings,
-  SearchStatus, Snapshot, SyncStatus, UpdateInfo, WhatsNew,
-  CrmRecord, WsAuditItem, WsAuditQuery, WsCard, WsCollection, WsConflict, WsConverted, WsInvitation, WsIncoming, WsInvite, WsOp, WsQuery, WsPresence, WsRoles, WsState, TeamMember, MemberPatch, ChatPoll, Department, RecordScope,
+  SearchStatus, Snapshot, UpdateInfo, WhatsNew,
+  CrmRecord, WsCard, WsCollection, WsConverted, WsQuery, WsState,
   AiCaps, AiChatReply, ImportBatch, ImportFile, ImportOptions, ImportPreview, ImportResult, StageChange, CrmExportField, CrmExportRequest, CrmMergeInfo, CrmMergeRequest,
 } from "./types";
 
@@ -15,22 +15,7 @@ const ids = (ids: string[]) => ({ ids });
 export const api = {
   // запуск и сессия
   bootInfo: () => call<BootInfo>("boot_info"),
-  logout: () => call("logout"),
-  cloudSignIn: (email: string, password: string) => call("cloud_sign_in", { email, password }),
-  cloudSignUp: (email: string, password: string, confirm: string, username: string) => call<string | null>("cloud_sign_up", { email, password, confirm, username }),
   setProfile: (name?: string, avatar?: string) => call<SessionInfo>("set_profile", { name: name ?? null, avatar: avatar ?? null }),
-  cloudConfirm: (email: string, code: string) => call("cloud_confirm", { email, code }),
-  cloudResendConfirmation: (email: string) => call("cloud_resend_confirmation", { email }),
-  cloudRequestReset: (email: string) => call<string>("cloud_request_reset", { email }),
-  cloudFinishReset: (email: string, code: string, password: string, confirm: string) => call("cloud_finish_reset", { email, code, password, confirm }),
-  cloudSetPasswordAfterRecovery: (password: string, confirm: string) => call("cloud_set_password_after_recovery", { password, confirm }),
-  changeCloudPassword: (current: string, next: string, confirm: string) => call("change_cloud_password", { current, new: next, confirm }),
-  changeCloudEmail: (email: string, password: string) => call("change_cloud_email", { email, password }),
-  confirmCloudEmail: (email: string, code: string) => call("confirm_cloud_email", { email, code }),
-  resendCloudEmailChange: () => call("resend_cloud_email_change"),
-  deleteCloudAccount: (password: string) => call<string>("delete_cloud_account", { password }),
-  cloudStats: () => call<Record<string, number>>("cloud_stats"),
-  handleAuthUrl: (url: string) => call<AuthCallback>("handle_auth_url", { url }),
 
   // данные
   snapshot: () => call<Snapshot>("snapshot"),
@@ -65,7 +50,7 @@ export const api = {
   setUiLanguage: (language: string) => call("set_ui_language", { language }),
   powerState: () => call<PowerState>("power_state"),
 
-  // поиск и синхронизация
+  // поиск
   searchOverview: () => call<SearchOverview>("search_overview"),
   setSearchSettings: (settings: SearchSettings) => call("set_search_settings", { settings }),
   setVkToken: (token: string) => call("set_vk_token", { token }),
@@ -73,8 +58,6 @@ export const api = {
   runSearch: (only?: string[]) => call("run_search", { only: only ?? null }),
   stopSearch: () => call("stop_search"),
   searchStatus: () => call<SearchStatus>("search_status"),
-  syncStatus: () => call<SyncStatus>("sync_status"),
-  syncNow: () => call("sync_now"),
 
   // интеграции
   drivesState: () => call<DrivesState>("drives_state"),
@@ -110,8 +93,6 @@ export const api = {
   // Customers 2.0: Workspace и CRM
   wsState: () => call<WsState>("ws_state"),
   wsSwitch: (id: string) => call<WsState>("ws_switch", { id }),
-  wsRefresh: () => call<WsState>("ws_refresh"),
-  wsSyncNow: () => call<WsState>("ws_sync_now"),
   wsCreateWorkspace: (name: string) => call<WsState>("ws_create_workspace", { name }),
   wsRenameWorkspace: (name: string) => call<WsState>("ws_rename_workspace", { name }),
   wsSetLocalDetails: (name: string, currency: string) => call<WsState>("ws_set_local_details", { name, currency }),
@@ -137,43 +118,9 @@ export const api = {
   wsMergeUndo: () => call<CrmMergeInfo>("ws_merge_undo", {}),
   wsReorderCollections: (list: string[]) => call("ws_reorder_collections", ids(list)),
   wsHideCollection: (id: string, hidden: boolean) => call("ws_hide_collection", { id, hidden }),
-  wsConflicts: () => call<{ conflicts: WsConflict[]; rejected: WsOp[] }>("ws_conflicts"),
-  wsResolveConflict: (id: string, takeLost: boolean) => call("ws_resolve_conflict", { id, takeLost }),
-  wsDismissRejected: () => call<number>("ws_dismiss_rejected"),
-  wsInvite: (email: string, role: string) => call<WsInvite>("ws_invite", { email, role }),
-  wsInvitations: () => call<WsInvitation[]>("ws_invitations"),
-  wsRevokeInvitation: (id: string) => call<boolean>("ws_revoke_invitation", { id }),
-  wsResendInvitation: (id: string) => call<WsInvite>("ws_resend_invitation", { id }),
-  wsAudit: (q: WsAuditQuery = {}) => call<{ items: WsAuditItem[]; more: boolean }>("ws_audit", { actor: q.actor ?? null, action: q.action ?? null, entityId: q.entityId ?? null, offset: q.offset ?? 0 }),
-  wsTransferOwnership: (user: string) => call<WsState>("ws_transfer_ownership", { user }),
-  wsDeleteWorkspace: (confirmName: string) => call<WsState>("ws_delete_workspace", { confirmName }),
-  // Приглашения «по почте»: ядро получит команды вместе с новой базой (ADR-082); до этого список всегда пуст.
-  wsIncoming: () => call<WsIncoming[]>("ws_incoming").catch(() => [] as WsIncoming[]),
-  wsAcceptIncoming: (id: string) => call<WsState>("ws_accept_incoming", { id }),
-  wsDeclineIncoming: (id: string) => call<boolean>("ws_decline_incoming", { id }),
-  wsAcceptInvitation: (token: string) => call<WsState>("ws_accept_invitation", { token }),
-  wsSetMemberRole: (user: string, role: string) => call<WsState>("ws_set_member_role", { user, role }),
-  wsRemoveMember: (user: string) => call<WsState>("ws_remove_member", { user }),
-  wsUploadLocal: () => call<{ workspace: string; copied: number; skipped: number; state: WsState }>("ws_upload_local"),
-  wsPresence: (entityType?: string, entityId?: string) => call<WsPresence[]>("ws_presence", { entityType: entityType ?? null, entityId: entityId ?? null }),
   wsAttachAdd: (entityType: string, entityId: string, name: string, mime: string, data: string) => call<CrmRecord>("ws_attach_add", { entityType, entityId, name, mime, data }),
   wsAttachSave: (id: string, path: string) => call<string>("ws_attach_save", { id, path }),
-  wsRoles: () => call<WsRoles>("ws_roles"),
-  wsSaveRole: (key: string, name: string, rank: number, permissions: string[]) => call<WsRoles>("ws_save_role", { key, name, rank, permissions }),
-  wsDeleteRole: (key: string) => call<WsRoles>("ws_delete_role", { key }),
-  wsSetRoleScope: (key: string, scope: RecordScope) => call<WsRoles>("ws_set_role_scope", { key, scope }),
-  wsDepartments: () => call<Department[]>("ws_departments"),
-  wsSaveDepartment: (d: { id?: string | null; name: string; parent?: string | null; head?: string | null }) =>
-    call<{ id: string }>("ws_save_department", { id: d.id ?? null, name: d.name, parent: d.parent ?? null, head: d.head ?? null }),
-  wsDeleteDepartment: (id: string) => call<null>("ws_delete_department", { id }),
-  wsSetMemberDepartment: (user: string, department: string | null) => call<null>("ws_set_member_department", { user, department }),
   wsDeleteStage: (stage: string, moveTo: string) => call<{ moved: number }>("ws_delete_stage", { stage, moveTo }),
-  wsLeave: () => call<WsState>("ws_leave"),
-  wsTeam: () => call<TeamMember[]>("ws_team"),
-  wsUpdateMember: (user: string, fields: MemberPatch) => call<TeamMember>("ws_update_member", { user, fields }),
-  /** Действие чата: имя функции сервера (chat_list, chat_send…) и её аргументы без префикса `p_`. */
-  wsChat: <T = unknown>(action: string, args: Record<string, unknown> = {}) => call<T>("ws_chat", { action, args }),
-  wsChatPoll: () => call<ChatPoll>("ws_chat_poll"),
   // интеграции и локальная модель
   hubLoad: () => call<unknown>("hub_load"),
   hubSave: (value: unknown) => call("hub_save", { value }),
@@ -181,7 +128,6 @@ export const api = {
   aiCapabilities: (baseUrl: string, apiKey: string | undefined, model: string) => call<AiCaps>("ai_capabilities", { baseUrl, apiKey: apiKey ?? null, model }),
   aiNotify: (title: string, body: string) => call<void>("ai_notify", { title, body }),
   aiChat: (baseUrl: string, apiKey: string | undefined, body: unknown) => call<AiChatReply>("ai_chat", { baseUrl, apiKey: apiKey ?? null, body }),
-  wsMarket: <T = unknown>(action: string, args: Record<string, unknown> = {}) => call<T>("ws_market", { action, args }),
 
   // обновления
   updateInfo: () => call<UpdateInfo>("update_info"),

@@ -1,15 +1,12 @@
 // Демо-реализация команд для запуска вне Tauri: браузер, тесты и снимки экрана.
 // Данные выдуманные; в собранное приложение эта часть не загружается (динамический импорт).
 
-import { IN_TEST } from "./wsMock";
 import catalog from "../../src-tauri/data/osm_catalog.json";
 import type {
   AccountPrefs, BootInfo, DevicePrefs, DrivesState, Exclusion, ExclusionKind, Lead, OsmCategory, SearchSettings, SearchStatus, SessionInfo, Snapshot, SourceReport,
-  SyncStatus, UpdateInfo, WsState, AiChatReply,
+  UpdateInfo, AiChatReply,
 } from "./types";
 import { wsCall } from "./wsMock";
-import { teamCall } from "./chatMock";
-import { marketCall } from "./marketMock";
 
 type Handler = (p: unknown) => void;
 const listeners = new Map<string, Set<Handler>>();
@@ -177,14 +174,10 @@ let search: SearchStatus = {
   },
 };
 
-// Живое демо начинается со страницы входа и всегда облачное; тесты по-прежнему стартуют с открытой сессией.
-let signedIn = demo.has("auth") ? false : IN_TEST ? !demo.has("local") : false;
-let cloud = IN_TEST ? demo.has("cloud") : true;
+// Приложение локальное (ADR-100): входа нет, сессия открыта сразу.
 let profile: { name: string | null; avatar: string | null } = { name: null, avatar: null };
-let signedEmail = "alex@example.ru";
 const session = (): SessionInfo => ({
-  id: cloud ? "cloud-1" : "alex", displayName: profile.name ?? (cloud ? signedEmail : "alex"), avatar: profile.avatar,
-  cloudUser: cloud ? { id: "1", email: signedEmail, newEmail: null, confirmed: true } : null, databasePath: "/Users/demo/Library/Application Support/Customers/demo/leads.db",
+  id: "local-1", displayName: profile.name ?? "alex", avatar: profile.avatar, databasePath: "/Users/demo/Library/Application Support/Customers/demo/leads.db",
 });
 
 let update: UpdateInfo = {
@@ -192,7 +185,6 @@ let update: UpdateInfo = {
   stagedVersion: demo.has("update") ? "1.2.0" : null, lastCheck: ago(3), releasesPage: "https://github.com/xop1tt/Customers-App/releases",
 };
 
-const sync = (): SyncStatus => ({ enabled: cloud, kind: "idle", message: null, lastSync: ago(0.2), pending: 0 });
 
 function snapshot(): Snapshot {
   return { leads, sources, pipelineErrors, exclusions, syncLog, lastSearchAt: ago(1.5), databaseSize: 2_400_000 };
@@ -258,37 +250,9 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
   }
   if (cmd === "ai_notify") { hubDemo.notified.push({ title: String(args.title), body: String(args.body) }); return null; }
   if (cmd === "ai_chat") return hubDemo.reply(args.body as { messages: { role: string; content?: string | null }[] });
-  if (cmd === "ws_market") {
-    const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
-    const remote = ws.workspaces.find((w) => w.id === ws.active)?.remote ?? false;
-    // В демо облачной команды (?team) вы — ещё и модератор маркетплейса.
-    return marketCall(String(args.action), (args.args ?? {}) as Record<string, unknown>,
-      { cloud: ws.isCloud, me: ws.me, wsId: remote ? ws.active : null, perms: ws.permissions, moderator: ws.isCloud });
-  }
-  if (["ws_team", "ws_update_member", "ws_chat", "ws_chat_poll", "ws_departments", "ws_save_department", "ws_delete_department", "ws_set_member_department"].includes(cmd)) {
-    const ws = (await wsCall("ws_state", {}, () => leads)) as WsState;
-    const me = session();
-    if (cmd === "ws_chat" && args.action === "chat_post") {
-      // Как сервер: название и подпись карточки берутся из CRM этого рабочего пространства.
-      const a = (args.args ?? {}) as Record<string, unknown>;
-      const refs = (a.attachments as { type: string; id: string }[] | undefined) ?? [];
-      const cards = [];
-      for (const r of refs) {
-        const table = ({ company: "companies", contact: "contacts", crm_lead: "crm_leads", deal: "deals" } as Record<string, string>)[r.type];
-        const rows = table ? ((await wsCall("ws_list", { entity: table, query: { limit: 10000 } }, () => leads)) as { items: Record<string, unknown>[] }).items : [];
-        const row = rows.find((x) => x.id === r.id);
-        if (!row) throw { code: "error", message: "Карточка не найдена в этом рабочем пространстве." };
-        const title = String(row.name ?? row.full_name ?? row.title ?? "");
-        const subtitle = String(r.type === "deal" ? `${row.amount ?? 0} ${row.currency ?? "RUB"}` : r.type === "contact" ? row.position ?? "" : r.type === "crm_lead" ? row.company_name ?? "" : row.legal_name ?? "");
-        cards.push({ type: r.type, id: r.id, title, subtitle, available: true });
-      }
-      args = { ...args, args: { ...a, attachments: cards } };
-    }
-    return teamCall(cmd, args, { team: ws.isCloud, me: ws.me, myName: me.displayName, myAvatar: me.avatar ?? null, wsId: ws.active ?? "", members: ws.members, perms: ws.permissions });
-  }
   if (cmd.startsWith("ws_")) {
     const out = await wsCall(cmd, args, () => leads);
-    if (["ws_save", "ws_delete", "ws_restore", "ws_merge", "ws_merge_undo", "ws_convert_lead", "ws_switch", "ws_create_workspace", "ws_rename_workspace", "ws_set_local_details", "ws_reorder_collections", "ws_hide_collection", "ws_resolve_conflict"].includes(cmd)) {
+    if (["ws_save", "ws_delete", "ws_restore", "ws_merge", "ws_merge_undo", "ws_convert_lead", "ws_switch", "ws_create_workspace", "ws_rename_workspace", "ws_set_local_details", "ws_reorder_collections", "ws_hide_collection"].includes(cmd)) {
       setTimeout(() => emit("workspace-changed", null), 0);
       if (cmd === "ws_convert_lead") {
         const c = out as { workspaceId: string; companyId: string; contactId: string | null; dealId: string | null };
@@ -300,19 +264,9 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
   switch (cmd) {
     case "boot_info":
       return {
-        version: "1.1.0", platform: demo.get("platform") === "windows" ? "windows" : "macos", cloudAvailable: true,
-        session: signedIn ? session() : null, device, error: null,
+        version: "1.1.0", platform: demo.get("platform") === "windows" ? "windows" : "macos",
+        session: session(), device, error: null,
       } satisfies BootInfo;
-    case "cloud_sign_in":
-      if (String(args.email)) signedEmail = String(args.email);
-      if (String(args.password) === "wrong") throw { code: "", message: "Неверный адрес почты или пароль." };
-      signedIn = true;
-      cloud = true;
-      emit("session-changed", session());
-      return null;
-    case "cloud_sign_up":
-      profile = { ...profile, name: String(args.username ?? "") || null };
-      return String(args.email);
     case "set_profile":
       if (args.name != null) profile = { ...profile, name: String(args.name) };
       if (args.avatar != null) profile = { ...profile, avatar: String(args.avatar) || null };
@@ -326,19 +280,6 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
         { id: "viber", title: "Viber", installed: false, opensChat: true },
         { id: "skype", title: "Skype", installed: false, opensChat: false },
       ];
-    case "cloud_confirm":
-    case "cloud_finish_reset":
-    case "cloud_set_password_after_recovery":
-      signedIn = true;
-      cloud = true;
-      emit("session-changed", session());
-      return null;
-    case "cloud_request_reset":
-      return String(args.email);
-    case "logout":
-      signedIn = false;
-      emit("session-ended", { reason: "" });
-      return null;
     case "snapshot":
       return snapshot();
     case "lead_events":
@@ -453,10 +394,6 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
       return null;
     case "search_status":
       return search;
-    case "sync_status":
-      return sync();
-    case "sync_now":
-      return null;
     case "drives_state":
       return drives;
     case "disconnect_drive": {
@@ -516,8 +453,6 @@ export async function call(cmd: string, args: Record<string, unknown>): Promise<
       return [];
     case "update_intervals":
       return [[1, "Каждый час"], [3, "Каждые 3 часа"], [6, "Каждые 6 часов"], [12, "Каждые 12 часов"], [24, "Раз в сутки"], [168, "Раз в неделю"]].map(([hours, title]) => ({ hours, title }));
-    case "cloud_stats":
-      return { leads_active: leads.length, leads: leads.length + 3, exclusions: exclusions.length, settings: 2 };
     default:
       return null;
   }
